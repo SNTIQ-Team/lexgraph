@@ -1,0 +1,17 @@
+# generated data (reproducible via refresh.sh) — ships via the HF dataset
+data/snapshots/
+data/cache/
+data/*.qfs
+data/neuris_archive.jsonl
+web/data/
+
+# raw legal-content working set (not part of the open dataset)
+Gesetze_Sammlung_V3/
+
+# runtime noise
+__pycache__/
+*.pyc
+*.log
+.venv/
+.claude/
+.tmp/

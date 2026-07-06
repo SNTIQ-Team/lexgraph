@@ -1,0 +1,18 @@
+Amtsgraph — Licensing
+Copyright (c) 2026 David Glushkov / SNTIQ
+
+This project is dual-licensed by audience. Three license texts apply:
+
+  NON-COMMERCIAL TRACK
+  (individuals, human-rights and non-profit organizations, research,
+   journalism, education)
+    - Code:                      LICENSE-APACHE-2.0
+    - Data, documentation, media: LICENSE-CC-BY-NC-SA-4.0
+
+  COMMERCIAL / CORPORATE / GOVERNMENTAL TRACK
+    - Everything (code & media):  LICENSE-SNTIQ-CM
+      (written permission required; free of charge; non-harm covenant,
+       attribution and case-by-case reciprocity apply)
+
+Which track applies to you, the designated attribution string and the
+permission contact are defined in LICENSING.md. If in doubt, ask first.

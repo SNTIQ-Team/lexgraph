@@ -1,0 +1,1436 @@
+[
+ {
+  "source": "github.com/bundestag/gesetze (BundesGit markdown corpus) + github.com/bundestag/gesetze-tools",
+  "status": "stale",
+  "endpoints": [
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Repo metadata: created 2012-07-27, pushed_at 2022-11-25 (last real data commit 2022-03-26), default branch master, 451 MB, 1908 stars, 167 forks, license Unlicense, not archived",
+    "sample_snippet": "\"pushed_at\": \"2022-11-25T09:16:13Z\", \"license\": {\"spdx_id\": \"Unlicense\"}, \"description\": \"Bundesgesetze und -verordnungen\""
+   },
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze/commits?per_page=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Latest commit + total count via Link header: 531 commits on master; HEAD = 77abca2c, 2022-03-26 (README merge, not data)",
+    "sample_snippet": "link: <...commits?per_page=1&page=531>; rel=\"last\" | 77abca2c 2022-03-26T04:32:03Z 'Merge pull request #63'"
+   },
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze/commits?per_page=1&page=531",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Oldest commit: f99fe952, 2012-08-02 'Add README' — start of history span",
+    "sample_snippet": "f99fe952 2012-08-02T19:43:46Z | Add README"
+   },
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze/commits/faba4c771899f5f0cf30f76904cf80e720f7b01f",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Detail of a 2022 bulk 'Aktualisierung' commit: 27,347 line changes across 73+ law files in one commit — proves 2021/22 layer is bulk snapshot refresh, not per-amendment commits",
+    "sample_snippet": "stats: {'total': 27347, 'additions': 16987, 'deletions': 10360}; modified a/amvv/index.md +85/-14, b/bgb/index.md +8/-9 ..."
+   },
+   {
+    "url": "https://raw.githubusercontent.com/bundestag/gesetze/master/s/stgb/index.md",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Raw law markdown (StGB, 523 KB): YAML frontmatter (Title, jurabk, slug), definition-list metadata incl. amendment citations, #### headings per §, Absaetze as plain '(1)' text",
+    "sample_snippet": "---\\nTitle: Strafgesetzbuch\\njurabk: StGB\\n---\\nZuletzt geändert durch\\n:   Art. 1 G v. 30.3.2021 I 441 ...\\n#### § 211 Mord\\n(1) Der Mörder wird..."
+   },
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze-tools",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Tools repo metadata: pushed 2026-05-04, LGPL-3.0, 131 stars — but recent activity is dependency/CVE bumps only",
+    "sample_snippet": "\"pushed_at\": \"2026-05-04T07:50:12Z\", \"license\": {\"spdx_id\": \"LGPL-3.0\"}, \"description\": \"Scripts to maintain German law git repository\""
+   },
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze-tools/commits?per_page=10",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Last 10 commits 2023-2026: all lxml/requests/CI-Python security bumps; zero pipeline/functional work since ~2023",
+    "sample_snippet": "2026-05-04 Update lxml to 6.1.0 to avoid vulnerability | 2026-04-08 Update requests to fix CVE-2026-25645"
+   },
+   {
+    "url": "https://api.github.com/repos/bundestag/gesetze/forks?sort=newest&per_page=100 (+page=2)",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "All 166 forks enumerated: only 3 pushed after 2023-01 (Orbiter/bundestag_gesetze_parser 2026-03, digitalegarage/regelungen 2025-08, sventhomsen/gesetze 2023-09). No maintained successor.",
+    "sample_snippet": "Orbiter/bundestag_gesetze_parser | pushed: 2026-03-26 | stars: 1 | size: 577257 (larger than upstream => added data)"
+   },
+   {
+    "url": "https://api.github.com/repos/Orbiter/bundestag_gesetze_parser/commits?per_page=5",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Only fork with data refreshes: re-scraped gesetze-im-internet.de 2024-05 and 2026-03, adds JSONL parser; single maintainer, sporadic, 1 star — not a dependable successor",
+    "sample_snippet": "2026-03-26 'updated to latest from https://www.gesetze-im-internet.de/' | 2024-05-09 'changed jsonl dump file name'"
+   }
+  ],
+  "data_shape": "One markdown file per federal law/Verordnung (~6,000+ acts, repo 451 MB), path pattern <letter>/<slug>/index.md. YAML frontmatter (Title, jurabk, layout, origslug, slug) + pandoc definition-list metadata block carrying amendment provenance in citation form (Ausfertigungsdatum, Fundstelle, 'Neugefasst durch', 'Zuletzt geändert durch: Art. 1 G v. 30.3.2021 I 441', 'textlich nachgewiesen, dokumentarisch noch nicht abschließend bearbeitet' flags). Body: # act title, ##/### Buch/Abschnitt, #### per §, #####/###### deeper units. Generated from gesetze-im-internet.de XML by lawdown.py (gesetze-tools). Known lossy conversion: enumeration numbering dropped (§ 211 StGB Mordmerkmale 1-3 render as unnumbered lines) — markdown alone is NOT faithful to official text structure.",
+  "granularity": "Act = file; § = addressable via #### markdown heading; Absatz only as textual '(n)' paragraph convention (no structural markup); Satz not marked at all. Numbered enumerations within Absaetze lose their numbers. Fine-grained (Absatz/Satz) node extraction requires your own parsing heuristics and cross-checking against the official XML.",
+  "history_support": "The headline claim ('git history = amendment archive 2012-2022') is only PARTLY true. Verified structure of the 531-commit history: (a) genuine per-BGBl-issue amendment commits with branch merges named bgbl/YYYY/part-issue, but ONLY Aug 2012 - Jan 2013 (~6 months) — this window is a real per-amendment provenance archive and a good worked example for LexGraph's commit model; (b) total gap 2013-2021; (c) Jan 2021 - Mar 2022: ~7 bulk 'Aktualisierung' commits by outside contributor Daniel Nagy, each touching 73+ laws / ~27k lines, jumping directly from ~2013 state to ~2021/22 state — diffable snapshots but no per-amendment attribution; (d) nothing after 2022-03-26. Net: two snapshot epochs (2012/13 and 2021/22), not continuous history. Checkout-by-date only meaningful inside the 2012/13 window and at the few 2021/22 refresh points. The frontmatter 'geändert durch' citation blocks are independently useful for genesis-chain seeding.",
+  "cadence": "Dead. Corpus: no data commits since 2022-03-26 (>4 years). gesetze-tools: alive only for dependency/CVE maintenance (last 2026-05-04); the BGBl/gesetze-im-internet scrapers (lawde.py, lawdown.py, LGPL-3.0) still exist and could be re-run to regenerate/extend the corpus yourself. All 166 forks checked: no maintained data successor; closest is Orbiter/bundestag_gesetze_parser with roughly annual solo re-scrapes (2024-05, 2026-03).",
+  "licensing": "Corpus repo: Unlicense (public-domain dedication, added 2021-03). Underlying statutory texts are amtliche Werke per § 5 UrhG — no copyright. Tools: LGPL-3.0. Access is via GitHub API/raw (GitHub ToS; unauthenticated API limit 60 req/h — clone the repo once instead of API-walking it). No robots.txt/scraping concerns. Cleanest licensing of any German law source.",
+  "verdict": "seed_only",
+  "notes": "Use as a HISTORICAL SEED, exactly as hypothesized — but with the corrected expectation that it yields two version checkpoints (Jan-2013 and Mar-2022 states of ~6,000 laws) plus one dense 6-month per-amendment window (Aug 2012 - Jan 2013), not a continuous 2012-2022 archive. Recommended ingestion: git clone once (451 MB), import the 2013 and 2022 tree states as dated snapshots, mine the bgbl/* merge structure as a reference implementation of per-amendment commits, and harvest the frontmatter 'geändert durch' citations for genesis chains. Do NOT rely on the markdown as authoritative text (enumeration numbering lost; 'dokumentarisch noch nicht abschließend bearbeitet' flags present) — pair with gesetze-im-internet.de XML as the current-text source, optionally regenerated via the still-runnable LGPL gesetze-tools scripts. No maintained fork exists to outsource this to."
+ },
+ {
+  "source": "openlegaldata.io (OLDP) — REST API at de.openlegaldata.io/api/ + bulk parquet dumps at huggingface.co/openlegaldata",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://de.openlegaldata.io/api/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "API root: 15 endpoints (cases, laws, law_books, references, courts, cases/search, laws/search, cases/stats, case_annotations, case_markers, ...)",
+    "sample_snippet": "{\"laws/search\":\"https://de.openlegaldata.io/api/laws/search/\",\"cases/search\":\"...\",\"references\":\"https://de.openlegaldata.io/api/references/\"}"
+   },
+   {
+    "url": "https://de.openlegaldata.io/api/cases/?page_size=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Paginated case list; count=423,944; newest decision dated 2026-05-21, ingested 2026-05-27 (5-week-old data as of 2026-07-06). Court object embedded (name, jurisdiction, level_of_appeal). No content in list serializer.",
+    "sample_snippet": "{\"count\":423944,\"results\":[{\"id\":521203,\"slug\":\"lg-nurnberg-furth-2026-05-21-8-o-486025\",\"court\":{\"name\":\"Landgericht Nürnberg-Fürth\",\"level_of_appeal\":\"Landgericht\"},\"date\":\"2026-05-21\",\"type\":\"Endurteil\"}]}"
+   },
+   {
+    "url": "https://de.openlegaldata.io/api/cases/521203/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Full case detail incl. complete HTML judgment text (11,181 chars), no API key required. ecli often empty; source_url sometimes placeholder 'http://example.com'.",
+    "sample_snippet": "\"content\": \"<h2>Tenor</h2><p>Die Klage wird abgewiesen.</p><p>Der Kläger trägt die Kosten des Rechtsstreits.</p>...\""
+   },
+   {
+    "url": "https://de.openlegaldata.io/api/laws/?page_size=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Paginated law list; count=176,915 records at per-§ granularity, with gesetze-im-internet doknr (BJNR...) linkage; updated_date 2026-05-08 on sample record.",
+    "sample_snippet": "{\"count\":176915,\"results\":[{\"id\":131584,\"book_code\":\"BGremBG 2015\",\"section\":\"§ 1\",\"title\":\"Ziel des Gesetzes\",\"doknr\":\"BJNR064210015BJNE000100000\"}]}"
+   },
+   {
+    "url": "https://de.openlegaldata.io/api/laws/232332/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Law detail with full norm text (§ 708 ZPO, 2,888 chars) in gesetze-im-internet DTD-style markup (P/DL/DT/DD/LA tags).",
+    "sample_snippet": "\"content\": \"<P>Für vorläufig vollstreckbar ohne Sicherheitsleistung sind zu erklären: <DL Type=\\\"arabic\\\"><DT>1.</DT><DD>...Anerkenntnisses oder eines Verzichts...\""
+   },
+   {
+    "url": "https://de.openlegaldata.io/api/law_books/?page_size=2",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "9,664 law books with revision_date + latest flags; multiple revisions per book retained (latest:False), but sparse scrape snapshots only (e.g. AAÜG 2016-12-23 → 2020-10-06; many books re-scraped 2026-05-06). NOT per-amendment history. page_size param ignored here.",
+    "sample_snippet": "{\"code\":\"AAÜG\",\"revision_date\":\"2016-12-23\",\"latest\":\"False\"} ... {\"code\":\"AAÜG\",\"revision_date\":\"2020-10-06\",\"latest\":\"True\"}"
+   },
+   {
+    "url": "https://de.openlegaldata.io/api/references/?page_size=3",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "18,620,949 citation edges (case→law and case→case). Each edge resolved to a concrete law record (book_id/section) plus raw marker_text preserving Abs./Satz. Newest edge cites case decided 2026-06-29 (1 week old).",
+    "sample_snippet": "{\"to\":\"§ 167 Abs. 1 Satz 1 VwGO\",\"law\":{\"id\":207101,\"section\":\"§ 167\",\"book_code\":\"VwGO\"},\"cited_by\":{\"kind\":\"case\",\"id\":521559,\"slug\":\"vg-schwerin-2026-06-29-2-a-59526-sn\"},\"marker_text\":\"§ 167 Abs. 1 Satz 1 VwGO\"}"
+   },
+   {
+    "url": "https://de.openlegaldata.io/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Explicitly invites bulk use: '# do not crawl us to get all the data: download everything via our data dumps or API! or via https://huggingface.co/openlegaldata/datasets'. Crawl-delay 60 for web crawlers; /api disallowed for search-engine bots only.",
+    "sample_snippet": "# download everything via our data dumps or API!\\nUser-agent: *\\nDisallow: /api\\nCrawl-delay: 60"
+   },
+   {
+    "url": "https://huggingface.co/api/datasets?author=openlegaldata",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "4 bulk datasets, all lastModified 2026-05-22: court-decisions-germany (parquet dumps 2022-10-18 AND 2026-05-20, size 100K<n<1M), laws-germany (ODbL), legal-citation-graph-germany (ODbL), legal-citation-graph (CC-BY-4.0).",
+    "sample_snippet": "openlegaldata/court-decisions-germany lastModified 2026-05-22; openlegaldata/legal-citation-graph-germany license:odbl; openlegaldata/laws-germany license:odbl"
+   }
+  ],
+  "data_shape": "Django-REST JSON, paginated (count/next/previous/results), no auth for read. Cases: metadata + full judgment HTML in detail view (court, date, file_number, type, ecli, slug). Laws: one record per § with full text in gesetze-im-internet DTD-flavored markup + doknr for GII cross-linking. References: pre-resolved edge objects {to, to_hash, law{book,section}, cited_by{kind,id}, marker_text}. Bulk: parquet on HuggingFace (oldp-toolkit generated), plus search endpoints (Elasticsearch-backed) and case_annotations/case_markers for enrichment.",
+  "granularity": "Laws: per-§ (Einzelnorm) — one API record per paragraph, not per Absatz/Satz. Citation edges: resolved to § level, but marker_text preserves the cited Absatz/Satz string (\"§ 167 Abs. 1 Satz 1 VwGO\"), so sub-§ targets are recoverable by parsing marker_text. Cases: per decision, with court/date/type metadata; body is unsegmented HTML (Tenor/Gründe headings present).",
+  "history_support": "Cases: inherently temporal — decisions are dated, immutable events reaching back years; ideal for a time-indexed case graph. Laws: NO true version history — law_books keeps prior scrape snapshots (revision_date, latest=False), e.g. one 2012–2016-era snapshot plus one 2026 snapshot per book, sourced from gesetze-im-internet consolidated text. Cannot checkout norm text by arbitrary date; no amendment-level diffs. The 2022-10-18 HF dump is itself a usable historical snapshot of the corpus.",
+  "cadence": "Actively maintained in 2026 after a 2022–2026 dump hiatus. Cases ingested within ~1 week of decision (verified: reference to a 2026-06-29 judgment present on 2026-07-06; case decided 2026-05-21 created 2026-05-27). Law books re-scraped ~2026-05-06. HF bulk dumps refreshed 2026-05-22 (previous: 2022-10-18) — assume roughly infrequent/occasional dump refreshes, but API is near-real-time for cases.",
+  "licensing": "Open. HF datasets: laws-germany and legal-citation-graph-germany under ODbL; legal-citation-graph under CC-BY-4.0; court-decisions-germany untagged, but German court decisions are amtliche Werke (§ 5 UrhG, copyright-free); OLDP platform code is MIT (github.com/openlegaldata/oldp). API is keyless for read; robots.txt explicitly endorses API/dump-based bulk access (Crawl-delay 60 applies to HTML crawling only). ODbL share-alike applies if LexGraph redistributes derived databases of the law/citation-graph dumps.",
+  "verdict": "primary",
+  "notes": "PRIMARY for its assigned role: the CASE-GRAPH seed. 18.6M pre-resolved case→§ citation edges plus 423,944 full-text decisions with court/date metadata is exactly the interpreted_by/applied_by layer, keyless and fresh (1-week ingest lag verified live). Edges land on § nodes with Abs./Satz recoverable from marker_text — maps cleanly onto LexGraph norm nodes via GII doknr. HOWEVER: honest scoping — the laws component alone would be seed_only for the temporal axis (sparse scrape snapshots of consolidated GII text, no date checkout, no amendment chain); do NOT use OLDP as the norm-version backbone — pair with BGBl/GII-history sources for that. Practical caveats: page_size honored inconsistently (law_books ignored it); ecli frequently empty and some source_url fields are literal \"http://example.com\", so per-case provenance needs cross-checking against Rechtsprechung-im-Internet/Landesportale; coverage is uneven across courts/Länder (LG/VG present, but no completeness guarantee). Prefer HF parquet dumps (2026-05-20) for the initial bulk load per robots.txt request, then API deltas via created_date/updated_date. ODbL share-alike obligations apply to redistributed derivatives of the ODbL-tagged dumps."
+ },
+ {
+  "source": "gesetze-im-internet.de (GII) — Bundesamt für Justiz / BMJ consolidated federal statutes",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://www.gesetze-im-internet.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Fully permissive robots: no path disallowed for any agent",
+    "sample_snippet": "User-agent: *\nDisallow:"
+   },
+   {
+    "url": "https://www.gesetze-im-internet.de/gii-toc.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Master TOC, 1.29 MB XML (DTD gii-toc.dtd), 6,124 <item> entries, each title + xml.zip link per law",
+    "sample_snippet": "<item><title>Asylbewerberleistungsgesetz</title><link>http://www.gesetze-im-internet.de/asylblg/xml.zip</link></item>"
+   },
+   {
+    "url": "https://www.gesetze-im-internet.de/asylblg/xml.zip",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "ZIP with one XML per law (BJNR107410993.xml, DTD gii-norm.dtd 1.01): <dokumente builddate doknr> containing one <norm> per Paragraph with <metadaten> + <textdaten>",
+    "sample_snippet": "<dokumente builddate=\"20260611215510\" doknr=\"BJNR107410993\"><norm ...><metadaten><jurabk>AsylbLG</jurabk>...<standangabe><standtyp>Stand</standtyp><standkommentar>zuletzt geändert durch Art. 3 G v. 23.4.2026 I Nr. 112</standkommentar>"
+   },
+   {
+    "url": "https://www.gesetze-im-internet.de/aktuDienst-rss-feed.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Aktualitaetendienst RSS 2.0, rebuilt daily (lastBuildDate 2026-07-06 05:30 GMT), 215 items announcing new BGBl I issues with recht.bund.de ELI links (amending acts, not consolidation events)",
+    "sample_snippet": "<item><title>BGBl. 2026 I Nr. 197</title><link>https://www.recht.bund.de/eli/bund/BGBl_1/2026/197</link><description>Neuntes Gesetz zur Änderung von Vorschriften im Steuerberatungsrecht...</description>"
+   },
+   {
+    "url": "https://www.gesetze-im-internet.de/aktdienst/",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "Dead guessed path — the real update feed is aktuDienst-rss-feed.xml, linked as rel=alternate in the homepage <head>",
+    "sample_snippet": "404 Not Found"
+   },
+   {
+    "url": "https://www.gesetze-im-internet.de/hinweise.html",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Editorial policy page: GII contains only consolidated current Fassungen; Änderungsgesetze/-verordnungen are explicitly NOT included; explains Stand/Neufassung semantics",
+    "sample_snippet": "Inhalt des Angebotes Gesetze im Internet sind die konsolidierten Fassungen der Gesetze und Rechtsverordnungen des Bundes; Änderungsgesetze und -verordnungen werden hingegen nicht aufgenommen."
+   }
+  ],
+  "data_shape": "One xml.zip per law (6,124 laws), single XML file named by juris doknr (BJNR...), DTD gii-norm.dtd 1.01. Root <dokumente builddate doknr>; first <norm> is the act header (jurabk/amtabk, ausfertigung-datum, fundstelle BGBl periodikum+zitstelle, langue title, standangabe list with standtyp Neuf/Stand and prose standkommentar, act-level fussnoten); then one <norm> per Paragraph with own doknr (BJNE... including an embedded version counter that changes on amendment — cheap diff/change-detection key), metadaten (enbez '§ 1', titel) and textdaten/text/Content with P, DL/DT/DD/LA structured enumerations, BR, pre. Footnotes are semi-structured prose (BVerfG unvereinbar rulings, Hinweise, Textnachweis-ab dates), NOT machine-readable amendment records. HTML/PDF/EPUB renditions also exist per law.",
+  "granularity": "Paragraph (§) level: one <norm> element per §, with enbez and titel. Absätze appear only as '(1)'-prefixed <P> children (reliably parseable by regex); Sätze are not marked at all. Enumerations (Nummern/Buchstaben) ARE structured (DL/DT/DD/LA). No per-Absatz or per-Satz identifiers.",
+  "history_support": "NONE. GII publishes only the current consolidated Fassung; hinweise.html explicitly states Änderungsgesetze are not included, and there is no version archive or Fassung navigation (verified on asylblg/index.html). Amendment history exists only as act-level prose ('zuletzt geändert durch...') and BJNE doknr version counters — predecessors are never published. Historical Fassungen must come from elsewhere (e.g. BGBl archives, juris, or forward snapshotting; community mirror bundestag/gesetze on GitHub has snapshots since ~2013).",
+  "cadence": "Consolidation is continuous by the Bundesamt für Justiz; each file carries a builddate (AsylbLG rebuilt 2026-06-11 after a 23.4.2026 amendment, i.e. weeks-scale consolidation lag is possible). The Aktualitaetendienst RSS is rebuilt daily (verified lastBuildDate = today) but announces new BGBl I promulgations, not per-law consolidation updates — so change detection for consolidated texts requires re-crawling gii-toc.xml and comparing builddate/BJNE doknr.",
+  "licensing": "Statutory texts are public domain as amtliche Werke per § 5 Abs. 1 UrhG. Site itself states no license terms; Impressum (HTTP 200) contains only a liability disclaimer; robots.txt permits everything. Non-official additions (nichtamtliche Inhaltsübersichten, editorial footnotes) are flagged 'nichtamtlich' but originate from the same federal documentation and are universally reused (e.g. GitHub bundestag/gesetze). Effectively unrestricted for LexGraph, including commercial use; cite BMJ/BfJ as source.",
+  "verdict": "seed_only",
+  "notes": "GII is the canonical, machine-readable source for the CURRENT consolidated state of all ~6,124 federal laws — perfect for seeding LexGraph's HEAD and, if snapshotted daily from now on, for building forward history (builddate + per-norm BJNE version counters make diff detection cheap; full corpus is only ~6k small zips). But it cannot provide back-history: no historical Fassungen, no structured amendment records (change info is prose in standangabe/fussnoten), no effective-date ranges per norm. For checkout-by-date before 'now', pair it with BGBl (recht.bund.de ELI, which the GII RSS already links to) for amendment acts, and consider the bundestag/gesetze GitHub mirror or archive.org captures of GII xml.zips for reconstructed past snapshots. Watch out: latin-1 encoded HTML pages, and consolidation lag of days-to-weeks after BGBl publication (AsylbLG: amended 23.4.2026, file rebuilt 11.6.2026). Update feed is aktuDienst-rss-feed.xml (the intuitive /aktdienst/ path 404s); it signals new BGBl issues, not that a consolidated file was refreshed."
+ },
+ {
+  "source": "buzer.de — private German federal-law consolidation and change-tracking service (operator: Daniel Liebig, Berlin; ad-funded, free)",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://www.buzer.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Permissive robots policy. Disallows only: /s2.htm (full-text search), a few JS files, /outb/ (outbound redirects), /newsletter.htm, and ?line=/?m= query params. All law, paragraph, version-log, and synopsis pages are crawlable.",
+    "sample_snippet": "User-agent: *\\nDisallow:\\nDisallow: /s2.htm\\nDisallow: /outb/\\nDisallow: /*?m="
+   },
+   {
+    "url": "https://www.buzer.de/i.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Impressum + Datenschutz. NO terms-of-use clause restricting scraping, automated access, or reuse anywhere on the page. Operator identified with contact (info@buzer.de) — a licensing conversation is one email away.",
+    "sample_snippet": "Impressum Verantwortlicher: Daniel Liebig ... 14169 Berlin ... info@buzer.de USt-ID DE280600166"
+   },
+   {
+    "url": "https://www.buzer.de/h.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Self-description of the offering: nearly all Bundesrecht (Fundstellennachweis A), all versions since 2006, every change mapped to its amending act, diffs (Synopsen), links to Drucksachen/Begruendungen. Consolidation is done in-house, usually effective the day after BGBl promulgation, QA'd against BMJ texts.",
+    "sample_snippet": "„Bundesrecht - tagaktuell konsolidiert - alle Fassungen seit 2006 ... jede Änderung dem jeweils zugrundeliegenden Änderungsgesetz zugeordnet“"
+   },
+   {
+    "url": "https://www.buzer.de/s1.htm?g=AsylbLG",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Title/metadata search (the allowed one; s2.htm full-text search is robots-disallowed). Returns act pages incl. https://www.buzer.de/AsylbLG.htm plus all related amending acts and Bekanntmachungen.",
+    "sample_snippet": "<a href=\"https://www.buzer.de/AsylbLG.htm\" class=\"ltg\">Asylbewerberleistungsgesetz (AsylbLG)"
+   },
+   {
+    "url": "https://www.buzer.de/AsylbLG.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Act index page (internal act id 4846): per-paragraph TOC (/1_AsylbLG.htm, /3a_AsylbLG.htm ...), link to '44 weitere Fassungen' (/gesetz/4846/l.htm), last-change BGBl citation, Drucksachen/Entwurf/Begruendung link (via /outb/ DIP redirect), citation graph ('wird in 204 Vorschriften zitiert', /gesetz/4846/v0.htm), FNA subject classification.",
+    "sample_snippet": "<a href=\"https://www.buzer.de/gesetz/4846/l.htm\">44 weitere Fassungen</a> ... <a href=\"/outb/dipbt/12-1546/68.htm\">Drucksachen / Entwurf / Begründung</a>"
+   },
+   {
+    "url": "https://www.buzer.de/3a_AsylbLG.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Per-paragraph page: current consolidated text, inline '#buildInHistory' section ('2 fruehere Fassungen'), list of Aenderungsvorschriften each linking to the exact amending article page (/gesetz/{amendActId}/a{articleId}.htm), and dated internal cross-references (e.g. '§ 7 AsylbLG ... (vom 01.01.2026)').",
+    "sample_snippet": "#buildInHistory →2 frühere Fassungen; /gesetz/13532/a225811.htm?m=/3a_AsylbLG.htm | Artikel 1 3. AsylbLGÄndG"
+   },
+   {
+    "url": "https://www.buzer.de/gesetz/4846/l.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "THE 'git log' per act: chronological list of every version since 2006, each entry with in-force date, whole-act synopsis link (/gesetz/4846/v{versionId}-YYYY-MM-DD.htm) and per-paragraph diff links (/gesetz/4846/al{changeId}-0.htm) naming exactly which §§ changed (incl. '(neu)' for insertions).",
+    "sample_snippet": "/gesetz/4846/v338943-2026-06-12.htm | Synopse gesamt ; /gesetz/4846/al240843-0.htm | § 1 ; al194115-0.htm | § 20 (neu)"
+   },
+   {
+    "url": "https://www.buzer.de/gesetz/4846/al240843-0.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Per-paragraph old/new synopsis: two-column table 'a.F. (alte Fassung) bis 12.06.2026' vs 'n.F. am 12.06.2026', word-level change highlighting via CSS classes hdel/hneu/halt/hunc/hdiff, exact amending citation ('durch Artikel 4 G. v. 23.04.2026 BGBl. 2026 I Nr. 111'), and prev/next navigation chaining all versions of that §.",
+    "sample_snippet": "<title>Fassung § 1 AsylbLG a.F. bis 12.06.2026 (geändert durch Artikel 4 G. v. 23.04.2026 BGBl. 2026 I Nr. 111)"
+   },
+   {
+    "url": "https://www.buzer.de/gesetz/4846/v338943-2026-06-12.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Whole-act synopsis for one version date: all paragraphs changed on 2026-06-12 by the GEAS-Anpassungsgesetz in a single diff view.",
+    "sample_snippet": "<title>Änderungen AsylbLG vom 12.06.2026 durch Artikel 4 des GEAS-Anpassungsgesetz"
+   },
+   {
+    "url": "https://www.buzer.de/v.htm",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Future changes: all promulgated-but-not-yet-in-force amendments for the next 100 days, filterable by subject area — directly usable for LexGraph's anticipation-of-pending-legislation feature.",
+    "sample_snippet": "<title>Künftige gesetzliche Änderungen ... bereits verkündete gesetzliche Änderungen, die demnächst in Kraft treten ... nächsten 100 Tage"
+   }
+  ],
+  "data_shape": "Server-rendered HTML only — no API, no JSON, no bulk/dump downloads. But the URL scheme is stable and enumerable: /{para}_{abbrev}.htm (current §), /gesetz/{actId}/index.htm (act), /gesetz/{actId}/l.htm (full change log), /gesetz/{actId}/v{versionId}-YYYY-MM-DD.htm (whole-act synopsis per version date), /gesetz/{actId}/al{changeId}-0.htm (per-§ synopsis), /gesetz/{amendActId}/a{articleId}.htm (amending article). Diff semantics are machine-readable via CSS classes (hdel=deleted, hneu=new, halt=old, hunc=unchanged, hdiff). Amending citations (BGBl part/page/date, article) and Drucksachen references are in structured text near the top of each page. Parsing is straightforward but is HTML scraping, not data access.",
+  "granularity": "Paragraph (§) is the addressing unit: every § has its own page, its own version chain, and its own dated synopses. Within a synopsis, changes are highlighted at word/sentence level (hdel/hneu spans), and Absatz/Satz structure is preserved in the text, so Absatz/Satz-level diffs are derivable by parsing — but there are no stable Absatz/Satz-level identifiers or URLs. Also provides act-level whole-version synopses and a citation graph (norm-to-norm references, dated).",
+  "history_support": "Genuinely temporal — the best public one for German federal law: ALL versions of (nearly all) Bundesrecht Teil I since 2006, every version linked to its amending act article, BGBl citation, and (via DIP redirect) Drucksachen/Begruendung — i.e. ready-made commit log, blame, and genesis chain. Hard limitation: nothing before 2006 (older versions must come from BGBl archives / offenegesetze.de / library sources). Future: promulgated changes visible up to 100 days ahead of in-force date.",
+  "cadence": "Daily ('tagaktuell konsolidiert'); consolidated versions typically live by the day after BGBl promulgation, QA'd against BMJ (gesetze-im-internet) texts. 'Aktuell' (/z.htm) and 'Verkuendet' (/v.htm) pages plus an RSS/Feed and email alert service (Rechtskataster) surface changes as they land.",
+  "licensing": "No terms of use exist that prohibit scraping — the Impressum (/i.htm) and usage notes (/h.htm) were read in full: no copyright notice, no automated-access clause, no reuse restriction; robots.txt is explicitly permissive for all content pages (only full-text search /s2.htm, /outb/ redirects, and JS are disallowed). HOWEVER: the underlying statutes are public domain (§ 5 UrhG amtliche Werke), but buzer's consolidations, version segmentation, diff alignment and metadata constitute a database protected by the sui generis database right (§§ 87a–87e UrhG). Systematic extraction of substantial parts (i.e. mirroring the version archive) would infringe that right regardless of robots.txt or absent ToS. Polite, low-volume access for QA/cross-checks is defensible; wholesale ingestion for a product requires the operator's permission. The operator is a reachable individual (Daniel Liebig, info@buzer.de) — a cooperation/licensing inquiry is the honest path if deeper use is wanted.",
+  "verdict": "secondary",
+  "notes": "Buzer.de is structurally the closest existing thing to LexGraph itself: per-act git-log (l.htm), per-§ dated synopses with word-level diff markup, amendment-to-BGBl-article provenance, Drucksachen genesis links, dated citation graph, and a 100-day lookahead of pending in-force changes. Everything verified live (11 requests, >=1s apart, all HTTP 200; samples recorded above). It is NOT 'primary' for two reasons: (1) legal — sui generis database right blocks bulk extraction of the editorially-built version archive without an agreement, and there is no API/dump; (2) coverage — history starts at 2006, federal Bundesrecht Teil I only (no Landesrecht, no pre-2006 checkout). Recommended use: (a) gold-standard cross-validation oracle for LexGraph's own consolidation built from primary sources (BGBl/gesetze-im-internet XML + archives), (b) blueprint for data model and diff semantics (hdel/hneu/hunc classes map directly to git-style hunks), (c) seed for the amending-act-to-§ mapping if and only if the operator grants permission — email info@buzer.de before any volume crawling. If permission is refused, downgrade practical use to seed_only/manual-QA. Local copies of all probed pages: /tmp/claude-1000/-home-echo0x22-Desktop-02-PROJECTS-HOBBY-Project-SNTIQ-Gericht/9d449979-121a-494a-9289-3a171a6cd536/scratchpad/ (robots.txt, home.html, i.htm, h.htm, s1_asylblg.html, asylblg.html, p3a.html, l.html, diff.html, vgesamt.html, v.html)."
+ },
+ {
+  "source": "recht.bund.de (Bundesgesetzblatt Verkündungsplattform, BMJ — authentic digital BGBl since 2023-01-01)",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://www.recht.bund.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "robots.txt: Disallow /SiteGlobals/ and /de|en/serviceseiten/ only; Crawl-delay: 30; Sitemap index advertised",
+    "sample_snippet": "User-agent: *\nDisallow: /SiteGlobals/\nCrawl-delay: 30\nSitemap: https://www.recht.bund.de/XMLSitemaps/Sitemap_Index.xml"
+   },
+   {
+    "url": "https://www.recht.bund.de/rss/feeds/rss_bgbl-1-2.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 change feed for BGBl I+II, 500 items (~8 months back), ttl 60min. Items link via ELI URI and carry custom meta: namespace: shortTitle, amtliche-abkuerzung, typ (Gesetz/Verordnung/Sonstiges), initiant (ministry), ausfertigung date, fundstelle citation, nummer, jahr, bgbl part, fna, sachgebiet, gesta. Siblings rss_bgbl-1.xml and rss_bgbl-2.xml linked from /de/serviceseiten/rss/rss_node.html",
+    "sample_snippet": "<link>https://www.recht.bund.de/eli/bund/bgbl-2/2026/129</link><pubDate>2026-07-02</pubDate><meta:fundstelle>BGBl. 2026 II Nr. 129 vom 02.07.2026</meta:fundstelle><meta:gesta>D042</meta:gesta><meta:fna>610-10, ...</meta:fna>"
+   },
+   {
+    "url": "https://www.recht.bund.de/XMLSitemaps/Sitemap_Verkuendungen.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Dedicated sitemap enumerating ALL 2,760 Verkündungen (BGBl I+II, 2023 through 2026-07) as /bgbl/{1|2}/{year}/{nr}/VO.html URLs — complete corpus enumeration in one request",
+    "sample_snippet": "<loc>https://www.recht.bund.de/bgbl/1/2023/297/VO.html</loc> ... URL count: 2760"
+   },
+   {
+    "url": "https://www.recht.bund.de/eli/bund/bgbl-1/2026/197",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "ELI permalink per Verkündung; 302 -> /bgbl/1/2026/197/VO (HTML detail page with metadata + PDF link). Oldest issue eli/bund/bgbl-1/2023/1 also verified 200. Accept: application/xml conneg NOT supported (302s to HTML)",
+    "sample_snippet": "final:https://www.recht.bund.de/bgbl/1/2026/197/VO ... href=\"/bgbl/1/2026/197/regelungstext.pdf?__blob=publicationFile&v=1\""
+   },
+   {
+    "url": "https://www.recht.bund.de/bgbl/1/2026/197/regelungstext.pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Authentic promulgation document, application/pdf (PDF 1.7). Annexes at anlage1.pdf, anlage2.pdf, ... per official docs. Note: HEAD requests get 303, use GET; .xml sibling probe serves the same PDF — no XML exists",
+    "sample_snippet": "%PDF-1.7 (Content-Type: application/pdf;charset=UTF-8)"
+   },
+   {
+    "url": "https://www.recht.bund.de/eli/bund/bgbl-1/2023/1/?view=zipdownload",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "ZIP bundle of a full Verkündung (Regelungstext + all Anlagen), application/zip",
+    "sample_snippet": "PK\\003\\004 (Content-Type: application/zip;charset=UTF-8)"
+   },
+   {
+    "url": "https://www.recht.bund.de/SiteGlobals/Forms/Suche/Expertensuche_Formular.html?documentType_=bgbl1&templateQueryString=Gesetz",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Expert search — server-rendered HTML result list (Government Site Builder). No JSON/Solr endpoint exposed anywhere in page source; scraping this is inferior to sitemap+RSS",
+    "sample_snippet": "HTML with 'Treffer' result count, class=searchresult"
+   },
+   {
+    "url": "https://www.recht.bund.de/de/service/webservice/webservice_node.html",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Official 'Datenabruf' documentation: explicitly sanctions automated retrieval; documents ELI URL scheme (eli/bund/BGBl-{1|2}/{year}/{nr}, sequential Nr. restarting yearly, letter suffixes like '1a' possible), new-issue detection by probing next Nr.'s URL response code, PDF blob suffixes, ZIP suffix, RSS feeds; states format is PDF",
+    "sample_snippet": "'Das Dateiformat ist PDF ... Ein automatisierter Abruf der Daten sowie die Prüfung auf neue Inhalte kann mit der nachfolgend beschrieben Weise umgesetzt werden ... regelungstext.pdf?__blob=publicationFile ... ?view=zipdownload'"
+   }
+  ],
+  "data_shape": "Per-Verkündung records. Metadata: RSS 2.0 with rich custom meta: namespace (fundstelle citation, BGBl part/Nr./year, typ, issuing ministry, Ausfertigung date, FNA numbers linking to consolidated-law classification, GESTA ID linking to the Bundestag legislative process) + XML sitemap for full-corpus enumeration + HTML detail pages. Documents: authentic PDF only (regelungstext.pdf + anlageN.pdf, or ZIP bundle). No XML/LegalDocML, no JSON API, no ELI content negotiation.",
+  "granularity": "Act/promulgation level (one BGBl Nr. = one Verkündung). No paragraph/Absatz/Satz structure — amendment commands are inside the PDF and would need PDF parsing to extract. ELI identifiers are per-issue (eli/bund/bgbl-1/{year}/{nr}), not per-norm-element.",
+  "history_support": "Append-only permanent archive of all promulgations since 2023-01-01 (2,760 issues verified enumerable) — as a genesis log it IS history and never mutates. But: no pre-2023 BGBl (1949–2022 sits at bgbl.de / Bundesanzeiger Verlag, restricted read-only viewer), and no consolidated/point-in-time norm text at all — this layer records the change events, not the resulting versions.",
+  "cadence": "Continuous as laws are promulgated (typically several issues per week; feed showed ~500 items over ~8 months). RSS ttl=60min; official guidance: poll RSS or probe next sequential ELI Nr. Newsletter also offered. robots.txt Crawl-delay: 30s — respect it for bulk page crawls; RSS/sitemap polling is low-volume anyway.",
+  "licensing": "BGBl content is amtliche Werke under § 5 UrhG (public domain / gemeinfrei). Platform is the free-of-charge authentic promulgation medium (BGBl-Modernisierungsgesetz); the official Datenabruf page explicitly documents and endorses automated retrieval. RSS feed itself carries 'Copyright by Bundesministerium der Justiz' boilerplate. Imprint (BMJ, hosted by ITZBund) contains no restrictive reuse terms. Robots.txt permits all content paths used.",
+  "verdict": "primary",
+  "notes": "This is THE authoritative genesis layer for LexGraph from 2023 onward: legally binding publication, stable ELI identifiers, officially sanctioned programmatic access, and two metadata hooks that wire directly into a temporal graph — GESTA IDs (join to Bundestag DIP/GESTA for the pre-publication legislative chain, i.e. anticipation of pending legislation) and FNA numbers (join to consolidated-law corpora like gesetze-im-internet to know WHICH consolidated norms an issue touches). Ingestion recipe: seed via Sitemap_Verkuendungen.xml (one request = full corpus), then poll rss_bgbl-1-2.xml hourly; fetch ZIP bundles per issue at <=1 req/30s. Limitations to plan around: PDF-only (paragraph-level amendment-command extraction requires PDF parsing — nontrivial but PDFs are born-digital PDF 1.7, not scans), per-issue granularity, nothing before 2023, and no consolidated text (pair with a consolidation source; the NeuRIS project testphase.rechtsinformationen.bund.de reportedly serves LegalDocML XML but was NOT verified in this session). Quirks: HEAD returns 303 (use GET); wrong file extensions are ignored by GSB (a .xml URL happily serves PDF — do not treat 200 as format confirmation); ELI path is case-insensitive for the BGBl-1/bgbl-1 segment."
+ },
+ {
+  "source": "EUR-Lex / Publications Office CELLAR (EU layer: Directive 2001/55/EC, Council Implementing Decision (EU) 2022/382)",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32001L0055",
+    "method": "GET",
+    "verified_http_status": 202,
+    "returns": "AWS WAF JavaScript challenge page, NOT the document. Even with full browser headers: 202 + 2 KB challenge HTML. Website is for humans only.",
+    "sample_snippet": "window.awsWafCookieDomainList = []; window.gokuProps = {\"key\":\"AQIDAHjcYu/...\""
+   },
+   {
+    "url": "https://eur-lex.europa.eu/robots.txt",
+    "method": "GET",
+    "verified_http_status": 202,
+    "returns": "Empty body behind the same WAF — robots.txt is not even retrievable by a bot; treat the eur-lex.europa.eu website as no-scrape.",
+    "sample_snippet": "(empty body, HTTP 202)"
+   },
+   {
+    "url": "http://publications.europa.eu/resource/celex/32001L0055 [Accept: application/rdf+xml]",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Full CDM metadata graph for the work (8.9 MB RDF/XML): work/expression/manifestation tree, owl:sameAs ELI+CELEX URIs, relations to other acts.",
+    "sample_snippet": "<rdf:Description rdf:about=\"http://publications.europa.eu/resource/cellar/...\"><owl:sameAs rdf:resource=\"http://publications.europa.eu/resource/eli/...\""
+   },
+   {
+    "url": "http://publications.europa.eu/resource/celex/32001L0055 [Accept: text/html; Accept-Language: deu]",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "German full text of the directive (45 KB HTML). Pre-~2004 acts have html/pdf manifestations only — xhtml and fmx4 both 404 for this act ('does not hold a content datastream of the requested type').",
+    "sample_snippet": "Richtlinie 2001/55/EG des Rates vom 20. Juli 2001 über Mindestnormen für die Gewährung vorübergehenden Schutzes im Falle eines Massenzustroms von Vertriebenen..."
+   },
+   {
+    "url": "http://publications.europa.eu/resource/celex/32022D0382 [Accept: application/zip;mtype=fmx4; Accept-Language: deu]",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Formex 4 XML zip (L_2022071DE.01000101.xml) of the Implementing Decision — structured markup with stable article/paragraph identifiers.",
+    "sample_snippet": "<ARTICLE IDENTIFIER=\"002\"> <PARAG IDENTIFIER=\"002.001\"> <ALINEA> ... <TI.ART>Artikel 2</TI.ART>"
+   },
+   {
+    "url": "https://publications.europa.eu/webapi/rdf/sparql",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Public SPARQL (Virtuoso, no auth; CSV/JSON/XML results). Verified: CDM metadata for 32001L0055 (resource_legal_eli=http://data.europa.eu/eli/dir/2001/55/oj, date_entry-into-force=2001-08-07, in-force=1, based_on_resource_legal); consolidation queries (see notes).",
+    "sample_snippet": "\"cdm#resource_legal_date_entry-into-force\",2001-08-07 / \"cdm#resource_legal_eli\",\"http://data.europa.eu/eli/dir/2001/55/oj\""
+   },
+   {
+    "url": "http://publications.europa.eu/resource/celex/02016R0399-20240710 [Accept: application/zip;mtype=fmx4; Accept-Language: deu]",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Dated CONSLEG consolidated German text (Schengen Borders Code as of 2024-07-10), Formex XML with <ARTICLE IDENTIFIER> markup + annex TIFFs (7.8 MB zip). Proves point-in-time checkout by dated CELEX works end-to-end.",
+    "sample_snippet": "CL2016R0399DE0050010.0001.xml: <ARTICLE IDENTIFIER=\"001\"> <ARTICLE IDENTIFIER=\"002\">"
+   },
+   {
+    "url": "http://data.europa.eu/eli/dir/2001/55/oj",
+    "method": "GET",
+    "verified_http_status": 301,
+    "returns": "ELI persistent identifier; 301 -> https -> https://eur-lex.europa.eu/eli/dir/2001/55/oj which is WAF'd for curl (202) but resolves in browsers. Use ELI as identifier scheme, CELLAR for retrieval.",
+    "sample_snippet": "Location: https://data.europa.eu/eli/dir/2001/55/oj -> final https://eur-lex.europa.eu/eli/dir/2001/55/oj HTTP 202"
+   },
+   {
+    "url": "http://publications.europa.eu/resource/celex/32011D0833 [Accept: application/xhtml+xml; Accept-Language: eng]",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Full text of Commission Decision 2011/833/EU on reuse — the licensing basis, verified from primary source.",
+    "sample_snippet": "\"...shall be available for reuse:\" ... \"reuse policy at the Commission will support new economic activity...\""
+   },
+   {
+    "url": "https://publications.europa.eu/robots.txt",
+    "method": "GET",
+    "verified_http_status": 403,
+    "returns": "301 -> op.europa.eu/robots.txt -> Azure WAF JS challenge (403). Portal websites are bot-blocked; the /resource/ and /webapi/ machine endpoints on publications.europa.eu are NOT challenged (all returned 200 above).",
+    "sample_snippet": "<meta name=\"description\" content=\"Azure WAF JS Challenge\"/><title>Azure WAF</title>"
+   }
+  ],
+  "data_shape": "FRBR-modelled (work/expression/manifestation) via the CDM ontology. Metadata: RDF/XML + SPARQL (CSV/JSON). Content: Formex 4 XML (structured, from ~2004 onward, incl. CONSLEG consolidated texts), XHTML, HTML, PDF; delivered by content negotiation on http://publications.europa.eu/resource/celex/{CELEX} (also /resource/eli/... and /resource/cellar/...). Identifiers: CELEX, ELI (http://data.europa.eu/eli/...), CELLAR UUIDs, cross-linked via owl:sameAs. All 24 languages via Accept-Language (ISO 639-3, e.g. 'deu').",
+  "granularity": "Article and numbered-paragraph (Absatz) level in Formex XML with stable identifiers (<ARTICLE IDENTIFIER=\"002\">, <PARAG IDENTIFIER=\"002.001\">, <ALINEA> for unnumbered subparagraphs). No per-Satz markup. Metadata/ELI granularity is act-level; sub-article addressing must be derived from the Formex structure (deterministic). Pre-2004 acts (incl. 2001/55/EC) exist only as flat HTML/PDF — paragraph structure must be parsed from HTML.",
+  "history_support": "Real point-in-time support: consolidated versions are first-class dated works (CELEX sector 0, e.g. 02016R0399-20161006/-20170407/-20240710/-20251012, all returned by one SPARQL query and retrievable as dated Formex — verified). Genesis/provenance chains in CDM (based_on_resource_legal, adopts_resource_legal, consolidates, predecessor codifications like 02006R0562-*). Caveats verified live: (1) acts never amended have no consolidation — 2001/55/EC has none, its single 2001 text IS the version history; (2) consolidation is per-language — 02022D0382-20220304 exists only in HUN (language-specific corrigendum), German text of 2022/382 is the unamended base act. Pending legislation (COM proposals, procedure events) also lives in CELLAR sectors 5/PreLex — supports the anticipation feature.",
+  "cadence": "Official Journal published each working day; CELLAR ingests continuously (same-day for OJ acts). Consolidated versions lag their triggering amendment by ~2-8 weeks (produced by OPOCE, non-authentic). SPARQL/CDM metadata updates daily.",
+  "licensing": "Excellent. Commission Decision 2011/833/EU (text verified live from CELLAR): documents 'shall be available for reuse' for commercial and non-commercial purposes, free of charge, with source acknowledgment. EUR-Lex/OP legal notice applies CC BY 4.0 to Publications Office material; legal texts themselves carry no copyright restriction on reuse. No API key, no registration for CELLAR REST or SPARQL. Only authentic version is the OJ (consolidations explicitly non-authentic — cite accordingly).",
+  "verdict": "primary",
+  "notes": "PRIMARY for the EU layer — but only via the CELLAR machine channel, never the website. Key operational facts: (1) eur-lex.europa.eu and op.europa.eu are behind AWS/Azure WAF JS challenges (202/403) — even robots.txt is unreachable; do not scrape the sites. (2) The sanctioned machine route publications.europa.eu/resource/* + /webapi/rdf/sparql is unchallenged, keyless, and returned 200 on every probe. (3) Retrieval recipe: GET /resource/celex/{CELEX} with Accept (application/rdf+xml | text/html | application/xhtml+xml | application/zip;mtype=fmx4 | application/xml;notice=tree) + Accept-Language (ISO 639-3 'deu'); wrong media-type syntax gives explicit 400/404 error messages, easy to handle. (4) For LexGraph temporal semantics: base act = initial commit; each dated CONSLEG (0-prefix CELEX with YYYYMMDD) = snapshot commit; CDM amendment/consolidation relations = edges for diff/blame; per-language consolidation coverage must be modeled (verified HUN-only case). (5) The registered SOAP search webservice and ELI dereference pages exist but were not needed; SOAP requires EU-Login registration and was not probed. (6) For the two target documents: 32001L0055 German full text retrieved (HTML only, pre-Formex era); 32022D0382 German Formex retrieved with Artikel/Absatz identifiers."
+ },
+ {
+  "source": "DIP Bundestag API (search.dip.bundestag.de/api/v1) — Dokumentations- und Informationssystem für Parlamentsmaterialien, official Bundestag/Bundesrat legislative-process API",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/openapi.yaml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "OpenAPI 3.0.1 spec v1.5 — the authoritative docs per Bundestag; publishes the CURRENT rotating public API key in securitySchemes",
+    "sample_snippet": "ApiKeyQuery: in: query, name: apikey, description: \"Beispiel: R2BZaee.DjdCyihKZMf8AOjtScubP2EVydegzjmBIQ\" (this 'example' key is the live public key, verified working)"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/vorgang?f.vorgangstyp=Gesetzgebung&f.wahlperiode=21",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "numFound=358 pending/completed WP21 legislation; 100 docs/page; cursor pagination verified across 2 pages (repeat until cursor unchanged)",
+    "sample_snippet": "{\"numFound\":358,\"documents\":[{\"id\":\"336643\",\"beratungsstand\":\"Dem Bundesrat zugeleitet - Noch nicht beraten\",\"vorgangstyp\":\"Gesetzgebung\",\"gesta\":\"E040\",\"initiative\":[\"Bundesregierung\"],\"aktualisiert\":\"2026-07-06T12:01:17+02:00\",...}],\"cursor\":\"AoJw0PPBg54DLlZvcmdhbmctMzMzNzgy\"}"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/vorgang?f.vorgangstyp=Gesetzgebung&f.wahlperiode=21&f.beratungsstand=Verk%C3%BCndet",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "numFound=145 promulgated WP21 laws with verkuendung[] carrying BGBl citation + ELI link to recht.bund.de, and inkrafttreten[] with per-article entry-into-force dates",
+    "sample_snippet": "\"verkuendung\":[{\"fundstelle\":\"BGBl I 2026, 197\",\"verkuendungsdatum\":\"2026-07-02\",\"pdf_url\":\"https://www.recht.bund.de/eli/bund/BGBl_1/2026/197\"}],\"inkrafttreten\":[{\"datum\":\"2026-01-01\",\"erlaeuterung\":\"Artikel 7\"},{\"datum\":\"2026-09-01\",\"erlaeuterung\":\"im Übrigen\"}]"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/vorgang/335057",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Single Vorgang detail (same schema as list documents)"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/vorgangsposition?f.vorgang=335057",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Complete Vorgangsablauf: 10 positions (Gesetzentwurf, 1./2./3. Beratung, Beschlussempfehlung, BR Durchgang, Beschlussdrucksache) with datum, zuordnung BT/BR, dokumentart, fundstelle.dokumentnummer — chains fully reconstructable",
+    "sample_snippet": "2026-05-19 Gesetzentwurf BT Drucksache 21/6002 | 2026-06-11 2./3. Beratung BT Plenarprotokoll 21/83 | 2026-06-12 Durchgang BR Plenarprotokoll 1066"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/drucksache?f.dokumentnummer=21%2F6002",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Drucksache metadata: dokumentnummer, drucksachetyp, urheber, pdf_hash, fundstelle.pdf_url (dserver.bundestag.de PDF), vorgangsbezug[] backlinks to Vorgang ids"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/drucksache-text?f.dokumentnummer=21%2F6002",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Full plaintext of the bill (367,334 chars) including amendment commands — raw material for anticipated diffs",
+    "sample_snippet": "\"Im Grunderwerbsteuergesetz (GrEStG) wird der Besteuerungsvorrang der für Anteilsübergänge geltenden Ergänzungstatbestände umgekehrt. Zudem werden die Anzeigefristen für Beteiligte nach § 19 GrEStG auf einen Monat verlängert.\""
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/vorgang",
+    "method": "GET",
+    "verified_http_status": 401,
+    "returns": "Without apikey: 401 Unauthorized — key is mandatory on every request (header 'Authorization: ApiKey <key>' or query param 'apikey')"
+   },
+   {
+    "url": "https://dip.bundestag.de/documents/informationsblatt_zur_dip_api.pdf",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Official short documentation PDF: key rotates and current one is published at dip.bundestag.de/über-dip/hilfe/api#content; read-only GET/HEAD/OPTIONS only; max 25 concurrent requests; delta-sync recipe via f.aktualisiert.start; cursor semantics (repeat until cursor unchanged)"
+   },
+   {
+    "url": "https://search.dip.bundestag.de/api/v1/vorgang?f.vorgangstyp=Gesetzgebung&f.wahlperiode=8",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "numFound=518 — Gesetzgebung Vorgänge available back to Wahlperiode 8 (1976-1980); deep process history"
+   }
+  ],
+  "data_shape": "JSON (or XML via format param). List responses: {numFound, documents[], cursor}. Vorgang: id, titel, vorgangstyp, wahlperiode, beratungsstand, initiative[], sachgebiet[], gesta (GESTA id), zustimmungsbeduerftigkeit[], deskriptor[] (thesaurus terms incl. Rechtsmaterialien type naming affected acts), verkuendung[] {fundstelle 'BGBl I 2026, 197', jahrgang, heftnummer, ausfertigungsdatum, verkuendungsdatum, pdf_url = ELI link to recht.bund.de}, inkrafttreten[] {datum, erlaeuterung per Artikel}, vorgang_verlinkung[] (related Vorgänge), abstract, aktualisiert (ISO timestamp). Vorgangsposition: vorgang_id, datum, vorgangsposition (step name), zuordnung (BT/BR), dokumentart, fundstelle {dokumentnummer, pdf_url}, urheber, gang, fortsetzung. Drucksache: dokumentnummer, drucksachetyp, urheber[], pdf_hash, fundstelle.pdf_url, vorgangsbezug[] backlinks; /drucksache-text and /plenarprotokoll-text add full plaintext. Everything is bidirectionally linked: Vorgang <-> Vorgangsposition <-> Drucksache/Plenarprotokoll.",
+  "granularity": "Legislative-PROCESS granularity, not norm granularity: entities are Vorgang (procedure), Vorgangsposition (procedural step), Drucksache, Plenarprotokoll, Aktivität, Person. No act/§/Absatz/Satz structure — affected norms appear only as deskriptor names, bill titles, and free text inside Drucksache full text (amendment commands like 'nach § 19 GrEStG ... verlängert' must be parsed from plaintext). Entry-into-force is per-Artikel of the amending law (inkrafttreten[]), not per target norm.",
+  "history_support": "No norm text versions at all — this source never carries consolidated law text, so it contributes nothing to checkout-by-date of norms. But process history is deep and permanent: Gesetzgebung Vorgänge verified back to Wahlperiode 8 (518 hits, 1976-1980; portal covers documents back further), including failed/lapsed bills ('Für erledigt erklärt'). This makes it the system of record for genesis/provenance chains (Entwurf -> Beratungen -> Beschluss -> BGBl fundstelle) and for anticipation of pending changes, complementing recht.bund.de/gesetze-im-internet which hold the norm texts.",
+  "cadence": "Continuous/intraday during parliamentary operation — top WP21 record had aktualisiert=2026-07-06T12:01 (same day as probe). Official PDF prescribes delta sync by polling f.aktualisiert.start with overlapping windows (their example polls hourly with 15-min overlap). No rate-limit headers observed; documented courtesy cap: max 25 concurrent requests; further rate-limiting details deliberately not published. GET/HEAD/OPTIONS only.",
+  "licensing": "Official public API of the German Bundestag; access requires the officially published rotating public API key (currently R2BZaee.DjdCyihKZMf8AOjtScubP2EVydegzjmBIQ, verified live in openapi.yaml and functional 2026-07-06; PDF says the authoritative current key is shown at dip.bundestag.de/über-dip/hilfe/api#content). Terms of use at https://dip.bundestag.de/über-dip/nutzungsbedingungen — page is JS-rendered SPA, text not machine-verifiable here; PDF summarizes: valid key required, read-only use, stability limits. Parliamentary documents are amtliche Werke (§ 5 UrhG context), and the API is explicitly provided for public/machine use; attribute 'Deutscher Bundestag / DIP'. No scraping needed (robots.txt on search.dip.bundestag.de: 404). Build key-rotation handling: re-fetch openapi.yaml periodically since the key rotates (an older key GmEPb1B... appears in the PDF as a stale example).",
+  "verdict": "primary",
+  "notes": "PRIMARY for the anticipation layer, exactly as scoped — but only for that layer (it is a process graph, not a norm-text source; for temporal checkout it is not even seed_only). Verified capabilities map directly onto LexGraph needs: (1) pending-legislation pipeline: f.vorgangstyp=Gesetzgebung + beratungsstand transitions ('Dem Bundesrat zugeleitet', 'Verkündet', 145/358 WP21 already promulgated) give a state machine for anticipation; (2) genesis chains: /vorgangsposition?f.vorgang={id} reconstructs the full BT/BR Ablauf with document numbers and dserver.bundestag.de PDFs; (3) the promulgation join: verkuendung[].pdf_url is an ELI URL into recht.bund.de (e.g. /eli/bund/BGBl_1/2026/197), giving a clean foreign key from pending Vorgang to the BGBl issue that LexGraph's norm layer ingests — this is the linchpin for closing anticipated diffs into committed history; (4) inkrafttreten[] per-Artikel dates enable scheduling future graph states; (5) /drucksache-text full plaintext of Entwürfe/Beschlussempfehlungen lets you parse amendment commands to pre-compute anticipated diffs; (6) gesta id cross-references the GESTA numbering used elsewhere. Caveats: cursor pagination has no total-page shortcut (iterate until cursor repeats); mapping 'affected norm' requires NLP over titles/deskriptor/full text (no structured norm references); the public key rotates — poll openapi.yaml or the help page and treat 401s as rotation signal. Politeness observed: ~15 requests total, sequential with 1s gaps."
+ },
+ {
+  "source": "NeuRIS / Rechtsinformationen des Bundes (testphase.rechtsinformationen.bund.de, github.com/digitalservicebund/ris-search)",
+  "status": "live",
+  "endpoints": [
+   {
+    "url": "https://docs.rechtsinformationen.bund.de/v3/api-docs",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "OpenAPI 3 spec (79 KB) for the whole RIS API; server declared as 'Public API (preview)' at testphase.rechtsinformationen.bund.de",
+    "sample_snippet": "\"title\": \"RIS API\", \"servers\": [{\"url\": \"https://testphase.rechtsinformationen.bund.de/\", \"description\": \"Public API (preview)\"}]"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation?searchTerm=B%C3%BCrgerliches%20Gesetzbuch&size=3",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Paginated JSON-LD search over legislation expressions; params: searchTerm, eli (work-ELI), temporalCoverageFrom/To, mostRelevantOn (checkout-by-date), dateFrom/To, sort, pageIndex/size",
+    "sample_snippet": "\"totalItems\":274 ... \"legislationIdentifier\":\"eli/bund/bgbl-1/1957/s609/2006-04-25/1/deu\",\"legislationLegalForce\":\"InForce\""
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation/eli/bund/bgbl-1/1957/s609/2006-04-25/1/deu",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Expression-level schema.org/Legislation JSON-LD: exampleOfWork (work ELI + BGBl citation), full hasPart article tree with eIds and per-article temporalCoverage, encoding[] with XML/HTML/ZIP manifestation contentUrls",
+    "sample_snippet": "\"hasPart\":[{\"eId\":\"hauptteil-n1_buch-n1\",...}], \"encoding\":[{\"contentUrl\":\".../2018-06-28/regelungstext-verkuendung-1.xml\",\"encodingFormat\":\"application/xml\"}]"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation/eli/bund/bgbl-1/1957/s609/2006-04-25/1/deu/2018-06-28/regelungstext-verkuendung-1.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Full LegalDocML.de 1.8.2 (Akoma-Ntoso German profile) manifestation XML: FRBR work/expression/manifestation, lifecycle (ereignis), geltungszeitgruppen, eIds down to abs/listenelem/text",
+    "sample_snippet": "<akn:akomaNtoso xmlns:akn=\"http://Inhaltsdaten.LegalDocML.de/1.8.2/\" ... eId=\"art-z8_abs-z3_bezeichnung-n1\""
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation/eli/bund/bgbl-2/2023/105/2025-12-31/1/deu/2026-03-12.zip",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Manifestation ZIP (193 KB) of a SUPERSEDED expression not present in the search index — proof that historical expressions stay downloadable if you know the URL (discoverable via changelog); contains regelungstext + rechtsetzungsdokument + Anlagen XML, images, PDF",
+    "sample_snippet": "['.../regelungstext-verkuendung-1.xml', '.../rechtsetzungsdokument-1.xml', '.../anlage-regelungstext-1.xml', '.../bild-1.jpg', '.../dokument-1.pdf']"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation/eli/bund/bgbl-1/1957/s609/2006-04-25/1/deu/2018-06-28/regelungstext-verkuendung-1/art-zi~.html",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Single-article (§/Art) HTML rendering addressed by eId — paragraph-level retrieval works",
+    "sample_snippet": "<title>Gesetz über die Gleichberechtigung von Mann und Frau ... (GleichberG)</title>"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation/changelog?from=2026-06-25T00:00:00Z&to=2026-07-05T00:00:00Z",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "JSON-LD delta feed (506 KB for 10 days): 2448 changed + 117 deleted manifestation URLs, arbitrary from/to windows, allChanged flag — the incremental-sync backbone; exposed 13 works with 2 expressions each incl. future in-force dates (e.g. 2026-01-01)",
+    "sample_snippet": "\"changed\":[{\"@type\":\"LegislationObject\",\"contentUrl\":\"/v1/legislation/eli/bund/bgbl-1/1957/s652/2025-01-01/1/deu/2024-01-23.zip\"}...]"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/legislation/eli/bund/bgbl-2/2023/105/2025-12-31/1/deu",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "NEGATIVE RESULT (deliberate): expression-level metadata for superseded/non-current expressions 404s — the index keeps only ~1 expression per work; no endpoint enumerates all Fassungen of a work",
+    "sample_snippet": "{\"errors\":[{\"code\":\"not_found\",\"message\":\"The requested data could not be found\"}]}"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/bulk-zip-links",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "schema.org DataCatalog of bulk snapshots for legislation/case-law/literature/admin-directives — but ALL contentUrl are null; docs say bulk XML download is 'coming soon'",
+    "sample_snippet": "{\"@type\":\"Dataset\",\"name\":\"legislation\",\"distribution\":{\"@type\":\"DataDownload\",\"encodingFormat\":\"application/zip\",\"contentUrl\":null}}"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/v1/statistics",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Corpus counts: legislation 2414, case-law 83186, literature 0, administrative-directive 0 — federal legislation coverage is roughly half of in-force stock",
+    "sample_snippet": "{\"legislation\":{\"count\":2414},\"case-law\":{\"count\":83186},\"literature\":{\"count\":0},\"administrative-directive\":{\"count\":0}}"
+   },
+   {
+    "url": "https://testphase.rechtsinformationen.bund.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Disallow: / for all agents — HTML portal scraping forbidden; the documented /v1 API is the sanctioned access path (open, no key, 600 req/min/IP)",
+    "sample_snippet": "User-agent: *\\nDisallow: /"
+   }
+  ],
+  "data_shape": "REST JSON-LD (schema.org Legislation / DataCatalog, hydra-style pagination) for search + metadata; LegalDocML.de 1.8.2 XML (German Akoma-Ntoso profile) per manifestation with FRBR work/expression/manifestation triple, lifecycle events (ereignis), Geltungszeitgruppen (validity intervals), and stable eIds; also per-document HTML renderings and ZIP bundles (regelungstext + rechtsetzungsdokument + Anlagen + images/PDF). ELI is the primary key: eli/bund/{agent}/{year}/{naturalIdentifier}/{pointInTime}/{version}/{language}[/{pointInTimeManifestation}].",
+  "granularity": "Document = expression of a work; JSON metadata exposes full article tree (hasPart) with eIds; retrieval per article (§/Art) via {articleEid}.html verified; inside the XML, eIds address down to Absatz, Liste/Listenelement and text nodes (abs-z3, listenelem-n3_text-n1) — Absatz-level anchors are native, Satz-level derivable from the XML structure. Best-in-class granularity among German sources.",
+  "history_support": "Partial and forward-accruing, not archival. The ELI design is natively temporal ({pointInTime}/{version} = expression) and query params temporalCoverageFrom/To + mostRelevantOn (checkout-by-date) already exist, BUT: (1) the search index holds ~1 expression per work — old-expression metadata 404s; (2) no endpoint enumerates all Fassungen of a work; (3) official docs list 'Versions of norms' as a PLANNED feature; (4) corpus starts from the gesetze-im-internet migration (current consolidations, pointInTime = last amendment) — no back-history to 1949. Crucially, superseded expressions' full LegalDocML ZIPs remain downloadable (verified 200 on a non-indexed expression), and the changelog exposes their URLs, including future in-force expressions (anticipation) — so archiving the changelog from today builds a real version history going forward.",
+  "cadence": "Continuous updates during Testphase; changelog endpoint accepts arbitrary from/to windows and returned 2448 changed + 117 deleted docs over 10 days, plus allChanged flag for full-resync signaling. Rate limit 600 req/min per IP, no auth. Recommended poll: daily changelog pull + fetch changed ZIPs.",
+  "licensing": "API explicitly open, no key required (official api-docs). Norm and decision texts are amtliche Werke under § 5 UrhG (public domain by statute); however no explicit open-data license (e.g. DL-DE/BY-2.0) is stated on portal or API docs. Portal code is MIT (github digitalservicebund/ris-search). robots.txt disallows all crawling of the HTML portal — use only the documented API. Testphase disclaimer: operator may change or discontinue the service at any time without notice, and dataset is declared incomplete.",
+  "verdict": "secondary",
+  "notes": "Primary-designate, secondary today. This is the only German source serving consolidated federal norms as LegalDocML.de/Akoma-Ntoso with native temporal ELIs, lifecycle metadata and article/Absatz eIds — architecturally a perfect match for LexGraph's checkout/diff/blame model, and clearly built to become THE canonical temporal source. But honesty requires downgrading it for now: legislation corpus is only 2,414 expressions (~half of in-force federal stock, 0 literature/admin directives), version enumeration per work is not exposed (explicitly 'planned'), old expressions vanish from the index (retrievable only via saved manifestation URLs), bulk dumps are announced but contentUrl:null, and the whole service is a preview that may change without notice. Recommended strategy: (1) start a daily changelog archiver NOW — every changed/deleted manifestation URL + ZIP is a version-history event you cannot recover later; this also captures future in-force expressions (anticipation feature). (2) Use gesetze-im-internet (current text, full corpus) as the seed and BGBl/archives for genesis chains. (3) Re-evaluate for promotion to primary when the versioning endpoint and bulk XML dumps ship. Contact for API feedback: rechtsinformationen@digitalservice.bund.de. Note: one unrelated env issue — the claude.ai Google Calendar MCP connector in this session requires OAuth authorization and is unavailable; irrelevant to this task."
+ },
+ {
+  "source": "gesetze-bayern.de (BAYERN.RECHT) — konsolidiertes bayerisches Landesrecht (BayRS) + bayer. Rechtsprechung",
+  "status": "live",
+  "audited": "2026-07-06 (probe + adversarial verify)",
+  "verify_verdict": "SOLID — all 16 claimed endpoints (12 live + 3 honest 404 dead-ends + robots) reproduced this session with matching status, content-type, and content, several down to exact byte sizes (XML 155,682 B; 404 page 17,631 B) and verbatim snippets (Vollzitat, facet counts 242/487/1541/208, BayVV key, fulltextSuggest array). The session-based POST-search and Filter/paging flows work exactly as described including the __RequestVerificationToken requirement, which the claim did NOT omit. All 10 testable UR",
+  "robots": "robots.txt (HTTP 200) is maximally permissive: \"User-agent: * / Allow: /\". No Disallow, no Crawl-delay, no Sitemap directive. Note there is also no sitemap.xml (verified 404), so robots gives crawl permission but no discovery aid.",
+  "licensing": "Operator: Bayerische Staatskanzlei (Herausgeber + content responsibility); technical implementation and consolidation by Verlag C.H.Beck GmbH & Co. KG 'im Auftrag des Freistaats Bayern'. Nutzungshinweise grant an explicit einfaches Nutzungsrecht: Vorschriften and Entscheidungen 'können örtlich, zeitlich und inhaltlich uneingeschränkt genutzt und weiterverwendet werden', expressly including commercial reproduction, distribution, public communication, further processing and deep links (covering annexes/images barring third-party rights). Caveats: (1) statutory texts themselves are amtliche Werke, but the site's consolidated versions are nichtamtlich with no warranty — legally authoritative is only the paper GVBl; (2) decisions are NOT fully § 5 UrhG-free: Beck's redaktionelle Leitsätze carry Urheberpersönlichkeitsrecht; (3) Datenbankschutz §§ 87a ff. UrhG for BAYERN.RECHT 'bleibt unberührt' — the reuse grant is per-content, not a database-dump license; (4) site design/other texts restricted to § 53 UrhG private use.",
+  "tier": "primary — the authoritative consolidated source for Bavarian state law with a per-act structured-XML export (sentence-level markup, typed cross-references, inkraft dates, BayRS numbers), an enumerable register with amendment chains, permissive robots, and an explicit commercial-reuse grant; nothing upstream of it exists for consolidated BayRS text (verkuendung-bayern.de only carries promulgation issues).",
+  "endpoints": [
+   {
+    "url": "https://www.gesetze-bayern.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Fully permissive robots policy",
+    "sample_snippet": "User-agent: *\nAllow: /"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/BayVwVfG",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Act root page (TOC + Vollzitat metadata) for BayVwVfG; Gliederung links -G1..-G8, Gesamtansicht link /true, Pdf/Rtf/Zip export links",
+    "sample_snippet": "<title>BayVwVfG: Bayerisches Verwaltungsverfahrensgesetz (BayVwVfG) Vom 23. Dezember 1976 (BayRS II S. 213) BayRS 2010-1-I (Art. 1–99)... href=\"/Content/Document/BayVwVfG-G1\" ... href=\"/Content/Pdf/BayVwVfG?all=False\" href=\"/Content/Zip/BayVwVfG\""
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/BayAsylAufnG-4",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Single-article page: Art. 4 AufnG (Unterbringung in Gemeinschaftsunterkünften) with full TOC sidebar and per-article Pdf/Rtf export",
+    "sample_snippet": "<title>AufnG: Art. 4 Unterbringung in Gemeinschaftsunterkünften - Bürgerservice ... Art. 4 Unterbringung in Gemeinschaftsunterkünften (1) ... href=\"/Content/Pdf/BayAsylAufnG-4?all=False\""
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/BayAsylAufnG/true",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Gesamtansicht: whole act (all 11 articles + Vollzitat) on one HTML page — cleanest scrape target per act",
+    "sample_snippet": "title=\"Gesamtes Gesetz auf einer Seite anzeigen\" ... Vollzitat nach RedR: Aufnahmegesetz (AufnG) vom 24. Mai 2002 (GVBl. S. 192, BayRS 26-5-I), das zuletzt durch § 1 des Gesetzes vom 9. Dezember 2022 (GVBl. S. 676) geändert worden ist"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Zip/BayDVAsyl",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/zip containing bayportalnorm/BayDVAsyl.xml — full structured XML of the act in Beck 'byrecht-norm' DTD: inkraft/ausserkraft dates, gliederungsNr.BayRS, absatz.nr, satz.nr (sentence-level!), typed cross-refs verweis.norm/verweis.benorm/verweis.euvo with target dokid",
+    "sample_snippet": "bayportalnorm/BayDVAsyl.xml (155,682 B); <!DOCTYPE byrecht-norm PUBLIC \"-//Verlag C.H.Beck/DTD Vorschriften//DE\"...> <byrecht-norm builddate=\"06.07.2026_02:01\"> ... <inkraft>2025-08-01</inkraft>; mimetype file: bayportalnorm+zip"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/schema/byrecht.normen.dtd",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "The full DTD (18.9 KB, text/plain) for the norm XML: elements incl. aenderungsverlauf, aenderungsgesetz, inkraft, ausserkraft, einzelnorm, jurAbsatz, absatz.nr, satz.nr, verweis.{norm,benorm,eurl,euvo,rspr,vv} — graph-ready reference typing",
+    "sample_snippet": "!ELEMENT list: ... aenderungsverlauf aendgart aendgfund ... satz.nr ... v.ziel.bynorm v.ziel.eurl v.ziel.euvo ... verweis.benorm verweis.eurl verweis.euvo verweis.rspr verweis.vv"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Pdf/BayAsylAufnG-4?all=False",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, PDF 1.7, 1 page — per-article PDF; ?all=True on act key yields whole-act PDF; /Content/Rtf/<key> analogous RTF",
+    "sample_snippet": "art4.pdf: PDF document, version 1.7, 1 page(s)"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Search/Suggest?query=Aufn&suggester=gesabkSuggest",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "JSON autocomplete API (no session/token needed). Suggesters found in /bundles/Scripts.js: fulltextSuggest, normSuggest, azSuggest, gesabkSuggest (Gesetzesabkürzungen)",
+    "sample_snippet": "[\"AufnG\"]  — and fulltextSuggest?query=DVAsyl → [\"Auszug“ des Bewohners (§ 21 Abs. 2 Satz 1 DVAsyl)\",\"DVAsyl\",\"Gebührenfestsetzung nach DVAsyl\"]"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Search (POST SearchFields.Content=AufnG Aufnahmegesetz + __RequestVerificationToken)",
+    "method": "POST",
+    "verified_http_status": 200,
+    "returns": "Redirects to /Search/Hitlist (session cookie). Hit rows expose the real doc keys: /Content/Document/BayAsylAufnG?hl=true, BayDVAsyl-5, BeckRS decision ids, VV keys",
+    "sample_snippet": "href=\"/Content/Document/BayAsylAufnG?hl=true\" ... href=\"/Content/Document/BayDVAsyl-5?hl=true\" ... href=\"/Content/Document/Y-300-Z-BECKRS-B-2022-N-15809?hl=true\" ... href=\"/Content/Document/BayVV_2179_A_14076-0?hl=true\""
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Search/Filter/NORMTYP/ges",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Session-based browse: redirects to /Search/Hitlist listing all 242 Gesetze (also NORMTYP/rv=487 Verordnungen, vv=1541 VV, vertr=208 Verträge; DOKTYP/norm|rspr). Paging via /Search/Page/1..N with same cookie — full enumeration path",
+    "sample_snippet": "final:https://www.gesetze-bayern.de/Search/Hitlist ... href=\"/Content/Document/BayBO?hl=true\">Bayerische Bauordnung (BayBO) in der Fassung der Bekanntmachung vom 14. August 2... href=\"/Search/Page/10\""
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/ffn",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "1.08 MB single page: complete BayRS systematic register (Gliederungsnummer + title for every Vorschrift) WITH per-act Fortführungsnachweis amendment chains (numbered 'geänd./neu gefasst' entries w/ GVBl citations); 872 relative links to doc keys. Sibling: /Content/Document/ffn-mbl for VV (BayMBl.)",
+    "sample_snippet": "26-5-I Gesetz über die Aufnahme und Unterbringung ... (Aufnahmegesetz - AufnG) vom 24. Mai 2002 (S. 192) 1) Art. 1 neu gefasst, Art. 10 geänd. (§ 2 G v. 10.09.2007, S. 634) 2) Art. 4 und 5 Abs. 3 geänd. (§ 1 G v. 26.03.2012, S. 82) ... 7) mehrfach geänd. (G v. 23.12.2021, S. 672)"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Api/Feed",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 of new COURT DECISIONS only (not norms). Per-jurisdiction variants verified as links: /Api/Feed/Verwaltungsgerichtsbarkeit, /Sozialgerichtsbarkeit, /OrdentlicheGerichtsbarkeit, /Arbeitsgerichtsbarkeit, /Finanzgerichtsbarkeit, /Verfassungsgerichtsbarkeit, /BesondereGerichtsbarkeit",
+    "sample_snippet": "<rss version=\"2.0\"><channel><title>RSS-Service zu aktuellen Entscheidungen bayerischer Gerichte</title>...<guid>Y-300-Z-BECKRS-B-2025-N-36978</guid><link>https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-36978</link><title>VG München – 09.12.2025, M 16 K 25.3659 –"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/AufnG",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "DEAD END: official abbreviation is NOT the doc key (BayAufnG also 404; real key is BayAsylAufnG). Doc keys must be resolved via search/suggest/register",
+    "sample_snippet": "404 error page, 17,631 B"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Xml/BayAsylAufnG",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "DEAD END: no direct /Content/Xml/ route — XML only inside the /Content/Zip/<key> container",
+    "sample_snippet": "404 error page (text/html)"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/sitemap.xml",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "DEAD END: no sitemap; enumeration must go via /Search/Filter hitlists or the ffn register",
+    "sample_snippet": "404 error page (text/html)"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/Impressum",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Operator: Herausgeber & inhaltlich verantwortlich = Bayerische Staatskanzlei (Bayern.Recht@stk.bayern.de); 'Technische Umsetzung des Bürgerservices BAYERN.RECHT: Verlag C.H.Beck GmbH & Co. KG'. Site also loads beck.matomo.cloud tracker + usercentrics CMP",
+    "sample_snippet": "Herausgeber Bayerische Staatskanzlei Franz-Josef-Strauß-Ring 1, 80539 München ... Technische Umsetzung des Bürgerservices BAYERN.RECHT Verlag C.H.Beck GmbH & Co. KG Wilhelmstraße 9 80801 München"
+   },
+   {
+    "url": "https://www.gesetze-bayern.de/Content/Document/Nutzungshinweise",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Terms of use: consolidation by C.H.Beck within days of GVBl promulgation; texts nichtamtlich; explicit broad reuse grant for Vorschriften+Entscheidungen incl. commercial; caveats on Leitsätze and §§87a UrhG Datenbankschutz",
+    "sample_snippet": "Im Bürgerservice BAYERN.RECHT eingestellte Vorschriften und Entscheidungen können örtlich, zeitlich und inhaltlich uneingeschränkt genutzt und weiterverwendet werden. Insbesondere ist es ausdrücklich gestattet, diese Inhalte ... gewerblich und nicht gewerblich zu vervielfältigen, zu verbreiten"
+   }
+  ],
+  "url_patterns": [
+   "https://www.gesetze-bayern.de/Content/Document/<DocKey> — act root (TOC + Vollzitat). DocKey is NOT always the official abbr: BayVwVfG, BayIntG, BayAGVwGO, BayLStVG, BayDVAsyl work, but AufnG -> BayAsylAufnG (resolve keys via search/suggest/register, don't guess)",
+   "https://www.gesetze-bayern.de/Content/Document/<DocKey>-<n> — single Art./§ n (e.g. BayAsylAufnG-4, BayDVAsyl-5); -G<n> = Gliederung node; -NN<n> = annex/footnote docs; VV keys look like BayVV_2179_A_14076-0",
+   "https://www.gesetze-bayern.de/Content/Document/<DocKey>/true — Gesamtansicht: whole act on one HTML page",
+   "https://www.gesetze-bayern.de/Content/Zip/<DocKey> — ZIP with bayportalnorm/<DocKey>.xml (Beck byrecht-norm DTD; nightly builddate ~02:00)",
+   "https://www.gesetze-bayern.de/Content/Pdf/<DocKey>?all=True|False and /Content/Rtf/<DocKey>?all=True|False — PDF/RTF export (all=True = whole act, works on act root; all=False on sub-document)",
+   "https://www.gesetze-bayern.de/Search/Suggest?query=<q>&suggester=fulltextSuggest|normSuggest|azSuggest|gesabkSuggest — sessionless JSON autocomplete",
+   "https://www.gesetze-bayern.de/Search/Filter/<FIELD>/<value> (GET, sets session) -> /Search/Hitlist -> /Search/Page/<n> — FIELD in {DOKTYP: norm|rspr, NORMTYP: ges|rv|vv|vertr, LEVEL1RSPRTREENODE: <Gerichtsbarkeit>}; full-text search itself is POST /Search with SearchFields.Content + __RequestVerificationToken + cookie",
+   "https://www.gesetze-bayern.de/Api/Feed[/<Gerichtsbarkeit>] — RSS 2.0, new court decisions only",
+   "https://www.gesetze-bayern.de/Content/Document/ffn and /Content/Document/ffn-mbl — BayRS systematic register + Fortführungsnachweise (amendment chains)",
+   "https://www.gesetze-bayern.de/schema/byrecht.normen.dtd — DTD for the norm XML"
+  ],
+  "pitfalls": [
+   "Doc keys != official abbreviations and are not mechanically derivable: AufnG -> BayAsylAufnG (both /Content/Document/AufnG and /BayAufnG verified 404), while DVAsyl -> BayDVAsyl and VwVfG -> BayVwVfG. Build a key map first (POST search, gesabkSuggest, hitlist enumeration, or the 872 links in /Content/Document/ffn).",
+   "Full-text search is stateful ASP.NET: GET /Search?SearchFields.Content=... returns 200 but silently NO results; you must GET / for the __RequestVerificationToken + cookie, POST /Search, then read /Search/Hitlist and /Search/Page/<n> with the same cookie jar. /Search/Filter/... GET works without POST but still needs the cookie for paging.",
+   "No sitemap.xml (404) and no norms RSS: /Api/Feed covers court decisions only. Change detection for norms = re-parse the ffn Fortführungsnachweis chains or diff the Zip XML / Vollzitat ('zuletzt geändert durch') line.",
+   "Zip-XML builddate is regenerated nightly (~02:00) even without content change — do NOT use builddate as a change signal; use <inkraft>, <fassungsdatum>, the aenderungsverlauf elements, or the Vollzitat citation.",
+   "Current consolidated version only — no point-in-time archive on the site (XML angaben.versabh carries a single version.id=\"p\"). Historic versions must come from GVBl issues on verkuendung-bayern.de.",
+   "XML exists only inside /Content/Zip/<key> (mimetype bayportalnorm+zip); /Content/Xml/ is 404. Format is a proprietary C.H.Beck DTD (byrecht-norm), not LegalDocML — write a dedicated parser; upside: satz.nr sentence numbering and verweis.benorm/eurl/euvo/rspr typed reference targets.",
+   "Texts are expressly nichtamtlich (only the paper GVBl is amtlich); Staatskanzlei disclaims Gewähr — keep provenance flags in the graph.",
+   "Court decisions: ids are BeckRS-derived (Y-300-Z-BECKRS-B-YYYY-N-NNNNN); redaktionelle Leitsätze/Schlagworte are Beck editorial work NOT free under § 5 UrhG — strip or license-tag them if ingesting Rechtsprechung; Datenbankschutz §§ 87a ff. UrhG is expressly reserved, so avoid marketing the ingest as a wholesale dump of their DB even though the per-document reuse grant is broad.",
+   "Be gentle with the ffn page (1.08 MB) and hitlist paging; site sits behind Beck infrastructure with Matomo/Usercentrics — a slow crawler with the contact-UA is fine given Allow: /, but there is no API rate documentation."
+  ],
+  "corrections_from_verify": [
+   "Suggesters normSuggest and azSuggest return HTTP 200 with an EMPTY JSON array [] for plain-word queries (tested query=Bauordnung on both). Only gesabkSuggest and fulltextSuggest were proven to return data. The claim merely listed the four suggester names as found in Scripts.js (technically true), but a consumer should not assume normSuggest/azSuggest work for arbitrary text — they likely require citation- or Aktenzeichen-shaped input.",
+   "Trivial snippet drift on the Gesamtansicht claim: title=\"Gesamtes Gesetz auf einer Seite anzeigen\" appears on the /true page itself suffixed '(inaktiv)'; the exact unsuffixed string is on the act-root and article pages that link TO /true.",
+   "ffn register link count: measured ~889 relative doc links vs claimed 872 — same order of magnitude, likely different counting filter; register content itself verified verbatim."
+  ],
+  "corpus_hints": "All six target acts verified live (HTTP 200) for the asylum/social-practice corpus: AufnG = /Content/Document/BayAsylAufnG (Art. 1-11, BayRS 26-5-I, last amended G v. 09.12.2022 GVBl. S. 676); DVAsyl = /Content/Document/BayDVAsyl (§§ 1-30, BayRS 26-5-1-I, current version inkraft 2025-08-01); BayIntG = /Content/Document/BayIntG (Art. 1-18, BayRS 26-6-I); AGVwGO = /Content/Document/BayAGVwGO (Art. 1-14, BayRS 34-1-I); BayVwVfG = /Content/Document/BayVwVfG (Art. 1-99, BayRS 2010-1-I); LStVG = /Content/Document/BayLStVG (Art. 1-62, BayRS 2011-2-I). Ingest recipe: pull /Content/Zip/<key> per act (structured XML with satz.nr + typed verweis.* — ideal for Lexgraph nodes/edges), seed genesis chains from the ffn Fortführungsnachweis entries (per-act numbered amendment list with GVBl citations), enumerate the full norm universe via /Search/Filter/NORMTYP/ges|rv|vv|vertr hitlists (242/487/1541/208 docs). For Bavarian asylum case-law, subscribe /Api/Feed/Verwaltungsgerichtsbarkeit and /Api/Feed/Sozialgerichtsbarkeit (RSS links resolve to /Content/Document/<BeckRS-id>)."
+ },
+ {
+  "source": "verkuendung-bayern.de (Verkündungsplattform Bayern — GVBl + BayMBl, Bayerische Staatskanzlei, TYPO3)",
+  "status": "live",
+  "audited": "2026-07-06 (probe + adversarial verify)",
+  "verify_verdict": "SOLID — all 16 claimed endpoints re-fetched verbatim in-session and matched on status, content-type, and content (several byte-identical: PDF Content-Length 517690, Last-Modified headers, CSV header + first data row, sha256 prefixes, RSS descriptions); all 10 URL patterns generalized on one fresh instantiation each; both reported 404s are honest dead ends; no hidden auth or omitted mandatory params — on the contrary, the one non-obvious mandatory param (export-as=csv, where omission fails silent",
+  "robots": "robots.txt does not exist: GET /robots.txt returns HTTP 404 (TYPO3 HTML error page). No Disallow rules, no crawl-delay, no sitemap reference; /sitemap.xml also 404. Pages carry meta name=\"robots\" content=\"index, follow\". No formal crawl guidance — self-impose politeness (1 req/s was fine; server is plain Apache, no rate-limit headers observed).",
+  "licensing": "Content (Gesetze, Verordnungen, amtliche Erlasse und Bekanntmachungen) is copyright-free per §5 UrhG, subject to Änderungsverbot and Quellenangabe (§§62-63 UrhG analog) — explicitly stated at /service/nutzungsbedingungen/. Site design/images/third-party material may be copyrighted. Publisher: Bayerische Staatskanzlei. IMPORTANT legal-status split: BayMBl PDFs are the \"Amtliche elektronische Ausgabe\" (electronic promulgation is authoritative, since 2019); GVBl electronic copies are provided only \"nachrichtlich und unentgeltlich\" — the officially promulgated GVBl version remains the PRINT edition published via Verlag Bayerische Staatszeitung GmbH (stated on /gesetz-und-verordnungsblatt/uebersicht-gvbl/). SHA-256 checksums are published per PDF for integrity verification.",
+  "tier": "primary — official state promulgation platform for Bavarian GVBl (1945+) and BayMBl (2019+, official electronic edition) with stable permalinks, RSS change feeds, full HTML text of every document since 2010, per-PDF sha256 checksums, and a CSV bulk-metadata export; no better machine interface for Bavarian gazettes exists.",
+  "endpoints": [
+   {
+    "url": "https://www.verkuendung-bayern.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "No robots.txt — TYPO3 404 HTML page. Bonus: the 404 page exposes the full site navigation (gvbl/, baymbl/, rss-feed, jahreslisten-exportieren, nutzungsbedingungen)",
+    "sample_snippet": "<title>Seite nicht gefunden - Verkündungsplattform Bayern</title> ... <a href=\"/service/rss-feed/\" class=\"dropdown-item\">RSS-Feed</a> ... <a href=\"/ministerialblatt/jahreslisten-exportieren/\">Jahreslisten exportieren</a>"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/service/rss-feed/gvbl-rss/list/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 (application/rss+xml, 34.8 KB, 50 items), one item per GVBl document: title, pubDate=Verkündung date, description with Ausfertigung date + Gliederungsnr., link=issue-PDF with #page= deep link, guid=stable permalink /gvbl/YYYY-page/",
+    "sample_snippet": "<title>Gesetz zur Neuordnung der Bayerischen Ehrenzeichen...</title><description>\"...\" vom 23.06.2026, veröffentlicht am 30.06.2026 (Gliederungsnr. 1132-7-I, 1132-6-S)</description><link>https://www.verkuendung-bayern.de/files/gvbl/2026/12/gvbl-2026-12.pdf#page=2</link><guid>https://www.verkuendung-bayern.de/gvbl/2026-306/</guid>"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/service/rss-feed/baymbl-rss/list/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 (34.9 KB, 50 items), one item per BayMBl document (each Bekanntmachung is its own Nr. with its own PDF): title, dates, Gliederungsnr., PDF link, guid permalink /baymbl/YYYY-NR/",
+    "sample_snippet": "<description>\"Änderung der Richtlinie „Staatliche Förderung von Fachstellen für Täterarbeit bei häuslicher Gewalt...\"\" vom 08.06.2026, veröffentlicht am 01.07.2026 (Gliederungsnr. 2174-A)</description><link>.../files/baymbl/2026/268/baymbl-2026-268.pdf</link><guid>.../baymbl/2026-268/</guid>"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/gesetz-und-verordnungsblatt/alle-ausgaben-des-gvbl-ab-1945/?volume=1946",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Issue index per year, coverage 1945-2026 (year links ?volume=1945...). HTML table per issue: Jahr, Ausgabe-Nr, Verkündung date, page span (Seiten), PDF link, sha256 checksum in popover. 1946 = 25 issues + Jahresinhaltsverzeichnis",
+    "sample_snippet": "<th>Jahr</th><th>Ausgabe</th><th>Verkündung</th><th>Seiten</th><th>PDF</th> ... <td data-label=\"Ausgabe\">12</td><td data-label=\"Verkündung\">30.06.2026</td><td data-label=\"Seiten\">305 - 328</td> ... data-content=\"8d66ecab5ac636872...\""
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/gvbl/?volume=2010",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Document-level GVBl search (server-rendered GET, no JS needed). volume input min=2010 max=2026. 2010 => '141 Treffer', results table with Fundstelle/Verkündung/Titel/Gl-Nr./Ausfertigung, pagination ?offset=N (last offset 136). Params: query, from, to, referencenumber, publicationType (1=Gesetz 2=Verordnung 3=Vertrag 4=Gerichtsentscheidung 5=Sonstiges), volume, itemsPerPage (15/25/50), offset",
+    "sample_snippet": "141 Treffer ... <td data-label=\"Fundstelle\"><a href=\"/gvbl/2010-871/\">2010 S. 871</a></td> <td data-label=\"Verkündung\">28.12.2010</td>"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/gvbl/?query=Ehrenzeichen",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Keyword search works across all volumes: 8 rows spanning 2021-2026 incl. /gvbl/2026-306/ and /gvbl/2021-38/",
+    "sample_snippet": "[('/gvbl/2026-306/', '2026 S. 306'), ('/gvbl/2021-290/', '2021 S. 290'), ('/gvbl/2021-38/', '2021 S. 38')]"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/gvbl/2026-306/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Per-document detail page (stable permalink = RSS guid): Fundstelle, issue Nr (2026/12), Verkündung date, PDF link + SHA-256 checksum, publication type, Gliederungsnummern, Sachgebiet classification, AND THE FULL TEXT of the act as HTML",
+    "sample_snippet": "Fundstelle GVBl. 2026 S. 306 Download 2026/12 vom 30.06.2026 (PDF, 506 KB) Hash-Prüfsumme der PDF-Datei (sha256): 8d66ecab... Gesetz 1132-7-I, 1132-6-S ... § 1 Änderung des Bayerischen Ehrenzeichengesetzes Das Bayerische Ehrenzeichengesetz (BayEzG) vom 19. Februar 2021 (GVBl. S. 38, BayRS 1132-6-S) wird wie folgt geändert:"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/gvbl/2010-871/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Detail pages with full HTML text + sha256 + Sachgebiet exist back to 2010 (not just the e-Verkündung era)",
+    "sample_snippet": "Fundstelle GVBl. 2010 S. 871 Download 2010/22 vom 28.12.2010 (PDF, 346 KB) ... (sha256): edc43209... Verordnung 2013-2-9-F Verwaltung Allgemeines Verwaltungsrecht Kosten Benutzungsgebühren ... Auf Grund des Art. 21 Abs. 1 Satz 1 des Kostengesetzes vom 20. Februar 1998"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/baymbl/2026-268/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "BayMBl detail page: labelled 'Amtliche elektronische Ausgabe' (electronic IS the official promulgation for BayMBl), Ressort, sha256, Gliederungsnr. + Sachgebiet chain, full HTML text. BayMBl search form params: query, from, to, ressort, authority, reference (Az.), referencenumber, publicationType; total corpus ~5,296 docs (last offset 5281)",
+    "sample_snippet": "Veröffentlichung BayMBl. 2026 Nr. 268 vom 01.07.2026 Veröffentlichendes Ressort Staatsministerium für Familie, Arbeit und Soziales Download Amtliche elektronische Ausgabe (PDF, 125 KB) Hash-Prüfsumme ... 2174-A Verwaltung Sozialhilfe und Wohlfahrtswesen Hilfe für misshandelte Frauen"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/files/gvbl/2026/12/gvbl-2026-12.pdf",
+    "method": "HEAD",
+    "verified_http_status": 200,
+    "returns": "Issue PDF direct download, Apache static file, Content-Length 517690, Accept-Ranges: bytes (resumable), Last-Modified header usable for conditional GET",
+    "sample_snippet": "HTTP/1.1 200 OK / Server: Apache / Last-Modified: Mon, 29 Jun 2026 22:15:05 GMT / Accept-Ranges: bytes / Content-Length: 517690"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/files/gvbl/1946/00/gvbl-1946-jahresinhaltsverzeichnis.pdf",
+    "method": "HEAD",
+    "verified_http_status": 200,
+    "returns": "Yearly table-of-contents PDF exists per historical year under NN=00 (Last-Modified 2016 — scan-era upload)",
+    "sample_snippet": "HTTP/1.1 200 OK / Server: Apache / Last-Modified: Mon, 02 May 2016 11:41:13 GMT / Accept-Ranges: bytes"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/ministerialblatt/jahreslisten-exportieren/ (POST ressort=0&volume=2025&export-as=csv&csv=Liste+als+CSV+exportieren)",
+    "method": "POST",
+    "verified_http_status": 200,
+    "returns": "Machine-readable CSV (text/csv;charset=UTF-8, 129 KB, 595 lines = full BayMBl year list 2025). Semicolon-delimited: Fundstelle;Verkündung;Titel;Gl-Nr.;Erlass;Ressort. Form offers volumes 2019-2026, ressort filter 0-13, also PDF export. CRITICAL: must send export-as=csv — the submit button param alone returns the HTML form (verified failure first)",
+    "sample_snippet": "\"Fundstelle\";\"Verkündung\";\"Titel\";\"Gl-Nr.\";\"Erlass\";\"Ressort\"\\n\"2025 Nr. 590\";\"30.12.2025\";\"Änderung haushaltsrechtlicher Verwaltungsvorschriften\";\"630-F,6321-F\";\"24.11.2025\";\"Staatsministerium der Finanzen und für Heimat\""
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/service/nutzungsbedingungen/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Terms: §5 UrhG amtliche Werke free of copyright (with §62/63 Änderungsverbot + Quellenangabe applying analog); site design/images may be copyrighted; no warranty, no contract with users",
+    "sample_snippet": "Nicht urheberrechtlich geschützt sind nach § 5 Urheberrechtsgesetz (UrhG) Gesetze, Verordnungen, amtliche Erlasse und Bekanntmachungen ... mit der Einschränkung, dass die Bestimmungen über Änderungsverbot und Quellenangabe in § 62 Abs. 1 bis 3 und § 63 Abs. 1 und 2 UrhG entsprechend anzuwenden sind."
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/eli/gvbl/2026/306",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "Dead end: no ELI support. No eli/ URLs anywhere in page markup either. The stable permalink scheme is /gvbl/{YYYY}-{page}/ and /baymbl/{YYYY}-{Nr}/ instead",
+    "sample_snippet": "<title>Seite nicht gefunden - Verkündungsplattform Bayern</title> Fehler 404: Seite nicht gefunden"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/sitemap.xml",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "Dead end: no XML sitemap",
+    "sample_snippet": "<title>Seite nicht gefunden - Verkündungsplattform Bayern</title>"
+   },
+   {
+    "url": "https://www.verkuendung-bayern.de/typo3temp/assets/compressed/merged-ce19cbc5c80496938e6e699828241598-49ab1ce89dd5a373fb16f59f3101fe44.js",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Dead end for hidden APIs: both JS bundles (484 KB + 5 KB) are only jQuery/Bootstrap/UI glue — zero fetch/XHR calls to JSON endpoints. Search is fully server-rendered; there is NO JSON/XHR API behind it",
+    "sample_snippet": "ajaxSettings.xhr=function(){try{return new ie.XMLHttpRequest}catch(e){}} — generic jQuery only; no application endpoint URLs present"
+   }
+  ],
+  "url_patterns": [
+   "Issue PDF (GVBl): https://www.verkuendung-bayern.de/files/gvbl/{YYYY}/{NN}/gvbl-{YYYY}-{NN}.pdf  (NN = zero-padded issue no.; append #page={P} for document deep link; verified 2026/12 and 1946)",
+   "Yearly TOC PDF (GVBl): https://www.verkuendung-bayern.de/files/gvbl/{YYYY}/00/gvbl-{YYYY}-jahresinhaltsverzeichnis.pdf",
+   "Per-document PDF (BayMBl): https://www.verkuendung-bayern.de/files/baymbl/{YYYY}/{NR}/baymbl-{YYYY}-{NR}.pdf  (NR = running number, not padded)",
+   "Document permalink (GVBl, = RSS guid): https://www.verkuendung-bayern.de/gvbl/{YYYY}-{firstPage}/  (Fundstelle 'YYYY S. firstPage'; full HTML text 2010-2026)",
+   "Document permalink (BayMBl): https://www.verkuendung-bayern.de/baymbl/{YYYY}-{NR}/",
+   "Issue index per year (1945-2026): https://www.verkuendung-bayern.de/gesetz-und-verordnungsblatt/alle-ausgaben-des-gvbl-ab-1945/?volume={YYYY}",
+   "GVBl document search: https://www.verkuendung-bayern.de/gvbl/?query={q}&from={DD.MM.YYYY}&to={DD.MM.YYYY}&referencenumber={GlNr}&publicationType={1-5}&volume={2010-2026}&itemsPerPage={15|25|50}&offset={N}",
+   "BayMBl document search: https://www.verkuendung-bayern.de/baymbl/?query={q}&ressort={0-13}&authority={a}&reference={Az}&referencenumber={GlNr}&publicationType={t}&itemsPerPage={15|25|50}&offset={N}",
+   "BayMBl year-list CSV: POST https://www.verkuendung-bayern.de/ministerialblatt/jahreslisten-exportieren/  body: ressort={0-13}&volume={2019-2026}&export-as=csv&csv=Liste+als+CSV+exportieren",
+   "RSS: https://www.verkuendung-bayern.de/service/rss-feed/{gvbl|baymbl}-rss/list/"
+  ],
+  "pitfalls": [
+   "GVBl electronic PDFs are 'nachrichtlich' only — the authoritative promulgated GVBl is still the print edition; cite accordingly. BayMBl electronic PDFs ARE the official promulgation.",
+   "CSV export silently returns the HTML form (HTTP 200) unless you add export-as=csv to the POST body — the submit-button param alone does nothing; the failure mode is a 200 with text/html instead of text/csv, so check Content-Type.",
+   "CSV/Jahreslisten export exists only for BayMBl (volumes 2019-2026, ressort 0-13); there is no GVBl equivalent — for GVBl bulk metadata you must paginate the /gvbl/ search (?offset=N, max itemsPerPage=50, ~2,371 docs 2010-2026).",
+   "Document-level data (detail pages, search, HTML full text) starts at 2010 for GVBl; 1945-2009 exists only as issue-level PDFs (older ones scans) plus per-year Jahresinhaltsverzeichnis PDFs — no per-document metadata for that era.",
+   "Two different Fundstelle/permalink schemes: GVBl keys documents by first PAGE of the year ('2026 S. 306' -> /gvbl/2026-306/, PDF is per-issue with #page= fragment), BayMBl by running document NUMBER ('2026 Nr. 268' -> /baymbl/2026-268/, PDF is per-document). Do not conflate.",
+   "RSS feeds are capped at 50 items with no paging — BayMBl publishes hundreds of docs/year, so poll at least weekly or you lose items; feeds carry documents, not issues.",
+   "No robots.txt, no sitemap, no JSON API, no OpenSearch, no ELI (verified 404s) — ingestion is RSS + HTML tables + static PDFs + the one CSV POST; server-rendered TYPO3 markup (data-label attributes on result tables are the most stable parse anchors but can change on relaunch).",
+   "RSS titles/descriptions can contain raw newlines inside the text (verified in gvbl feed item 'Vermessung und \\nGeoinformation') and documents can carry multiple Gliederungsnummern (comma-separated) — normalize before keying.",
+   "Verify downloads against the published SHA-256 checksums (on detail pages and issue tables); note GVBl pages print them lowercase, BayMBl uppercase.",
+   "The /gvbl/ and /baymbl/ landing pages default to a recent-window result set — always pass explicit filters (volume/from/to) when enumerating, and paginate via ?offset=N (row-index based: offset=16 is page 2 at 15/page)."
+  ],
+  "corrections_from_verify": [
+   "JS-bundle claim 'zero fetch/XHR calls to JSON endpoints' is literally false: the bundle contains 2 fetch() calls, both from the TYPO3 femanager extension (POST to Femanager.getBaseUrl()+'index.php?id=...&type=1594138042' and a tx_femanager_validation[referrerAction] form POST). These are frontend-user form-validation endpoints, not a document/search API, so the substantive conclusion (search fully server-rendered, no JSON API for legal content) is confirmed — but a strict reader should know the bundle is not fetch-free.",
+   "BayMBl corpus size: claim says '~5,296 docs (last offset 5281)'; live /baymbl/ shows '5.283 Treffer' with the same last pagination offset 5281 — count off by ~13 (likely derived from offset arithmetic rather than the displayed total). Beware: Treffer counts use German thousands separators ('5.283'), so naive integer parsing reads 283.",
+   "GVBl search results table has no 'Typ' column (columns: Fundstelle/Verkündung/Titel/Gl-Nr./Ausfertigung), so the publicationType filter's effect is only verifiable via result titles — the filter itself works (see fragility notes)."
+  ],
+  "corpus_hints": "For the SNTIQ asylum/social-practice corpus, BayMBl is the richer feed: ministerial Verwaltungsvorschriften and Bekanntmachungen (e.g. StMI asylum/Unterbringung directives, StMAS funding Richtlinien — verified example 2026 Nr. 268, Gliederungsnr. 2174-A 'Hilfe für misshandelte Frauen'). Ingest: (1) poll /service/rss-feed/baymbl-rss/list/ (50 items) for new acts; (2) backfill 2019-2026 via the Jahreslisten CSV POST (one request per year per ressort, ressort=0 = all, includes Gl-Nr. column for filtering — asylum/Ausländerrecht is BayRS Gliederung 26xx, Sozialhilfe/Wohlfahrt 217x/218x); (3) resolve each Fundstelle 'YYYY Nr. N' to /baymbl/YYYY-N/ for full HTML text and /files/baymbl/YYYY/N/baymbl-YYYY-N.pdf. For statutes (BayIntG, AufnG changes) use the GVBl RSS + /gvbl/?query=Aufnahme|Asyl|Integration&volume= searches (doc level 2010+). Pre-2019 ministerial matter: /amtsblatt/ holds Amtsblätter 2009-2018 (nav-verified, not probed); pre-2010 GVBl only as issue PDFs + Jahresinhaltsverzeichnis PDFs."
+ },
+ {
+  "source": "bayern.landtag.de",
+  "status": "live",
+  "audited": "2026-07-06 (probe + adversarial verify)",
+  "verify_verdict": "SOLID — All 14 claimed endpoints reproduced exactly in this session (14/14), including the two claimed dead ends (rssfeed without titel -> 404 text/html; /sitemap.xml -> 404, 16114-byte TYPO3 HTML). Several claims matched to the byte: vorgangsmappe PDF 1,680,394 bytes, Basis PDF 504,615 bytes / Last-Modified 26 Jun 2025, Folge 360,811, GVBl excerpt 167,449; RSS first item (Initiativdrucksache 19/12649, gegenstandid=166634, pubDate Thu 02 Jul 2026 10:59:21 GMT) matched verbatim; Impressum §5 Abs.",
+  "robots": "robots.txt (200, 411 bytes) for User-agent *: Disallow /webangebot2/Vorgangsmappe (legacy app only — webangebot3 not disallowed), /fileadmin/Intranet_Dokumente, /fileadmin/_627_geschuetzte_dateien, /fileadmin/intranet, /intranet, /*?eID=* (TYPO3 AJAX eID URLs), /sdl, /service/suche (the site-wide Solr search incl. suggest.json — off-limits; use the /parlament/dokumente/drucksachen facet search instead, which is allowed). No Crawl-delay, no Sitemap directive; /sitemap.xml returns 404. File ends with a dangling 'User-agent: MJ12bot' with no rule (malformed but harmless). No open-data page found anywhere (greps of home, search, RSS, Impressum pages).",
+  "licensing": "Impressum (verified live): \"Drucksachen und Plenarprotokolle des Bayerischen Landtags genießen als amtliche Werke im Sinne des § 5 Abs. 2 UrhG keinen urheberrechtlichen Schutz\" — they may be stored and republished (incl. on the internet), subject to Änderungsverbot (§ 62 Abs. 1-3 UrhG) and Quellenangabe (§ 63 Abs. 1-2 UrhG); Landtag recommends linking back. Everything else on the site (texts, images, page arrangement, videos) is \"alle Rechte vorbehalten\" and needs prior permission; press releases/speeches reusable with attribution. So the core corpus (Drucksachen PDFs, Plenarprotokolle, GVBl excerpts as amtliche Werke per §5 Abs. 1) is legally safe to ingest; the HTML metadata pages fall under the general reservation — extract facts, don't republish page content verbatim.",
+  "tier": "primary — authoritative, complete Gesetzentwurf lifecycle (Eingang → Lesungen → Ausschuss-Voten → Schlussabstimmung → Beschluss-Drs → GVBl citation with mirrored PDF) exposed via a stable JS-free GET facet search + parameterized RSS 2.0 feeds, with amtliche-Werke licensing on all documents.",
+  "endpoints": [
+   {
+    "url": "https://www.bayern.landtag.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Crawl rules; key disallows: /webangebot2/Vorgangsmappe, /*?eID=*, /sdl, /service/suche",
+    "sample_snippet": "User-agent: *\nDisallow: /webangebot2/Vorgangsmappe\nDisallow: /fileadmin/Intranet_Dokumente\n...\nDisallow: /*?eID=*\nDisallow: /sdl\nDisallow: /service/suche"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/parlament/dokumente/drucksachen?ist_basisdokument=on&suchvorgangsarten%5B0%5D=Gesetze%5C%5CGesetzentwurf&wahlperiodeid%5B0%5D=19&dokumentenart=Drucksache&anzahl_treffer=20&sort=date+desc",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Server-rendered Solr facet search (no JS needed), 424 KB HTML. All WP-19 Gesetzentwurf base documents: title, Drs-Nr, date, initiator, PDF link, vorgangsanzeige/vorgangsmappe links per hit. Facets expose votum[], beschluss, federfuehrung[], schlagworte[], erfassungsdatum ranges",
+    "sample_snippet": "treffer-info\"> Treffer 1 - 20 von 123 Drucksache Nr. 19/7191 vom 25.06.2025 Gesetzentwurf Staatsregierung Gesetzentwurf der Staatsregierung zur Änderung des Bayerischen Maßregelvollzugsgesetzes und weiterer Rechtsvorschriften"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/parlament/dokumente/drucksachen?ist_basisdokument=on&suchvorgangsarten%5B0%5D=Gesetze%5C%5CGesetzentwurf&wahlperiodeid%5B0%5D=19&dokumentenart=Drucksache&anzahl_treffer=20&sort=date+desc&page=2",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Page 2 of same search — pagination via &page=N confirmed (different result set)",
+    "sample_snippet": "<h5><strong>Gesetzentwurf zur Änderung des Aufnahmegesetzes - Bayerisches Asylnotstandsgesetz"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/webangebot3/views/vorgangsanzeige/vorgangsanzeige.xhtml?gegenstandid=161078",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Per-bill lifecycle page (72 KB HTML): Initiativdrucksache 19/7191 25.06.2025 + PDF; 02.07.2025 Plenum 1. Lesung (Plenarprotokoll Nr. 54 S. 6183-6192 PDF, Protokollauszug, Überweisung, per-speaker videos); 30.10.2025 two Ausschüsse with Beschlussempfehlung mit Bericht 19/8762 + Votum; 13.11.2025 Plenum Schlussabstimmung + Beschluss des Plenums 19/8892; 28.11.2025 GVBl Nr. 22 S. 573-577 with direct PDFs",
+    "sample_snippet": "Gesetzentwurf Initiativdrucksache Nr. 19/7191 vom 25.06.2025 ... 30.10.2025 Ausschuss für Arbeit und Soziales, Jugend und Familie / Beschlussempfehlung mit Bericht 19/8762 / Zustimmung in geänderter Fassung ... 13.11.2025 Plenum Beschluss des Plenums 19/8892 ... Gesetz- und Verordnungsblatt Nr. 22 Seite 573-577"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/webangebot3/views/rssfeed/rssfeed.xhtml?art=GESETZ&titel=Drucksachen+von+Gesetzentw%C3%BCrfen",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 (application/rss+xml), 100 items. Item title encodes the event type ('Initiativdrucksache 19/12649', 'Beschluss des Plenums zu Initiativdrucksache 19/12581'); link = vorgangsmappe.xhtml?gegenstandid=N; pubDate present — ideal change-detection feed",
+    "sample_snippet": "<title>Initiativdrucksache 19/12649</title><link>https://www.bayern.landtag.de/webangebot3/views/vorgangsmappe/vorgangsmappe.xhtml?gegenstandid=166634</link><description>Gesetzentwurf zur Änderung des Bayerischen Erwachsenenbildungsförderungsgesetzes</description><pubDate>Thu, 02 Jul 2026 10:59:21 GMT"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/webangebot3/views/rssfeed/rssfeed.xhtml?art=BESCHL",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "DEAD END without 'titel' param: returns 404 text/html. The titel parameter is mandatory even though it looks cosmetic",
+    "sample_snippet": "(404, text/html;charset=UTF-8 — JSF error page)"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/webangebot3/views/rssfeed/rssfeed.xhtml?art=BESCHL&titel=Drucksachen+von+beschlossenen+Gesetzentw%C3%BCrfen",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 feed of adopted bills (Beschluss des Plenums events only) — final-vote monitoring channel",
+    "sample_snippet": "<title>Drucksachen von beschlossenen Gesetzentwürfen</title>...<item><title>Beschluss des Plenums zu Initiativdrucksache 19/12581</title>...<description>Gesetz zur Änderung des Bayerischen Strafvollzugsgesetzes und des Bayerischen Sicherungsverwahrungsvollzugsgesetzes</description>"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/webangebot3/views/rss/main.xhtml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS directory page listing all feed parameterizations: art=ANFRAGE|ANTRAG_EUVORHABEN|BESCHL|GESETZ, institution=CSU|SPD|GRÜ|FREIE+WÄHLER|AfD|FDP|REG, initiator=<5-digit MdL id>, federfuehrung=<committee code, e.g. SO>, protokoll= (Plenarprotokolle)",
+    "sample_snippet": "rssfeed.xhtml?art=GESETZ&titel=Drucksachen+von+Gesetzentwürfen ... rssfeed.xhtml?art=BESCHL&titel=Drucksachen+von+beschlossenen+Gesetzentwürfen ... rssfeed.xhtml?federfuehrung=SO&titel=... ... rssfeed.xhtml?protokoll=&titel=Plenarprotokolle"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/www/ElanTextAblage_WP19/Drucksachen/Basisdrucksachen/0000006000/0000006189.pdf",
+    "method": "HEAD",
+    "verified_http_status": 200,
+    "returns": "Initiativdrucksache 19/7191 PDF (Gesetzentwurf BayMRVG), application/pdf, 504615 bytes, Last-Modified 2025-06-26",
+    "sample_snippet": "HTTP/1.1 200 OK / Content-Type: application/pdf / Content-Length: 504615 / Last-Modified: Thu, 26 Jun 2025 09:41:39 GMT"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/www/ElanTextAblage_WP19/Drucksachen/Folgedrucksachen/0000006000/0000006160.pdf",
+    "method": "HEAD",
+    "verified_http_status": 200,
+    "returns": "Folgedrucksache (Beschlussempfehlung/Beschluss stage doc of same bill), application/pdf, 360811 bytes — Folge docs live in a separate Folgedrucksachen tree",
+    "sample_snippet": "HTTP/1.1 200 OK / Content-Type: application/pdf / Content-Length: 360811"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/www/ElanTextAblage_WP19/GVBl/2025/2025_22/GVBL-2025-22%20S%20573%2019-7191.pdf",
+    "method": "HEAD",
+    "verified_http_status": 200,
+    "returns": "GVBl promulgation excerpt for bill 19/7191 (GVBl 2025 Nr. 22 S. 573), application/pdf, 167449 bytes — Landtag mirrors the GVBl excerpt per bill; full issue also at .../GVBl/2025/GVBl-2025-Nr-22.pdf",
+    "sample_snippet": "HTTP/1.1 200 OK / Content-Type: application/pdf / Content-Length: 167449"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/webangebot3/views/vorgangsmappe/vorgangsmappe.xhtml?gegenstandid=161078",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Full dossier as a single merged PDF (all lifecycle documents of the bill), application/pdf, 1680394 bytes — heavy; server-side PDF generation",
+    "sample_snippet": "%PDF-1.6 ... /Type /Catalog /Version /1.7 (Content-Type: application/pdf, 1,680,394 bytes)"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/sitemap.xml",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "DEAD END: no XML sitemap at standard location; robots.txt declares none",
+    "sample_snippet": "(404 — TYPO3 error page HTML, 16 KB)"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/service/impressum/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Impressum with copyright terms: Drucksachen and Plenarprotokolle are amtliche Werke §5 Abs. 2 UrhG (free reuse); rest of site all rights reserved",
+    "sample_snippet": "Drucksachen und Plenarprotokolle des Bayerischen Landtags genießen als amtliche Werke im Sinne des § 5 Abs. 2 UrhG keinen urheberrechtlichen Schutz, d. h. die Dokumente dürfen abgespeichert und an anderen Stellen, auch im Internet, veröffentlicht werden"
+   }
+  ],
+  "url_patterns": [
+   "https://www.bayern.landtag.de/parlament/dokumente/drucksachen?q=<fulltext>&suchvorgangsarten%5B0%5D=Gesetze%5C%5CGesetzentwurf&wahlperiodeid%5B0%5D=<WP:1-19>&dokumentenart=Drucksache&ist_basisdokument=on&anzahl_treffer=<20|50|100>&sort=date+desc&page=<N>  (server-rendered facet search; other facets: federfuehrung[], votum[], beschluss, schlagworte[], erfassungsdatum[start|end], antragsteller_fraktion_institution[], dknr, basisdokumentid)",
+   "https://www.bayern.landtag.de/webangebot3/views/vorgangsanzeige/vorgangsanzeige.xhtml?gegenstandid=<ID>  (per-bill lifecycle HTML)",
+   "https://www.bayern.landtag.de/webangebot3/views/vorgangsmappe/vorgangsmappe.xhtml?gegenstandid=<ID>  (per-bill merged dossier PDF, heavy)",
+   "https://www.bayern.landtag.de/webangebot3/views/rssfeed/rssfeed.xhtml?art=<GESETZ|BESCHL|ANFRAGE|ANTRAG_EUVORHABEN>&titel=<any-nonempty>  (titel mandatory; also institution=<CSU|SPD|GRÜ|FREIE WÄHLER|AfD|FDP|REG>, initiator=<MdL-id>, federfuehrung=<committee, e.g. SO>, protokoll=)",
+   "https://www.bayern.landtag.de/www/ElanTextAblage_WP<WP>/Drucksachen/<Basisdrucksachen|Folgedrucksachen>/<zeropad10(floor(id/500)*500)>/<zeropad10(id)>.pdf  (id = internal per-WP sequence, NOT the Drucksachen-Nr)",
+   "https://www.bayern.landtag.de/www/ElanTextAblage_WP<WP>/GVBl/<year>/<year>_<issue>/GVBL-<year>-<issue>%20S%20<page>%20<WP>-<DrsNr>.pdf  (per-bill GVBl excerpt) and https://www.bayern.landtag.de/www/ElanTextAblage_WP<WP>/GVBl/<year>/GVBl-<year>-Nr-<issue>.pdf  (full issue)",
+   "https://www.bayern.landtag.de/www/ElanTextAblage_WP19/Protokolle/19%20Wahlperiode%20Kopie/19%20WP%20Plenum%20Kopie/<NNN>%20PL%20<ddmmyy>%20ges%20endg%20Kopie.pdf#page=<p>  (Plenarprotokoll; paths contain spaces and 'Kopie' — URL-encode)"
+  ],
+  "pitfalls": [
+   "/service/suche (TYPO3-Solr site search incl. /service/suche/suggest.json) is robots-disallowed — never query it; the allowed harvest path is the /parlament/dokumente/drucksachen facet search",
+   "robots disallows /*?eID=* — avoid any TYPO3 eID AJAX URLs found in page JS",
+   "robots disallows /webangebot2/Vorgangsmappe (legacy); the current /webangebot3/.../vorgangsmappe.xhtml is allowed but returns ~1.7 MB merged PDFs per bill — prefer vorgangsanzeige.xhtml + individual PDFs",
+   "rssfeed.xhtml returns 404 if the 'titel' parameter is omitted (verified: art=BESCHL alone → 404, with titel → 200)",
+   "PDF filenames use an internal per-WP document sequence, not the Drucksachen-Nr (Drs 19/7191 → 0000006189.pdf): PDF URLs cannot be constructed from a Drs-Nr, they must be scraped from search results or vorgangsanzeige",
+   "suchvorgangsarten values contain literal double backslashes ('Gesetze\\\\Gesetzentwurf') — must be encoded as Gesetze%5C%5CGesetzentwurf",
+   "No JSON API, no OpenSearch, no sitemap.xml (404), no open-data page — machine-readable channels are RSS feeds only; everything else is server-rendered HTML (~430 KB per search page) requiring parsing",
+   "webangebot3 is a JSF (JavaServer Faces) app: GET views work statelessly, but any POST/ViewState interaction will break — stick to the GET-parameterized views",
+   "Plenarprotokoll PDF paths contain spaces and odd 'Kopie' folder names (e.g. '19 Wahlperiode Kopie/19 WP Plenum Kopie/...') — always URL-encode and never construct these by hand; harvest from vorgangsanzeige",
+   "basisdokumentid in search facet URLs = gegenstandid * 1000 (observed 166634 → 166634000) — treat as opaque, derive from links rather than computing",
+   "The bulk /www/ElanTextAblage_WP19/ file tree has no directory listing guarantees — enumerate ids via the facet search (123 Gesetzentwürfe in WP 19, 25941 documents total), not by crawling the tree"
+  ],
+  "corrections_from_verify": [
+   "ElanTextAblage bucket-directory formula is wrong for the first bucket: claimed zeropad10(floor(id/500)*500), but ids < 500 live in directory '0000000001', not '0000000000' (verified: WP18 search HTML links Basisdrucksachen/0000000001/0000000293.pdf, HEAD 200 application/pdf 1035539 bytes). Ids >= 500 conform (1436->1000, 2883->2500, 3319->3000, 6189->6000). Safer to extract PDF URLs from search/vorgangsanzeige HTML than to compute them.",
+   "Search 'sort=date+desc' does not surface the newest Drucksachen: page-1 top hit is 19/7191 vom 25.06.2025 (exactly as claimed), yet the GESETZ RSS feed's newest Initiativdrucksache is 19/12649 with pubDate 02 Jul 2026 — so 'date' is evidently not the Drucksache issue date (possibly a completion/erledigt date or index quirk). Do not rely on the facet search for recency; use the RSS feeds for change detection, as the original audit itself recommends."
+  ],
+  "corpus_hints": "For the SNTIQ asylum/social-practice corpus: (1) subscribe to rssfeed.xhtml?federfuehrung=SO&titel=x — Drucksachen with federführende Beratung im Ausschuss für Arbeit und Soziales, Jugend und Familie; (2) facet search with q=Asyl (or Aufnahmegesetz, AsylbLG, Unterbringung) + wahlperiodeid[0]=19 — page 2 of the plain Gesetzentwurf listing already surfaced 'Gesetzentwurf zur Änderung des Aufnahmegesetzes - Bayerisches Asylnotstandsgesetz'; (3) Schriftliche Anfragen (suchvorgangsarten[0]=Anfragen%5C%5CSchriftliche+Anfrage) are the richest administrative-practice signal (Abschiebepraxis, Unterbringungszahlen per Stimmkreis facet stimmkreise[]); (4) art=BESCHL RSS feed for enacted-law triggers feeding Schutzbrief updates; (5) per-bill GVBl excerpt PDFs on vorgangsanzeige give the promulgated text without needing verkuendung-bayern.de."
+ },
+ {
+  "source": "parlamentsspiegel.de",
+  "status": "live",
+  "audited": "2026-07-06 (probe + adversarial verify)",
+  "verify_verdict": "SOLID — all 10 claimed endpoints reproduced at the claimed HTTP status with matching content (several byte-identical: cntHit 262/2106/2477/4, composite IDs, PDF Content-Length 1061249); all 7 URL patterns generalized under fresh instantiations; robots re-verified independently with no violations; no omitted auth or parameters found (search even works cookieless). Only trivial snippet-level inaccuracies (sitemap 401 body not empty, abbreviated CSP) that change no conclusion.",
+  "robots": "No robots.txt exists: GET /robots.txt returns 302 -> /parlamentsspiegel/suche (verified twice, incl. HEAD showing Location header). Therefore nothing is disallowed and no crawl-delay is declared — apply voluntary politeness (1 req/s max). Note the strict CSP (connect-src 'self' *.nrw.de) is browser-only, irrelevant to server-side harvesting. Origin PDF hosts have their own robots.txt: bayern.landtag.de (fetched, 200) disallows /webangebot2/Vorgangsmappe, /fileadmin/Intranet*, /intranet, /*?eID=*, /sdl, /service/suche — the ElanTextAblage PDF paths used by Parlamentsspiegel links are allowed.",
+  "licensing": "Impressum (live, in-page modal): 'Der Präsident des Landtags NRW im Auftrag der Präsidenten der deutschen Landesparlamente', Platz des Landtags 1, Düsseldorf; contact Parlamentsspiegel@landtag.nrw.de. No open-data license and no API terms. Copyright section explicitly warns: 'Der Nutzer kann insbesondere aus dem Umstand, dass Daten heruntergeladen werden können, nicht darauf schließen, dass es sich nicht um nach §§ 1 ff. UrhG geschützte Werke handelt.' The underlying Drucksachen/Plenarprotokolle are parliamentary documents (amtliche Werke argument under § 5 Abs. 2 UrhG applies to the documents themselves, subject to source attribution and no-alteration), but the portal's editorial metadata (Zusammenfassungen, Schlagworte, Sachgebiet classification) is redaktionell erstellt — sui-generis database rights (§§ 87a ff. UrhG) plausibly apply to systematic bulk extraction of the metadata layer. Practical stance: polite, attributed harvesting of search metadata for research plus PDF retrieval from origin Landtag servers is low-risk; wholesale republication of the abstract/Schlagwort layer is not clearly permitted. When in doubt email the Redaktion (they publish phone + email for exactly this).",
+  "tier": "secondary — best-in-class cross-Länder discovery/monitoring index (all 16 Landtage, daily updates verified at 05.07.2026, normalized metadata, direct origin PDF links, stable GET permalinks), but HTML-scrape-only with 50/page cap, no feeds/export, metadata-not-fulltext search, and coverage only from ~1970; use it as the monitor/index layer and fetch authoritative full texts from the origin Landtag servers (which are the primary sources).",
+  "endpoints": [
+   {
+    "url": "https://www.parlamentsspiegel.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 302,
+    "returns": "No robots.txt exists: 302 Location: /parlamentsspiegel/suche (the search app). No crawl rules, no crawl-delay. Response headers reveal Apache, strict CSP allowing only *.nrw.de connect-src, X-Frame-Options DENY.",
+    "sample_snippet": "HTTP/1.1 302 | Server: Apache | Location: /parlamentsspiegel/suche | Content-Security-Policy: default-src 'self' *.nrw.de; ... connect-src 'self' *.nrw.de"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/parlamentsspiegel/suche (follow redirect, cookie jar) -> final https://www.parlamentsspiegel.de/suche",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Search app (178 KB HTML). Sets JSESSIONID cookie. Two GET forms (frmSearch/frmFilter, action=./suche). Params: query, type=vorgang|dokNr, size, page (0-based), detail, weitern, qyZeitAb/qyZeitBis (TT.MM.JJJJ or letzterMonat/heute), qyHerk (16 Land codes), qyVTyp (9 types), qyVSys (Sachgebiet codes), als. Statistics carousel: 990.990 Vorgaenge, 2.347.530 Dokumente, 153 Sachgebiete, aktualisiert 05.07.2026; Tagesaktualisierung 190 Vorgaenge/950 Dokumente am 05.07.2026 von Bayern, MV, Niedersachsen, Thueringen.",
+    "sample_snippet": "<form id=\"frmSearch\" action=\"./suche\" method=\"GET\"> ... <input type=\"checkbox\" name=\"qyHerk\" value=\"BAY\" /> ... Insgesamt: <strong>990.990</strong> Vorgänge, <strong>2.347.530</strong> Dokumente, <strong>153</strong> Sachgebiete, aktualisiert am: <strong>05.07.2026</strong>"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/suche?query=Asyl&qyHerk=BAY&detail=true",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Live search 'Asyl' restricted to Bayern: 262 Vorgaenge, 27 pages. Each .ps-vorgang block has: composite ID (BAY_V165554_D127498), Titel, direct origin-server PDF link, Land, Dokumenttyp+Datum, Drucksachennummer, Sachgebiet, Schlagworte, Zusammenfassung, Urheber (named MdL+Fraktion), Fundstelle, Folge-Dokumente. Hit state embedded as window.jSuche = {cntHit: 262, pgLast: 26, ...}.",
+    "sample_snippet": "href=\"https://www.bayern.landtag.de/www/ElanTextAblage_WP19/Drucksachen/Schriftliche Anfragen/19_0011106.pdf\"><span>Drucksache 19/11106</span>: <span title=\"1/1, BAY_V165554_D127498\">Bayern</span> - <span>Kleine Anfrage; Abgeordnete/r: AfD; 20.04.2026</span> ... Schlagwort: ...<mark>Asyl</mark>, Abschiebung"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/suche?query=&qyZeitBis=heute&qyZeitAb=letzterMonat&type=vorgang&als=0&size=10",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Site's own 'last month' permalink (empty query allowed): 2477 Vorgaenge. Newest documents 3-4 days old, proving daily currency: Bayern Drucksache 19/12669 dated 03.07.2026 with direct PDF link.",
+    "sample_snippet": "cntHit : 2477 | href=\"https://www.bayern.landtag.de/www/ElanTextAblage_WP19/Drucksachen/Basisdrucksachen/0000009500/0000009853.pdf\"> Drucksache 19/12669 ... Bayern - Antrag. Petra Therese Högl (CSU); ... - Drucksache 19/12669, 03.07.2026"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/suche?query=19%2F11106&type=dokNr&als=0&size=10&detail=true",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Drucksachennummer lookup (type=dokNr): 4 hits for '19/11106' across three Laender — proves DrsNr collide across Laender and that dokNr search works. Includes a Niedersachsen Antwort dated 01.07.2026 (5 days old).",
+    "sample_snippet": "title=\"9/9, NDS_V476664_D490951\" ... Niedersachsen - Antwort Landesregierung 01.07.2026 Drucksache 19/11106 (5 S.) | title=\"1/1, BAY_V165554_D127498\" ... Bayern | title=\"2/2, BLN_V356460_D356462\" ... Berlin ... 10.03.2022"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/suche?query=Asyl&qyHerk=BAY&type=vorgang&size=50&page=0",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "size=50 accepted: exactly 50 .ps-vorgang blocks per page (size=25 also works, pgLast drops to 10; size=100 silently falls back to 10 results). Harvest at size=50.",
+    "sample_snippet": "grep -c 'class=\"ps-vorgang\"' -> 50 (size=50); 25 (size=25); 10 (size=100 rejected, pgLast: 26)"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/suche?query=Gesetz&qyZeitAb=01.01.1970&qyZeitBis=31.12.1989&type=vorgang&size=10",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Historical depth probe with explicit TT.MM.JJJJ dates: 1970-1989 -> 2106 hits; 1990-1999 -> 9278; 2000-2009 -> 13547; 1947-1969 -> 0. Coverage starts ~1970, thin before 1990.",
+    "sample_snippet": "cntHit : 2106 (1970-89) | cntHit : 9278 (1990-99) | cntHit : 13547 (2000-09) | cntHit : 0 (1947-69)"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/sitemap.xml",
+    "method": "GET",
+    "verified_http_status": 401,
+    "returns": "Verified dead end: sitemap exists behind auth (401 Unauthorized, not 404/302). Not usable for crawling.",
+    "sample_snippet": "HTTP:401 (empty body)"
+   },
+   {
+    "url": "https://www.parlamentsspiegel.de/rss",
+    "method": "GET",
+    "verified_http_status": 302,
+    "returns": "Verified dead end: no RSS/Atom feed. 302 -> /parlamentsspiegel/login. No <link rel=alternate>, no OpenSearch description in any fetched page; Accept: application/json on /suche returns text/html (content negotiation ignored).",
+    "sample_snippet": "HTTP:302 Location: https://www.parlamentsspiegel.de/parlamentsspiegel/login"
+   },
+   {
+    "url": "https://www.bayern.landtag.de/www/ElanTextAblage_WP19/Drucksachen/Schriftliche%20Anfragen/19_0011106.pdf",
+    "method": "HEAD",
+    "verified_http_status": 200,
+    "returns": "Origin-server PDF link from a Parlamentsspiegel result resolves directly (after URL-encoding the space): application/pdf, 1,061,249 bytes. bayern.landtag.de robots.txt (fetched, 200) does not disallow /www/ElanTextAblage_* paths.",
+    "sample_snippet": "HTTP/1.1 200 OK | Content-Type: application/pdf | Content-Length: 1061249 | Last-Modified: Fri, 24 Apr 2026 09:49:28 GMT"
+   }
+  ],
+  "url_patterns": [
+   "https://www.parlamentsspiegel.de/suche?query={TERM[+||+TERM2]}&type=vorgang&size={10|25|50}&page={N0}&detail=true — general search permalink (query supports '||' OR; weitern=true for wildcard)",
+   "https://www.parlamentsspiegel.de/suche?query={TERM}&qyHerk={BW|BAY|BLN|BRA|HB|HH|HES|MEVO|NDS|NW|RPF|SAL|SAC|SACA|SH|THUE}[&qyHerk=...] — restrict to one or more Länder (repeatable param)",
+   "https://www.parlamentsspiegel.de/suche?query={TERM}&qyVTyp={Anfrage|Antrag|Bericht|Beschlussempfehlung|Debatte|Gesetz|Sonstiges|Vorschrift|Wahl}[&qyVTyp=...] — Vorgangstyp filter (repeatable)",
+   "https://www.parlamentsspiegel.de/suche?query={TERM}&qyZeitAb={TT.MM.JJJJ|letzterMonat}&qyZeitBis={TT.MM.JJJJ|heute} — date window (symbolic values most reliable for recency)",
+   "https://www.parlamentsspiegel.de/suche?query={TERM}&qyVSys={code} — Sachgebiet facet (e.g. 5070='Ausländer, Migranten', 5100='Soziales'; 153 total)",
+   "https://www.parlamentsspiegel.de/suche?query={NN%2FNNNNN}&type=dokNr — lookup by Drucksachennummer (returns matches from ALL Länder with that number)",
+   "Origin PDF (per result href, host varies by Land, URL-encode spaces): https://www.bayern.landtag.de/www/ElanTextAblage_WP{P}/Drucksachen/{Kategorie}/{P}_{NNNNNNN}.pdf and 15 other Land-specific schemes"
+  ],
+  "pitfalls": [
+   "No machine-readable interface at all: no JSON/XML/CSV export, no OpenSearch description, no RSS/Atom (/rss 302s to a login page), sitemap.xml is 401, and Accept: application/json is ignored (returns text/html). HTML scraping of the GET permalinks is the only path.",
+   "Session handling: first request to /robots.txt, /parlamentsspiegel/suche etc. returns 302; use a cookie jar (JSESSIONID) and follow redirects; the canonical search endpoint is https://www.parlamentsspiegel.de/suche.",
+   "size parameter silently capped: 10/25/50 work, size=100 falls back to 10 without error — always verify by counting .ps-vorgang blocks; page is 0-based (page=0 is first page).",
+   "Origin PDF hrefs frequently contain unencoded spaces (e.g. '/Schriftliche Anfragen/19_0011106.pdf') — URL-encode before fetching; some origin links are plain http:// (lissh.lvn.parlanet.de, pardok.parlament-berlin.de etc.).",
+   "PDFs live on 16 different origin Landtag hosts, each with its own robots.txt, availability and URL scheme — fetch each host's robots.txt before harvesting (bayern.landtag.de verified OK for /www/ElanTextAblage_*).",
+   "Drucksachennummern collide across Länder (19/11106 exists in Niedersachsen, Bayern AND Berlin) — never key on DrsNr alone; use the portal's composite ID {LAND}_V{vorgang}_D{dokument} from the title attribute / collapse anchors.",
+   "Hit count and pagination must be parsed from the embedded 'window.jSuche = {cntHit: N, pgLast: M}' JS object — there is no clean DOM counter node.",
+   "Historical coverage starts ~1970 (0 hits 1947-1969, only 2106 'Gesetz' hits 1970-1989 vs 13547 in 2000-2009) — unusable for pre-1970 research; per-Land depth varies.",
+   "Explicit narrow recent date windows can return 0 hits while the symbolic values work (query=Asyl&qyZeitAb=22.06.2026 -> 0, but qyZeitAb=letzterMonat -> 3) — prefer symbolic letzterMonat/heute for monitoring and treat explicit-date results near the present with suspicion (indexing lag).",
+   "Search matches editorial metadata (Titel, Schlagwort, Zusammenfassung — <mark> highlights confirm), NOT the PDF full text — recall is limited by the indexers' Schlagwort choices.",
+   "Unknown paths 302-redirect to the search page or /parlamentsspiegel/login rather than 404ing — do not interpret a 302/200-after-redirect as evidence a probed resource exists.",
+   "Results HTML is large (~270 KB per 10-hit detail page) and Thymeleaf-generated with commented-out debris; parse defensively on class names (ps-vorgang, ps-titel, ps-dokument, ps-fundstelle)."
+  ],
+  "corrections_from_verify": [
+   "sitemap.xml claim says '401 (empty body)' — the body is actually a 439-byte Tomcat error page ('HTTP Status 401 – Unautorisiert', text/html). Status and dead-end conclusion are correct; only the snippet is inaccurate.",
+   "CSP snippet is abbreviated: actual connect-src is \"'self' *.nrw.de svc.webspellchecker.net\" (webspellchecker host omitted). Irrelevant to server-side harvesting as the claim itself notes.",
+   "bayern.landtag.de robots.txt additionally fully blocks named bots (sitebot, Baiduspider, Ahrefsbot, jobs.de-Robot, MJ12bot) — not mentioned in the claim; a generic research UA is unaffected, User-agent:* section matches the claim verbatim and allows ElanTextAblage paths.",
+   "Form contains 189 qyVSys checkboxes, not 153; the '153 Sachgebiete' figure is the site's own statistic (hierarchical parent/child codes explain the difference). Claimed example codes verified: 5070='Ausländer, Migranten', 5100='Soziales'."
+  ],
+  "corpus_hints": "For the SNTIQ asylum/social-practice corpus: (1) Daily monitor query: GET /suche?query=Asyl+%7C%7C+Aufnahmegesetz+%7C%7C+Fl%C3%BCchtling&qyZeitAb=letzterMonat&qyZeitBis=heute&type=vorgang&size=50&detail=true — query syntax supports '||' (OR); symbolic dates 'letzterMonat'/'heute' are more reliable than explicit narrow date windows. (2) Restrict by Land with repeatable qyHerk= (BW, BAY, BLN, BRA, HB, HH, HES, MEVO, NDS, NW, RPF, SAL, SAC, SACA, SH, THUE). (3) Vorgangstyp filter qyVTyp= (Anfrage, Antrag, Bericht, Beschlussempfehlung, Debatte, Gesetz, Sonstiges, Vorschrift, Wahl) — use qyVTyp=Gesetz + query=Aufnahmegesetz to track Land-Aufnahmegesetz legislative processes; Kleine Anfragen (fqDTyp=KlAnfr) are the richest source on administrative asylum practice. (4) Sachgebiet facet: qyVSys=5070 = 'Ausländer, Migranten', qyVSys=5100 = 'Soziales' (153 Sachgebiete total; no dedicated 'Asyl' Sachgebiet — Asyl appears as Schlagwort). (5) Parse window.jSuche {cntHit, pgLast} from each page for pagination; walk page=0..pgLast with size=50. (6) Always keep the portal's composite ID ({LAND}_V{vorgang}_D{dokument}) as primary key — Drucksachennummern collide across Länder (19/11106 exists in NDS, BAY and BLN). (7) Fetch full texts as PDFs from the 16 origin Landtag servers via the direct hrefs; treat Parlamentsspiegel as index/monitor only. Search matches Titel/Schlagwort/Abstrakt metadata, not PDF full text."
+ },
+ {
+  "source": "eu-legislative-layer (CELLAR SPARQL + EUR-Lex + EP Open Data / OEIL)",
+  "status": "live",
+  "audited": "2026-07-06 (probe + adversarial verify)",
+  "verify_verdict": "SOLID — all 11 claimed endpoints reproduced this session with exactly the claimed HTTP statuses, content types, and content, down to suspicious-looking specifics that would expose fabrication (SPARQL counts 123 and 162, empty DEU bindings, 69963-byte RSS with CELEX:32026R1507 as first item, 132227-byte OpenAPI spec with the 500-req/5-min sentence, 585-byte OEIL JSON 404 body, verbatim MNE celex/title/ojnum/ojdate). No hidden auth, API keys, or omitted mandatory params anywhere. All four robots.t",
+  "robots": "publications.europa.eu/robots.txt: 301 -> op.europa.eu/robots.txt -> 403 Azure WAF JS challenge; robots not retrievable, SPARQL endpoint itself unrestricted and answers 200. eur-lex.europa.eu/robots.txt: HTTP 202, empty body, header x-amzn-waf-action: challenge (AWS WAF via CloudFront) — robots not retrievable; the WAF challenges all HTML paths regardless of User-Agent, but exempts the /EN/display-feed.rss servlet. data.europarl.europa.eu/robots.txt: 200, 'User-agent: * / Allow: /', Sitemap: https://data.europarl.europa.eu/sitemap.xml — everything allowed; API spec states rate limit 500 requests/5 min. oeil.secure.europarl.europa.eu/robots.txt: host redirects to oeil.europarl.europa.eu, robots.txt 404 (no restrictions published). No Crawl-delay found anywhere; self-imposed 1 req/s used.",
+  "licensing": "EU open data reuse regime confirmed applicable: EUR-Lex legal notice states the reuse policy is based on Commission Decision 2011/833/EU — legal documents reusable for commercial and non-commercial purposes with source acknowledgment (verified via archived legal notice; live page WAF-blocked; noted exceptions e.g. International Accounting Standards). EU primary/secondary legislation texts are official works. EP Open Data API declares CC BY 4.0 in its own OpenAPI spec (verified live). German implementing acts referenced by MNE records are amtliche Werke under § 5 UrhG at national level; CELLAR only stores their bibliographic citation, not text.",
+  "tier": "primary — for CELLAR SPARQL (auth-free, complete directive+MNE graph incl. German citations) and the EP Open Data API (CC BY 4.0 JSON-LD procedures/adopted texts); EUR-Lex website itself only via the RSS servlet (rssId=222 for daily OJ L) since all HTML is WAF-challenged; OEIL seed_only (stable human-facing procedure URLs, no machine interface).",
+  "endpoints": [
+   {
+    "url": "https://publications.europa.eu/webapi/rdf/sparql?format=application/sparql-results+json&query=PREFIX cdm: <http://publications.europa.eu/ontology/cdm%23> SELECT (COUNT(DISTINCT ?work) AS ?n) WHERE { ?work cdm:work_has_resource-type <http://publications.europa.eu/resource/authority/resource-type/DIR> . ?work cdm:work_date_document ?d . FILTER(?d >= \"2024-01-01\"^^xsd:date && ?d <= \"2024-12-31\"^^xsd:date) }",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "CELLAR SPARQL (Virtuoso, anonymous, no auth). Trivial liveness query: count of works typed Directive dated 2024 = 123. Also accepts POST; format param or Accept header selects JSON/XML/CSV.",
+    "sample_snippet": "{ \"head\": { \"link\": [], \"vars\": [\"n\"] }, \"results\": { \"distinct\": false, \"ordered\": true, \"bindings\": [ { \"n\": { \"type\": \"literal\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\", \"value\": \"123\" }} ] } }"
+   },
+   {
+    "url": "https://publications.europa.eu/webapi/rdf/sparql (GET, urlencoded query) — MNE query: SELECT ?celex ?title ?ojnum ?ojdate WHERE { ?dir cdm:resource_legal_id_celex \"32019L0790\"^^xsd:string . ?nim cdm:measure_national_implementing_implements_resource_legal ?dir ; cdm:resource_legal_id_celex ?celex ; cdm:measure_national_implementing_implemented_by_country <http://publications.europa.eu/resource/authority/country/DEU> ; cdm:work_title ?title . OPTIONAL {?nim cdm:measure_national_implementing_number_official_journal ?ojnum} OPTIONAL {?nim cdm:measure_national_implementing_date_official_journal ?ojdate} }",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "THE working route for German national transposition measures (sector-7 CELEX). Returns NIM work with German act title + national OJ citation (number, date, page, act type also available as cdm:measure_national_implementing_* properties). Verified: 32019L0790 -> 72019L0790DEU_202104209.",
+    "sample_snippet": "\"celex\": {\"value\": \"72019L0790DEU_202104209\"}, \"title\": {\"xml:lang\": \"de\", \"value\": \"Gesetz zur Anpassung des Urheberrechts an die Erfordernisse des Digitalen Binnenmarkts vom 31. Mai 2021\"}, \"ojnum\": {\"value\": \"27\"}, \"ojdate\": {\"value\": \"2021-06-04\"}"
+   },
+   {
+    "url": "https://publications.europa.eu/webapi/rdf/sparql (GET) — SELECT (COUNT(?nim) AS ?n) WHERE { ?dir cdm:resource_legal_id_celex \"32024L1385\"^^xsd:string . ?nim cdm:measure_national_implementing_implements_resource_legal ?dir }",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Directive (EU) 2024/1385 (violence against women; transposition deadline 2027): 162 MNEs already notified EU-wide, but the DEU-filtered variant of the same query returns 0 rows — Germany has notified nothing yet as of 2026-07-06. Empty result is legitimate state, not an error.",
+    "sample_snippet": "{ \"n\": { \"type\": \"literal\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\", \"value\": \"162\" }} (same query filtered to country DEU: \"bindings\": [ ])"
+   },
+   {
+    "url": "https://eur-lex.europa.eu/EN/display-feed.rss?rssId=222",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Predefined EUR-Lex RSS feed '5 - Acts of the Official Journal L' — individual acts of the latest OJ L editions, one item per act, CELEX id in the title. 70 KB, works with our plain UA (RSS servlet is exempt from the WAF). Other predefined ids recovered from archived help page: 162 Parliament+Council legislation, 163/164 case-law, 161 Commission proposals, 221 sibling OJ feed (only 222 verified live). Language swap via path (/DE/).",
+    "sample_snippet": "<title>5 - Acts of the Official Journal L</title>...<item><title>CELEX:32026R1507: Commission Implementing Regulation (EU) 2026/1507 of 3 July 2026 authorising"
+   },
+   {
+    "url": "https://eur-lex.europa.eu/legal-content/DE/NIM/?uri=CELEX:32019L0790",
+    "method": "GET",
+    "verified_http_status": 202,
+    "returns": "DEAD END for machine access: HTTP 202, Content-Length 0, header 'x-amzn-waf-action: challenge' (AWS WAF JS challenge via CloudFront). Identical 202 with a real Firefox UA, so not UA-based — a JS/cookie challenge blocks the whole legal-content/, content/ and oj/ HTML surface. Use the CELLAR SPARQL MNE route instead.",
+    "sample_snippet": "HTTP/1.1 202 Accepted | Server: CloudFront | Content-Length: 0 | x-amzn-waf-action: challenge | X-Cache: Error from cloudfront"
+   },
+   {
+    "url": "https://data.europarl.europa.eu/api/v2/",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "EP Open Data API base: returns full OpenAPI 3.0.3 spec (132 KB JSON). No auth/API key. License declared in spec: CC BY 4.0. Rate limit stated: max 500 requests per 5 min per endpoint. Datasets: meps, corporate-bodies, meetings(+vote-results/decisions), events, speeches, procedures(+events), documents, plenary-documents, adopted-texts, committee-documents, parliamentary-questions, external-documents, controlled-vocabularies — each with /feed variant.",
+    "sample_snippet": "\"openapi\": \"3.0.3\", \"info\": {\"version\": \"v2\", \"title\": \"European Parliament Open Data API\", ... \"Maximum number of requests 500 in 5min\" ... \"license\": {\"name\": \"CC BY 4.0 - Attribution 4.0 International\"}"
+   },
+   {
+    "url": "https://data.europarl.europa.eu/api/v2/adopted-texts?year=2024&format=application%2Fld%2Bjson&offset=0&limit=2",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Adopted texts (TA docs) as JSON-LD with ELI identifiers, FRBR Work/Expression/Manifestation tree (per-language docx/pdf manifestations) and EuroVoc subject URIs. Also supports application/rdf+xml and text/turtle via format param (must be URL-encoded).",
+    "sample_snippet": "{\"id\": \"eli/dl/doc/TA-10-2024-0046\", \"type\": \"Work\", \"parliamentary_term\": \"org/ep-10\", \"document_date\": \"2024-11-27\", \"is_about\": [\"http://eurovoc.europa.eu/4038\", ...], \"is_realized_by\": [{\"id\": \"eli/dl/doc/TA-10-2024-0046/lt\""
+   },
+   {
+    "url": "https://data.europarl.europa.eu/api/v2/procedures/2022-0066?format=application%2Fld%2Bjson",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Single legislative procedure by process-id; OEIL reference 2022/0066(COD) maps to id '2022-0066'. Full activity graph (committee tabling, readings, votes) with dates, activity types from def/ep-activities vocabulary, and links to underlying documents. This is the machine-readable replacement for OEIL scraping. NOTE: unfiltered /procedures list timed out (>30 s, curl exit 000, http 000) — always fetch by id or filter.",
+    "sample_snippet": "{\"data\":[{\"id\":\"eli/dl/proc/2022-0066\",\"type\":\"Process\",\"consists_of\":[{\"id\":\"eli/dl/event/BUDG-PA-739787-DEPOT-2022-12-13\",\"type\":\"Activity\",\"activity_date\":\"2022-12-13\",\"had_activity_type\":\"def/ep-activities/COMMITTEE_TABLING_OPINION\""
+   },
+   {
+    "url": "https://oeil.secure.europarl.europa.eu/oeil/popups/ficheprocedure.do?reference=2022/0066(COD)&l=en",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Legacy OEIL URL 301-redirects to the stable canonical form https://oeil.europarl.europa.eu/oeil/en/procedure-file?reference=2022/0066(COD) — 200, 165 KB server-rendered HTML (not a JS shell; procedure content greppable). Good as citation/seed URL; the page exposes NO RSS/Atom/export links.",
+    "sample_snippet": "<title>Procedure File: 2022/0066(COD) | Legislative Observatory | European Parliament (final URL: https://oeil.europarl.europa.eu/oeil/en/procedure-file?reference=2022/0066(COD))"
+   },
+   {
+    "url": "https://oeil.secure.europarl.europa.eu/oeil/popups/ficheprocedure.rss?reference=2022/0066(COD)&l=en",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "DEAD END: legacy per-procedure OEIL RSS removed after the site redesign (404, JSON error body). Also verified dead: https://oeil.europarl.europa.eu/oeil/en/rss (404) and legacy search XML export /oeil/search/export.do?exportFormat=XML (200 but redirects to the homepage — export function gone). OEIL today offers no RSS and no XML export; use data.europarl /procedures instead.",
+    "sample_snippet": "HTTP 404, content-type application/json (585-byte error body); /oeil/en/rss -> 404; export.do -> 200 redirect to https://oeil.europarl.europa.eu/oeil/en (homepage, no XML)"
+   },
+   {
+    "url": "https://web.archive.org/web/2025/https://eur-lex.europa.eu/content/legal-notice/legal-notice.html",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Licensing evidence (live EUR-Lex legal notice is WAF-blocked, so quoted from Wayback snapshot): Commission reuse policy based on Decision 2011/833/EU, reuse of EUR-Lex legal documents allowed for commercial and non-commercial purposes.",
+    "sample_snippet": "The Commission's document reuse policy is based on Decision 2011/833/EU . Unless otherwise specified, you can re-use the legal documents published in EUR-Lex for commercial or non-commercial purposes."
+   }
+  ],
+  "url_patterns": [
+   "https://publications.europa.eu/webapi/rdf/sparql?query={urlencoded SPARQL}&format=application/sparql-results+json (GET or POST; PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>)",
+   "MNE linkage: ?nim cdm:measure_national_implementing_implements_resource_legal ?directive ; citation via cdm:measure_national_implementing_{number|date|page}_official_journal and cdm:work_title; country filter <http://publications.europa.eu/resource/authority/country/DEU>",
+   "Sector-7 CELEX for German measures: 7{YYYY}L{NNNN}DEU_{national-id} (e.g. 72019L0790DEU_202104209)",
+   "https://eur-lex.europa.eu/{EN|DE}/display-feed.rss?rssId={162|163|164|161|221|222} (222 = OJ L acts, verified; invalid ids return 200 + 'feed doesn't exist' stub)",
+   "https://eur-lex.europa.eu/legal-content/{LANG}/NIM/?uri=CELEX:{celex} (human URL only — WAF-challenged for clients without JS)",
+   "https://data.europarl.europa.eu/api/v2/{dataset}?format=application%2Fld%2Bjson&offset={n}&limit={n}",
+   "https://data.europarl.europa.eu/api/v2/procedures/{YYYY-NNNN} (process-id = OEIL reference minus '(COD)': 2022/0066(COD) -> 2022-0066)",
+   "https://data.europarl.europa.eu/api/v2/adopted-texts?year={YYYY}&format=application%2Fld%2Bjson",
+   "https://oeil.europarl.europa.eu/oeil/en/procedure-file?reference={YYYY}/{NNNN}(COD) (stable citation URL; legacy oeil.secure.* ficheprocedure.do redirects here)"
+  ],
+  "pitfalls": [
+   "eur-lex.europa.eu serves HTTP 202 + empty body + 'x-amzn-waf-action: challenge' (AWS WAF/CloudFront) on ALL HTML paths (legal-content, content/help, oj/daily-view), independent of User-Agent — the NIM tab cannot be scraped headlessly; use the CELLAR SPARQL MNE query instead",
+   "Wrong CDM property fails SILENTLY: cdm:resource_legal_implements_resource_legal returns empty bindings with HTTP 200; the correct property is cdm:measure_national_implementing_implements_resource_legal — validate queries against a directive with known transpositions (32019L0790) before trusting empty results",
+   "Empty German MNE set can be a legitimate state, not a bug: 32024L1385 has 162 MNEs EU-wide but 0 from Germany (deadline 2027) as of 2026-07-06",
+   "MNE records contain only bibliographic citations of German acts (title, BGBl number/date/page) — no act text; resolve text via German sources (BGBl) using the citation",
+   "publications.europa.eu/robots.txt redirects to op.europa.eu which is 403 Azure-WAF-blocked — robots policy unknowable; keep voluntary 1 req/s throttling on the SPARQL endpoint, and expect slow/timeout on heavy unscoped queries (Virtuoso)",
+   "EUR-Lex predefined rssId values are only documented on a WAF-blocked help page (recovered via Wayback: 161,162,163,164,221,222); invalid ids return HTTP 200 with a 'feed doesn't exist' XML stub — validate feed body, not status code",
+   "EP API: unfiltered /procedures times out (>30 s); always fetch by process-id or filter; rate limit 500 req/5 min; the format parameter value must be URL-encoded (application%2Fld%2Bjson)",
+   "OEIL legacy machine interfaces are gone: ficheprocedure.rss 404, /oeil/en/rss 404, search export.do silently redirects to homepage; oeil.secure.europarl.europa.eu redirects to oeil.europarl.europa.eu (update stored URLs)",
+   "web.archive.org availability API rate-limits aggressively (429) and domain-wide CDX regex queries time out — use narrow prefix CDX queries when recovering blocked EUR-Lex pages"
+  ],
+  "corrections_from_verify": [
+   "OEIL legacy-URL claim says the .do URL '301-redirects'; observed chain has 3 redirects and the oeil.secure.europarl.europa.eu host hop is a 307 Temporary Redirect (307 observed directly for both /robots.txt and ficheprocedure.rss on that host). Endpoint outcome (final 200 canonical URL) is correct; only the redirect-code detail is off.",
+   "Claim 10's secondary sub-claims (https://oeil.europarl.europa.eu/oeil/en/rss -> 404 and legacy export.do -> homepage redirect) were NOT re-verified by me due to the request budget; the primary ficheprocedure.rss 404 claim was confirmed exactly, including the 585-byte JSON error body.",
+   "Wayback sample_snippet stitches two sentences that are separated by HTML markup in the snapshot; both phrases are present verbatim, so this is presentation-only, not a fabrication.",
+   "RSS claim said 'only 222 verified live' among the recovered feed ids; rssId=162 is in fact also live ('1 - All Parliament and Council legislation') — the id catalog is better than claimed, not worse."
+  ],
+  "corpus_hints": "For the SNTIQ asylum/social-practice corpus: (1) enumerate relevant directives via CELLAR SPARQL (work_has_resource-type DIR + date filter or EuroVoc/directory-code filters), then per directive pull German MNEs with the measure_national_implementing_* query — this yields the exact BGBl citation linking EU asylum law (e.g. 2024 Migration Pact instruments) to German transposition acts (AsylG/AufenthG amendments); (2) poll https://eur-lex.europa.eu/DE/display-feed.rss?rssId=222 daily for new OJ L acts and filter titles/CELEX for asylum-related regulations (sector 3, L); (3) for legislative history and upcoming obligations, resolve the OEIL reference of a pact file to the EP API (/procedures/{YYYY-NNNN}) for the full JSON-LD activity/vote graph, and keep https://oeil.europarl.europa.eu/oeil/en/procedure-file?reference=... as the human-readable citation URL in Schutzbrief-style outputs; (4) adopted-texts endpoint (TA documents, per-language docx/pdf manifestations) gives EP first/second-reading texts before OJ publication — useful lead indicator for practice notes."
+ },
+ {
+  "source": "bundesrat.de (BR-Drucksachen PDFs + RSS)",
+  "status": "live",
+  "audited": "2026-07-06 (probe + adversarial verify)",
+  "verify_verdict": "SOLID — all 16 claimed endpoints reproduced exactly (statuses, content-types, and byte-identical PDF sizes for all 6 PDFs; RSS titles/items, Impressum UrhG text, and both dead ends match). All 5 URL patterns generalized on fresh instantiations, including the hundred-boundary range-dir edge case and the previously unverified sub-number pattern. No omitted auth or parameters found; both pitfall proofs (query-less HTML trap, HEAD 303 WAF rejection) reproduce. Only nits: 46 B drift on one dynamic HT",
+  "robots": "robots.txt (200): \"User-agent: * / Disallow: /SiteGlobals/ /DE/Service/ /EN/Service/ / Allow: /SiteGlobals/Modules|StyleBundles|Frontend/ / Crawl-delay: 30\". All Drucksachen content under /SharedDocs/drucksachen/ is ALLOWED. Crawl-delay 30s applies — bulk backfill must throttle hard. Tension: the site's advertised RSS feeds live under /SiteGlobals/Functions/RSSFeed/ which a strict reading disallows, although the RSS page (/DE/service-navi/rss/rss-node.html, allowed) explicitly publishes them for subscription; feed polling is arguably out of robots' crawler scope but should be sparse (feed ttl=60 min). The GSB search form (/SiteGlobals/Forms/Suche/) is robots-disallowed.",
+  "licensing": "Impressum (verified): all website content 'urheberrechtlich geschützt', download/print for personal use only, commercial use needs permission — EXCEPT 'Drucksachen und Plenarprotokolle des Bundesrates, die als amtliche Werke im Sinne des § 5 Abs. 2 UrhG keinen urheberrechtlichen Schutz genießen', subject to Änderungsverbot (§ 62 Abs. 1-3 UrhG) and Quellenangabe (§ 63 Abs. 1-2 UrhG). So the target corpus (Drucksachen PDFs) is free to store/republish with source attribution and without alteration; site chrome/images are not. RSS channel carries 'Copyright by Bundesrat' but feed metadata is not the documents. Hosting: ITZBund.",
+  "tier": "primary — closes the DIP gap directly: predictable, verified PDF URLs for substantive BR bill texts and (B)-Beschlüsse, clean text layer, §5 UrhG amtliche Werke, plus RSS triggers for new Drucksachen; only constraint is the 30s crawl-delay for bulk backfill and no bulk/search API.",
+  "endpoints": [
+   {
+    "url": "https://www.bundesrat.de/robots.txt",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "robots policy: Disallow /SiteGlobals/, /DE/Service/, /EN/Service/; Allow /SiteGlobals/Modules|StyleBundles|Frontend/; Crawl-delay 30. First attempt failed curl exit 35 (transient TLS), retry OK.",
+    "sample_snippet": "User-agent: *\nDisallow: /SiteGlobals/\nDisallow: /DE/Service/\nDisallow: /EN/Service/\nAllow: /SiteGlobals/Modules/\nAllow: /SiteGlobals/StyleBundles/\nAllow: /SiteGlobals/Frontend/\nCrawl-delay: 30"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0201-0300/296-25.pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, 144127 B, PDF 1.7, 1 page — BR-Drs. 296/25 Gesetzesantrag Niedersachsen (AsylG amendment). NOTE: 1-page transmittal letter only, not the bill text.",
+    "sample_snippet": "pdftotext: 'Drucksache 296/25 30.06.25 Gesetzesantrag des Landes Niedersachsen | Entwurf eines ... Gesetzes zur Änderung des Asylgesetzes zur Verfahrensbeschleunigung durch die erweiterte Möglichkeit der Zulassung von Rechtsmitteln...'"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2024/0101-0200/173-24.pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, 338372 B, PDF 1.4, 2 pages — BR-Drs. 173/24 (same AsylG topic, 2024 round).",
+    "sample_snippet": "file(1): PDF document, version 1.4, 2 page(s); Content-Type: application/pdf"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2026/0101-0200/109-26.pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, 426729 B, PDF 1.7 — BR-Drs. 109/26 verified.",
+    "sample_snippet": "status=200 type=application/pdf size=426729; file(1): PDF document, version 1.7 (zip deflate encoded)"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0701-0800/763-25.pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, 1706606 B, 33 pages — full Gesetzentwurf der Bundesregierung 'Leistungsrechtsanpassungsgesetz' (benefits for RL 2001/55/EG temporary-protection holders). Clean extractable text layer with Artikel/§ amendment structure.",
+    "sample_snippet": "pdftotext: 'Drucksache 763/25 19.12.25 AIS - Fz - G - In | Gesetzentwurf der Bundesregierung ... Artikel 1 ... § 1 wird wie folgt geändert: ... Artikel 2 ... § 74 wird wie folgt geändert ... Artikel 3 ... § 146 wird wie folgt geändert'"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0701-0800/772-25.pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, 2494193 B, PDF 1.7 — BR-Drs. 772/25 verified (5th test number).",
+    "sample_snippet": "status=200 type=application/pdf size=2494193; file(1): PDF document, version 1.7 (zip deflate encoded)"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2024/0101-0200/173-24(B).pdf?__blob=publicationFile&v=1",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "application/pdf, 179433 B, 15 pages — Beschluss variant: literal '(B)' in filename works unencoded. Contains the FULL BR-adopted bill text (this is the substantive document DIP lacks).",
+    "sample_snippet": "pdftotext: 'Drucksache 173/24 (Beschluss) 17.05.24 Gesetzentwurf des Bundesrates | Entwurf eines ... Gesetzes zur Änderung des Asylgesetzes zur Verfahrensbeschleunigung ... A. Problem und Ziel Die Verwaltungsgerichtsbarkeit hat'"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0201-0300/296-25.pdf",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "PITFALL PROOF: same URL WITHOUT ?__blob=publicationFile returns 200 text/html (29736 B) — the Drucksache DETAIL PAGE, not the PDF. Content-type check is mandatory.",
+    "sample_snippet": "<title>Bundesrat - Suche - Entwurf eines ... Gesetzes zur Änderung des Asylgesetzes zur Verfahrensbeschleunigung...</title> (text/html;charset=utf-8)"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0201-0300/296-25.pdf (HEAD)",
+    "method": "HEAD",
+    "verified_http_status": 303,
+    "returns": "PITFALL PROOF: HEAD requests are rejected by the Airlock WAF — 303 See Other to /error_path/400.html (same for all 5 tested URLs). Must use GET.",
+    "sample_snippet": "HTTP/1.1 303 See Other | Location: /error_path/400.html?al_req_id=akuoIVxwZ4cWKWRJ... | Set-Cookie: AL_BALANCE-S=..."
+   },
+   {
+    "url": "https://www.bundesrat.de/SiteGlobals/Functions/RSSFeed/RSSGenerator_PBPrintout.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 (text/xml), ttl 60 — 'Zuletzt veröffentlichte Drucksachen': newest Drucksachen incl. sub-numbered variants (388/1/26); item link points to the SharedDocs detail .html page (swap .html→.pdf?__blob=publicationFile for the PDF).",
+    "sample_snippet": "<title>Bundesrat - Zuletzt veröffentlichte Drucksachen</title>...<ttl>60</ttl><item><title>388/1/26 | Entwurf eines Gesetzes zur Beschleunigung der Umsetzung der Energieeffizienzrichtlinie | 3. Juli 2026</title><link>https://www.bundesrat.de/SharedDocs/drucksachen/2026/0301-0400/388-1-26.html</link>"
+   },
+   {
+    "url": "https://www.bundesrat.de/SiteGlobals/Functions/RSSFeed/RSSGenerator_Announcement.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 — 'Beim Bundesrat eingegangene Beratungsvorgänge': newly received items (bills, EU proposals, Verwaltungsvorschriften) with Drucksache numbers — the earliest-possible new-document trigger.",
+    "sample_snippet": "<title>Bundesrat - Eingegangene Beratungsvorgänge</title>...<item><title>397/26 | Vorschlag für eine Verordnung ... zur Änderung der Verordnung (EU) 2018/1725 ... | 6. Juli 2026</title>"
+   },
+   {
+    "url": "https://www.bundesrat.de/SiteGlobals/Functions/RSSFeed/RSSGenerator_top_plenumkompakt.xml",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS 2.0 — PlenumKOMPAKT: agenda items (TOPs) of upcoming/current plenary sitting, dated by sitting.",
+    "sample_snippet": "<title>Bundesrat - PlenumKOMPAKT</title>...<item><title>10.07.2026 | \"Nur Ja heißt Ja\", Schulpflicht und Recht auf Reparatur</title>"
+   },
+   {
+    "url": "https://www.bundesrat.de/DE/service-navi/rss/rss-node.html",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "RSS overview page (robots-allowed path) listing all 6 feeds: Announcement, PBPrintout (Drucksachen), Publication (Plenarprotokolle), Event, Event_Ausschuss (Termine), top_plenumkompakt. Publication/Event feeds seen advertised but not fetched this session.",
+    "sample_snippet": "href=\"SiteGlobals/Functions/RSSFeed/RSSGenerator_PBPrintout.xml\" ... title=\"Zuletzt veröffentlichte Drucksachen des Bundesrates\" | href=\"...RSSGenerator_Publication.xml\" title=\"Plenarprotokolle des Bundesrates\""
+   },
+   {
+    "url": "https://www.bundesrat.de/DE/service-navi/impressum/impressum-node.html",
+    "method": "GET",
+    "verified_http_status": 200,
+    "returns": "Impressum with Nutzungsbedingungen: general content copyrighted (personal use only), but Drucksachen + Plenarprotokolle exempted as amtliche Werke §5 Abs.2 UrhG. NOTE: first fetch of this URL returned a Bayerischer Landtag TYPO3 page with 200 (shared-hosting misroute); retry returned the real page.",
+    "sample_snippet": "'Davon ausgenommen sind Drucksachen und Plenarprotokolle des Bundesrates, die als amtliche Werke im Sinne des § 5 Abs. 2 UrhG keinen urheberrechtlichen Schutz genießen. Sie unterliegen jedoch dem Änderungsverbot gemäß § 62 ... und dem Gebot der Quellenangabe gemäß § 63'"
+   },
+   {
+    "url": "https://www.bundesrat.de/sitemap.xml",
+    "method": "GET",
+    "verified_http_status": 404,
+    "returns": "Dead end: no sitemap.xml (GSB 404 error page). robots.txt declares no Sitemap either. Number-space must be discovered via RSS + numeric iteration.",
+    "sample_snippet": "<title>BR - Service - Seite nicht gefunden (Fehler 404)</title>"
+   },
+   {
+    "url": "https://www.bundesrat.de/SharedDocs/drucksachen/2025/0201-0300/",
+    "method": "GET",
+    "verified_http_status": 302,
+    "returns": "Dead end: no directory listing — 302 redirect, size 0. Cannot enumerate a range folder directly.",
+    "sample_snippet": "status=302 type=text/html;charset=utf-8 size=0"
+   }
+  ],
+  "url_patterns": [
+   "PDF: https://www.bundesrat.de/SharedDocs/drucksachen/<YYYY>/<RRRR>-<RRRR+99>/<nr>-<yy>.pdf?__blob=publicationFile&v=1  — YYYY = 2000+yy (from the /yy suffix of the Drucksachennummer); range dir = zero-padded hundred block containing nr: lower = floor((nr-1)/100)*100+1, upper = lower+99, both %04d (296/25 -> 2025/0201-0300/296-25.pdf; 173/24 -> 2024/0101-0200/173-24.pdf; 763/25 -> 2025/0701-0800/763-25.pdf). All 5 test numbers verified 200.",
+   "Beschluss: same path with '(B)' appended before .pdf, literal unencoded parens: .../2024/0101-0200/173-24(B).pdf?__blob=publicationFile&v=1 (verified 200, 15 pages, full adopted bill text).",
+   "Sub-numbered Drucksachen (Ausschussempfehlungen etc.): <nr>-<sub>-<yy> in the base-nr range dir, e.g. .../2026/0301-0400/388-1-26.html (observed in RSS; corresponding .pdf?__blob=publicationFile expected).",
+   "Detail page (HTML metadata): same path with .html instead of .pdf (robots-allowed; RSS items link here).",
+   "Feeds: https://www.bundesrat.de/SiteGlobals/Functions/RSSFeed/RSSGenerator_{PBPrintout|Announcement|Publication|Event|Event_Ausschuss|top_plenumkompakt}.xml"
+  ],
+  "pitfalls": [
+   "HEAD requests are rejected (303 -> /error_path/400.html) by the Airlock WAF — always GET, and treat 303-to-error_path as 'blocked request shape', not 'document missing'.",
+   "The .pdf URL WITHOUT ?__blob=publicationFile returns HTTP 200 text/html (the detail page) — a naive downloader saves HTML as .pdf. Always require Content-Type: application/pdf.",
+   "robots Crawl-delay is 30 seconds — a full-year backfill (~800 Drucksachen + variants) takes ~7h/year at compliant speed; plan slow backfill, use RSS (ttl 60 min) for increments.",
+   "RSS feeds live under robots-Disallowed /SiteGlobals/Functions/ despite being advertised for subscription — document the compliance stance; poll at most hourly.",
+   "Wrong-tenant responses observed: one 200 response for the bundesrat.de Impressum URL was actually a Bayerischer Landtag TYPO3 page (shared hosting/LB misroute). Validate every response (expected host in canonical link / 'Bundesrat' marker) before ingesting.",
+   "Transient TLS failure on first contact (curl exit 35); retry with backoff.",
+   "Not every Drucksache contains the bill text: 296/25 is a 1-page transmittal letter (Gesetzesantrag re-introduction); the substantive text sits in the referenced earlier Drucksache or the (B) version. Check page count / doc type (Gesetzesantrag vs Gesetzentwurf vs Beschluss).",
+   "pdftotext artifacts: spaced-out header ('Bun d esrat') and vertical sidebar strings ('R Fu ss' = 'Fristablauf'-style margin marks) interleave with body text — strip first-page header region or filter short-token lines.",
+   "No sitemap (404), no directory listing (302), search form is robots-disallowed GSB HTML — discovery is numeric iteration (1..~1000 per year + sub-numbers + (B)) plus the two RSS feeds; expect 404-shaped GSB error pages (HTML, sometimes 200-ish renders) for gaps.",
+   "The v= query version varies per document on the site (v=1 worked for all 5 tests, but treat it as optional/ignored rather than semantic)."
+  ],
+  "corrections_from_verify": [
+   "Query-less 296-25.pdf detail page measured 29690 B vs claimed 29736 B — dynamic HTML drift, content-type (text/html) and <title> match exactly; not a substantive error.",
+   "Two transient anecdotes in the claims (first robots fetch curl exit 35; first Impressum fetch returning a Bayerischer Landtag TYPO3 page) were not reproducible this session — both URLs answered correctly on first attempt. Unverifiable but disclosed as transients by the claimant, so no deduction.",
+   "Sub-numbered PDF pattern was claimed only as 'expected' — now upgraded to verified: 388-1-26.pdf?__blob=publicationFile&v=1 returns 200 application/pdf, 445872 B, 'Drucksache 388/1/26 03.07.26 Empfehlungen der Ausschuesse'."
+  ],
+  "corpus_hints": "For the SNTIQ asylum/social-practice corpus: (a) BR-Drs. 173/24 + 173/24(B) — Bundesrat's own AsylG amendment bill (Rechtsmittel-Zulassung, Einzelrichter-Übertragung), the (B) PDF is the full adopted text DIP only covers via cover letter; (b) BR-Drs. 296/25 — Niedersachsen's 2025 re-introduction of the same AsylG draft (letter only, follow its reference chain); (c) BR-Drs. 763/25 Leistungsrechtsanpassungsgesetz — switches RL 2001/55/EG temporary-protection beneficiaries between AsylbLG/SGB II regimes, committee lines AIS-Fz-G-In, directly relevant to social-benefits practice; (d) poll RSSGenerator_Announcement.xml (incoming Beratungsvorgänge) filtered for AsylG/AufenthG/AsylbLG/SGB keywords to catch new Länder initiatives at the earliest stage, and RSSGenerator_PBPrintout.xml for Ausschussempfehlungen (nr/sub/yy) which reveal amendment direction before plenary vote; (e) RSSGenerator_top_plenumkompakt.xml maps TOPs to sitting dates for event-sourcing timeline anchors."
+ }
+]

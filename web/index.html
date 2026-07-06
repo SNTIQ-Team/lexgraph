@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lexgraph — Gesetze als git</title>
+<link rel="icon" href="sntiq.svg">
+<style>
+:root{
+  --bg:#0d1017; --bg2:#141922; --bg3:#1b2230; --line:#242c3a;
+  --fg:#e6ebf2; --dim:#8b97a8; --dim2:#5a6577;
+  --acc:#6ea8fe; --ok:#4ec9a5; --warn:#e0b341; --bad:#e0645a; --eu:#c58fff;
+  --by:#5fd0e0; --land:#9aa7ff;
+  --del:#4a1f22; --delfg:#ff9d94; --add:#173a2a; --addfg:#7ee0b0;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;
+  background:var(--bg2);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20}
+.brand{font-weight:700;font-size:16px;letter-spacing:.3px;white-space:nowrap;
+  display:flex;align-items:center;gap:8px}
+.brand .logo{width:22px;height:22px;border-radius:5px}
+.brand small{color:var(--dim);font-weight:400;font-size:12px;margin-left:2px}
+nav{display:flex;gap:4px;margin-left:8px}
+nav button{background:none;border:1px solid transparent;color:var(--dim);
+  padding:7px 14px;border-radius:7px;cursor:pointer;font-size:13.5px}
+nav button:hover{color:var(--fg);background:var(--bg3)}
+nav button.on{color:var(--fg);background:var(--bg3);border-color:var(--line)}
+.right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.lang{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.lang button{background:var(--bg3);border:none;color:var(--dim);
+  padding:6px 11px;cursor:pointer;font-size:12px;font-weight:600}
+.lang button.on{background:var(--acc);color:#08121f}
+.built{color:var(--dim2);font-size:12px;white-space:nowrap}
+.pulse{display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--ok);margin-right:6px;vertical-align:middle;
+  animation:pulse 2.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(78,201,165,.5)}
+  70%{box-shadow:0 0 0 7px rgba(78,201,165,0)}100%{box-shadow:0 0 0 0 rgba(78,201,165,0)}}
+
+main{height:calc(100vh - 53px);overflow:hidden;position:relative}
+.view{display:none;height:100%}
+#overview.on{display:flex;flex-direction:column}
+#git.on{display:flex;flex-direction:column}
+#hier.on{display:block}
+#graph.on{display:block}
+
+/* ---- git log ---- */
+#git .colhead{gap:14px}
+.gitstat{margin-left:auto;color:var(--dim2);font-size:12px}
+#gitlog{overflow-y:auto;flex:1;padding:6px 0 40px}
+.commit{display:grid;grid-template-columns:56px 88px 1fr;gap:0;
+  align-items:stretch;border-bottom:1px solid var(--bg2)}
+.commit:hover{background:var(--bg2)}
+.rail{position:relative}
+.rail canvas{position:absolute;inset:0;width:100%;height:100%}
+.chash{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim2);
+  padding:11px 8px 0 0;text-align:right}
+.cbody{padding:9px 16px 9px 4px;min-width:0}
+.cmsg{font-size:13px}
+.cmsg .mtag{font-size:9px;font-weight:700;letter-spacing:.4px;padding:1px 5px;
+  border-radius:3px;margin-right:7px;vertical-align:middle;text-transform:uppercase}
+.mtag.eu{background:#2c2447;color:var(--eu)} .mtag.bund{background:#1a2436;color:var(--acc)}
+.mtag.bayern{background:#12313a;color:var(--by)} .mtag.land{background:#232a4a;color:var(--land)}
+.mtag.merge{background:#173a2a;color:var(--ok)} .mtag.open{background:#3a2e12;color:var(--warn)}
+.cmeta{font-size:11px;color:var(--dim);margin-top:3px;display:flex;
+  gap:10px;flex-wrap:wrap;align-items:center}
+.cref{font-size:10px;background:var(--bg3);border:1px solid var(--line);
+  border-radius:10px;padding:0 7px;color:var(--dim);font-family:ui-monospace,monospace}
+.cref.geas{color:var(--eu);border-color:#3a2f56}
+.cref.rel{color:var(--bad);border-color:#4a2028}
+.cact{color:var(--acc);font-family:ui-monospace,monospace}
+.cpara{font-size:10px;color:var(--dim2);font-family:ui-monospace,monospace}
+
+/* ---- overview ---- */
+#overview{overflow:hidden}
+.stats{display:flex;gap:10px;padding:14px 18px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);background:var(--bg2)}
+.stat{background:var(--bg3);border:1px solid var(--line);border-radius:9px;
+  padding:9px 14px;min-width:96px}
+.stat .n{font-size:21px;font-weight:700}
+.stat .l{font-size:11px;color:var(--dim);text-transform:uppercase;
+  letter-spacing:.4px}
+.stat.acc .n{color:var(--acc)} .stat.by .n{color:var(--by)}
+.stat.eu .n{color:var(--eu)} .stat.ok .n{color:var(--ok)}
+.split{display:flex;flex:1;overflow:hidden}
+.col{display:flex;flex-direction:column;overflow:hidden}
+.col.feed{flex:1;border-right:1px solid var(--line)}
+.col.wiki{width:min(46%,660px)}
+.colhead{padding:10px 16px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;background:var(--bg2)}
+.colhead h3{margin:0;font-size:13px;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--dim);white-space:nowrap}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{font-size:11px;padding:3px 9px;border-radius:20px;cursor:pointer;
+  border:1px solid var(--line);color:var(--dim);background:var(--bg3)}
+.chip.on{color:var(--fg);border-color:var(--acc);background:#1b2740}
+.scroll{overflow-y:auto;flex:1}
+input.search{background:var(--bg3);border:1px solid var(--line);color:var(--fg);
+  border-radius:7px;padding:7px 11px;font-size:13px;width:100%;outline:none}
+input.search:focus{border-color:var(--acc)}
+
+.ev{display:flex;gap:11px;padding:9px 16px;border-bottom:1px solid var(--line);
+  align-items:baseline}
+.ev:hover{background:var(--bg2)}
+.ev .date{color:var(--dim2);font-size:12px;white-space:nowrap;
+  font-family:ui-monospace,monospace;min-width:78px}
+.ev .body{flex:1;min-width:0}
+.ev .title{font-size:13px}
+.ev .meta{font-size:11px;color:var(--dim);margin-top:1px}
+.tag{font-size:10px;padding:1px 7px;border-radius:4px;margin-right:6px;
+  font-weight:600;letter-spacing:.3px;vertical-align:middle}
+.j-DE{background:#233;color:#9fd} .j-EU{background:#312a45;color:var(--eu)}
+.j-by{background:#12313a;color:var(--by)} .j-land{background:#232a4a;color:var(--land)}
+.badge{font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;
+  background:#3a2e12;color:var(--warn)}
+.badge.amtlich{background:#123a2a;color:var(--ok)}
+.badge.relevant{background:#3a1420;color:var(--bad)}
+
+.wikirow{padding:10px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.wikirow:hover{background:var(--bg2)}
+.wikirow .ab{font-weight:600}
+.wikirow .ti{font-size:12px;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wikirow .mini{font-size:11px;color:var(--dim2);margin-top:3px;
+  display:flex;gap:12px;flex-wrap:wrap}
+.wikirow .mini b{color:var(--dim);font-weight:600}
+.dotp{color:var(--acc)} .dotn{color:var(--warn)}
+
+/* ---- act sheet ---- */
+.modal{position:fixed;inset:0;background:rgba(5,7,11,.72);z-index:40;
+  display:none;align-items:stretch;justify-content:flex-end}
+.modal.on{display:flex}
+.sheet{width:min(800px,95vw);background:var(--bg);height:100%;overflow-y:auto;
+  border-left:1px solid var(--line);box-shadow:-20px 0 60px rgba(0,0,0,.5)}
+.sheet .top{position:sticky;top:0;background:var(--bg2);
+  border-bottom:1px solid var(--line);padding:16px 22px;z-index:2}
+.sheet .pad{padding:6px 22px 40px}
+.sheet h2{margin:.25em 0;font-size:20px}
+.tline{color:var(--dim);font-size:12.5px;margin-top:6px;
+  display:flex;gap:16px;flex-wrap:wrap}
+.tline b{color:var(--fg)}
+.sec{margin:22px 0}
+.sec h4{font-size:12px;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--dim);border-bottom:1px solid var(--line);padding-bottom:5px;
+  display:flex;justify-content:space-between}
+.sec h4 .cnt{color:var(--dim2)}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:5px;
+  margin:0 6px 0 0;font-weight:600;white-space:nowrap}
+.st-published,.st-verkuendet{background:#123a2a;color:var(--ok)}
+.st-adopted,.st-beschlossen{background:#2a3312;color:#bcd94e}
+.st-proposed,.st-eingebracht,.st-1_lesung,.st-ausschuss,.st-2_lesung{
+  background:#1b2740;color:var(--acc)}
+.st-rejected,.st-not_merged,.st-abgelehnt,.st-zurueckgezogen{
+  background:#3a1a16;color:var(--bad)}
+
+/* timeline of changes */
+.tl{position:relative;margin-left:8px;padding-left:20px;
+  border-left:2px solid var(--line)}
+.tl .item{position:relative;padding:9px 0}
+.tl .item::before{content:"";position:absolute;left:-27px;top:14px;
+  width:11px;height:11px;border-radius:50%;background:var(--dim2);
+  border:2px solid var(--bg)}
+.tl .item.future::before{background:var(--warn)}
+.tl .item.pending::before{background:var(--acc)}
+.tl .item.past::before{background:var(--ok)}
+.tl .d{font-family:ui-monospace,monospace;font-size:12px;color:var(--dim)}
+.tl .d .rel{color:var(--dim2);margin-left:6px}
+.tl .tx{font-size:13px;margin-top:2px}
+.tl .paras{margin-top:4px}
+.tag-para{display:inline-block;font-size:10.5px;background:var(--bg3);
+  border:1px solid var(--line);border-radius:4px;padding:0 6px;
+  margin:2px 4px 0 0;color:var(--dim);font-family:ui-monospace,monospace}
+
+/* diff block */
+.diff{margin-top:7px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:8px;overflow:hidden;font-size:12.5px}
+.diff .drow{padding:6px 10px;font-family:ui-monospace,monospace;
+  line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.diff .drow.o{background:rgba(74,31,34,.35);border-bottom:1px solid var(--line)}
+.diff .drow.n{background:rgba(23,58,42,.32)}
+.diff .mk{display:inline-block;width:15px;color:var(--dim2);user-select:none}
+.diff del{background:var(--del);color:var(--delfg);text-decoration:none;
+  border-radius:3px;padding:0 1px}
+.diff ins{background:var(--add);color:var(--addfg);text-decoration:none;
+  border-radius:3px;padding:0 1px}
+
+.norm{padding:9px 0;border-bottom:1px solid var(--bg3)}
+.norm .en{font-weight:600;color:var(--acc)}
+.norm .tx{font-size:12.5px;color:var(--dim);white-space:pre-wrap;
+  max-height:8em;overflow:hidden}
+.x{cursor:pointer;color:var(--dim);font-size:22px;padding:0 6px;float:right}
+.x:hover{color:var(--fg)}
+
+/* ---- hierarchy ---- */
+#hier{overflow:auto;padding:18px 22px}
+.tree details{margin:2px 0}
+.tree summary{cursor:pointer;padding:5px 8px;border-radius:6px;
+  list-style:none;display:flex;align-items:center;gap:8px}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary:hover{background:var(--bg2)}
+.tree summary .tw{color:var(--dim2);width:12px;display:inline-block;
+  transition:transform .15s}
+.tree details[open]>summary .tw{transform:rotate(90deg)}
+.tree .grp{border-left:1px solid var(--line);margin-left:13px;padding-left:10px}
+.tree .cnt{color:var(--dim2);font-size:12px}
+.tree .leaf{padding:3px 8px 3px 30px;font-size:12.5px;color:var(--dim);
+  border-bottom:1px solid var(--bg2)}
+.tree .leaf .d{color:var(--dim2);font-family:ui-monospace,monospace;
+  margin-right:8px}
+.tree h2{font-size:15px}
+.tree .lvl1>summary{font-size:15px;font-weight:600}
+
+/* ---- graph ---- */
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:grab;display:block}
+#cv:active{cursor:grabbing}
+.gpanel{position:absolute;top:14px;left:14px;background:rgba(20,25,34,.92);
+  border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  backdrop-filter:blur(6px);max-width:230px;font-size:12px}
+.gpanel h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--dim)}
+.leg{display:flex;align-items:center;gap:7px;margin:3px 0;cursor:pointer}
+.leg.off{opacity:.32}
+.leg .dot{width:11px;height:11px;border-radius:50%;flex:none}
+.timeline{position:absolute;left:14px;right:14px;bottom:14px;
+  background:rgba(20,25,34,.92);border:1px solid var(--line);border-radius:10px;
+  padding:10px 16px;backdrop-filter:blur(6px)}
+.timeline .row{display:flex;align-items:center;gap:12px}
+.timeline .lab{font-family:ui-monospace,monospace;font-size:13px;min-width:78px;
+  color:var(--acc)}
+.timeline input[type=range]{flex:1;accent-color:var(--acc)}
+.timeline button{background:var(--bg3);border:1px solid var(--line);
+  color:var(--fg);border-radius:6px;width:32px;height:28px;cursor:pointer}
+.timeline .sub{font-size:11px;color:var(--dim);margin-top:5px}
+.gsearch{position:absolute;top:14px;right:14px;width:230px}
+.tip{position:absolute;pointer-events:none;background:rgba(10,13,20,.96);
+  border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-size:12px;
+  max-width:280px;z-index:5;display:none}
+.tip .k{color:var(--dim)}
+.worldbar{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  display:flex;gap:8px}
+.wbox{background:rgba(20,25,34,.92);border:1px solid var(--line);
+  border-radius:8px;padding:6px 12px;font-size:12px;text-align:center}
+.wbox b{font-size:15px}
+.empty{color:var(--dim2);padding:40px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="sntiq.svg" class="logo" alt="SNTIQ">Lexgraph <small data-i="tagline"></small></div>
+  <nav>
+    <button data-v="overview" class="on" data-i="nav_overview"></button>
+    <button data-v="git" data-i="nav_git"></button>
+    <button data-v="hier" data-i="nav_hier"></button>
+    <button data-v="graph" data-i="nav_graph"></button>
+  </nav>
+  <div class="right">
+    <div class="lang">
+      <button data-l="de" class="on">DE</button>
+      <button data-l="en">EN</button>
+    </div>
+    <div class="built" id="built"><span class="pulse"></span>…</div>
+  </div>
+</header>
+
+<main>
+  <section class="view on" id="overview">
+    <div class="stats" id="stats"></div>
+    <div class="split">
+      <div class="col feed">
+        <div class="colhead"><h3 data-i="feed_title"></h3>
+          <div class="chips" id="feedchips"></div></div>
+        <div class="scroll" id="feed"></div>
+      </div>
+      <div class="col wiki">
+        <div class="colhead"><h3 data-i="wiki_title"></h3>
+          <input class="search" id="wikisearch"></div>
+        <div class="scroll" id="wiki"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="git">
+    <div class="colhead">
+      <h3 data-i="git_title"></h3>
+      <div class="chips" id="gitlanes"></div>
+      <span class="gitstat" id="gitstat"></span>
+    </div>
+    <div class="scroll" id="gitlog"></div>
+  </section>
+
+  <section class="view" id="hier"></section>
+
+  <section class="view" id="graph">
+    <canvas id="cv"></canvas>
+    <div class="worldbar" id="worldbar"></div>
+    <div class="gpanel"><h4 data-i="layers"></h4><div id="legend"></div></div>
+    <input class="search gsearch" id="gsearch">
+    <div class="timeline">
+      <div class="row">
+        <button id="play">▶</button>
+        <span class="lab" id="tlab">—</span>
+        <div style="flex:1;position:relative">
+          <canvas id="density" style="position:absolute;left:0;right:0;top:-2px;
+            width:100%;height:16px;opacity:.5;pointer-events:none"></canvas>
+          <input type="range" id="trange" min="0" max="100" value="100"
+            style="width:100%;position:relative">
+        </div>
+      </div>
+      <div class="sub" id="tsub"></div>
+    </div>
+    <div class="tip" id="tip"></div>
+  </section>
+</main>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let DATA={}, LANG=localStorage.getItem('lex_lang')||'de';
+
+/* ================= i18n ================= */
+const T={
+ de:{
+  tagline:'Gesetze als git · Bund · Bayern · EU · Länder',
+  nav_overview:'Wiki & Realtime', nav_hier:'Hierarchie', nav_graph:'Graph', nav_git:'Git-Log',
+  git_title:'Commit-Log der Normgebung', git_all:'alle',
+  git_commits:'Commits', git_open:'offene Zweige', git_merges:'Merges (EU→DE)',
+  git_touches:'ändert', git_merge_of:'merge von',
+  feed_title:'Realtime-Feed', wiki_title:'Wiki',
+  wiki_ph:'Gesetz suchen … (AsylbLG, AufnG, Aufenthalt)',
+  gsearch_ph:'Knoten suchen …', layers:'Ebenen',
+  stand:'Stand', loading:'lädt…', none:'keine Ereignisse', notfound:'nichts gefunden',
+  s_acts:'Gesetze', s_vorg:'DIP-Vorgänge', s_pub:'Patches verkündet',
+  s_pend:'Patches offen', s_bybills:'BY-Entwürfe', s_byver:'BY verkündet',
+  s_eu:'EU-Instrumente', s_transp:'DE-Umsetzungen', s_nodes:'Graph-Knoten',
+  s_beliefs:'Beliefs',
+  last_change:'zuletzt geändert', next_change:'nächste Änderung',
+  changes:'Änderungen', pending:'offen', norms:'§§',
+  build:'Stand', bayrs:'BayRS',
+  sec_upcoming:'⏳ Tritt in Kraft', sec_pending:'In Arbeit — nicht geltendes Recht',
+  sec_merged:'✔ Verkündet diese WP', sec_killed:'✗ Gescheitert',
+  sec_bills:'Landtag WP19', sec_gvbl:'GVBl / BayMBl',
+  sec_history:'Änderungshistorie', sec_norms:'§§ Volltext', sec_diff:'Was änderte sich',
+  not_law:'NICHT geltendes Recht',
+  cmds:'Befehle', from_laws:'aus', laws:'Gesetzen', no_effect:'Historie, ohne Wirkung',
+  in_force_from:'in Kraft ab', old:'alt', new:'neu',
+  rel_today:'heute', rel_yesterday:'gestern', rel_tomorrow:'morgen',
+  rel_days_ago:'vor % Tagen', rel_in_days:'in % Tagen',
+  rel_months_ago:'vor % Monaten', rel_in_months:'in % Monaten',
+  rel_years_ago:'vor % Jahren', rel_in_years:'in % Jahren',
+  world_bund:'Bund', world_bayern:'Bayern', world_eu:'EU', stable:'stabil',
+  active_nodes:'Knoten', active_beliefs:'Beliefs aktiv in diesem Monat',
+  hier_title:'Normative Hierarchie — von EU-Genesis bis Landesrecht',
+  eu_union:'Europäische Union', instruments:'Instrumente',
+  deu_impl:'DE-Umsetzung', deu_impls:'DE-Umsetzungen', no_impl:'keine DE-Umsetzung',
+  repealed:'außer Kraft', corpus:'Korpus', pipeline:'Gesetzgebungs-Pipeline (DIP)',
+  states:'Stände', bund:'Bund', bayern:'Freistaat Bayern',
+  laender_monitor:'Länder-Monitor', landtage:'Landtage', bills_kind:'Gesetzentwürfe',
+ },
+ en:{
+  tagline:'laws as git · Federal · Bavaria · EU · States',
+  nav_overview:'Wiki & Realtime', nav_hier:'Hierarchy', nav_graph:'Graph', nav_git:'Git log',
+  git_title:'Commit log of lawmaking', git_all:'all',
+  git_commits:'commits', git_open:'open branches', git_merges:'merges (EU→DE)',
+  git_touches:'touches', git_merge_of:'merge of',
+  feed_title:'Realtime feed', wiki_title:'Wiki',
+  wiki_ph:'search a law … (AsylbLG, AufnG, Aufenthalt)',
+  gsearch_ph:'find node …', layers:'Layers',
+  stand:'as of', loading:'loading…', none:'no events', notfound:'nothing found',
+  s_acts:'laws', s_vorg:'DIP procedures', s_pub:'patches enacted',
+  s_pend:'patches pending', s_bybills:'BY bills', s_byver:'BY enacted',
+  s_eu:'EU instruments', s_transp:'DE transpositions', s_nodes:'graph nodes',
+  s_beliefs:'beliefs',
+  last_change:'last changed', next_change:'next change',
+  changes:'amendments', pending:'pending', norms:'§§',
+  build:'as of', bayrs:'BayRS',
+  sec_upcoming:'⏳ Entering into force', sec_pending:'In progress — not law in force',
+  sec_merged:'✔ Enacted this term', sec_killed:'✗ Failed',
+  sec_bills:'State parliament (WP19)', sec_gvbl:'GVBl / BayMBl gazette',
+  sec_history:'Amendment history', sec_norms:'§§ full text', sec_diff:'What changed',
+  not_law:'NOT law in force',
+  cmds:'commands', from_laws:'from', laws:'laws', no_effect:'history, no effect',
+  in_force_from:'in force from', old:'old', new:'new',
+  rel_today:'today', rel_yesterday:'yesterday', rel_tomorrow:'tomorrow',
+  rel_days_ago:'% days ago', rel_in_days:'in % days',
+  rel_months_ago:'% months ago', rel_in_months:'in % months',
+  rel_years_ago:'% years ago', rel_in_years:'in % years',
+  world_bund:'Federal', world_bayern:'Bavaria', world_eu:'EU', stable:'stable',
+  active_nodes:'nodes', active_beliefs:'beliefs active this month',
+  hier_title:'Normative hierarchy — from EU genesis to state law',
+  eu_union:'European Union', instruments:'instruments',
+  deu_impl:'DE transposition', deu_impls:'DE transpositions', no_impl:'no DE transposition',
+  repealed:'repealed', corpus:'Corpus', pipeline:'Legislative pipeline (DIP)',
+  states:'stages', bund:'Federal', bayern:'Free State of Bavaria',
+  laender_monitor:'State monitor', landtage:'state parliaments', bills_kind:'bills',
+ }
+};
+const t=k=>(T[LANG][k]!==undefined?T[LANG][k]:k);
+const TODAY=new Date('2026-07-06');
+
+/* ---- date helpers ---- */
+function fmtDate(iso){
+  if(!iso)return'';const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m?`${m[3]}.${m[2]}.${m[1]}`:iso;
+}
+function relTime(iso){
+  if(!iso)return'';const d=new Date(iso.slice(0,10));
+  const days=Math.round((d-TODAY)/86400000);
+  const a=Math.abs(days);const past=days<0;
+  if(days===0)return t('rel_today');
+  if(days===-1)return t('rel_yesterday');
+  if(days===1)return t('rel_tomorrow');
+  let key,val;
+  if(a<45){key=past?'rel_days_ago':'rel_in_days';val=a;}
+  else if(a<365){key=past?'rel_months_ago':'rel_in_months';val=Math.round(a/30);}
+  else{key=past?'rel_years_ago':'rel_in_years';val=Math.round(a/365);}
+  return t(key).replace('%',val);
+}
+function dateRel(iso){return iso?`${fmtDate(iso)} <span class="rel">· ${relTime(iso)}</span>`:'';}
+// GII builddate "20260611" / Bavaria "06.07.2026_02:00" -> ISO
+function buildToIso(b){if(!b)return'';
+  let m=/^(\d{4})(\d{2})(\d{2})/.exec(b);if(m)return`${m[1]}-${m[2]}-${m[3]}`;
+  m=/^(\d{2})\.(\d{2})\.(\d{4})/.exec(b);if(m)return`${m[3]}-${m[2]}-${m[1]}`;
+  return b;}
+
+/* ---- word-level diff (LCS) ---- */
+function tok(s){return (s||'').split(/(\s+)/).filter(x=>x!=='');}
+function wordDiff(o,n){
+  const A=tok(o),B=tok(n),m=A.length,k=B.length;
+  const dp=Array.from({length:m+1},()=>new Int32Array(k+1));
+  for(let i=m-1;i>=0;i--)for(let j=k-1;j>=0;j--)
+    dp[i][j]=A[i]===B[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  let i=0,j=0,oh='',nh='';
+  const flush=(buf,tag)=>buf?`<${tag}>${esc(buf)}</${tag}>`:'';
+  let ob='',nb='';
+  while(i<m&&j<k){
+    if(A[i]===B[j]){oh+=flush(ob,'del');ob='';nh+=flush(nb,'ins');nb='';
+      oh+=esc(A[i]);nh+=esc(B[j]);i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){ob+=A[i++];}
+    else{nb+=B[j++];}
+  }
+  while(i<m)ob+=A[i++]; while(j<k)nb+=B[j++];
+  oh+=flush(ob,'del');nh+=flush(nb,'ins');
+  return{o:oh,n:nh};
+}
+function diffBlock(o,n){
+  const d=wordDiff(o,n);
+  return `<div class="diff">
+    <div class="drow o"><span class="mk">−</span>${d.o}</div>
+    <div class="drow n"><span class="mk">+</span>${d.n}</div></div>`;
+}
+
+async function j(p){const r=await fetch(p);if(!r.ok)throw new Error(p);return r.json();}
+
+async function boot(){
+  const [summary,feed,wiki,hier,graph,git]=await Promise.all(
+    ['summary','feed','wiki','hierarchy','graph','git'].map(n=>j('data/'+n+'.json')));
+  DATA={summary,feed,wiki,hier,graph,git};
+  applyLang();initGraph();
+  DATA.builtStr=fmtDate(summary.built_at)+' '+summary.built_at.slice(11,16)+' UTC';
+  renderAll();
+}
+function renderAll(){renderStats();renderFeed();renderWiki();renderHier();renderGit();
+  $('#built').innerHTML='<span class="pulse"></span>'+t('stand')+' '+DATA.builtStr;}
+
+/* ---- lang ---- */
+function applyLang(){
+  document.documentElement.lang=LANG;
+  $$('[data-i]').forEach(el=>el.textContent=t(el.dataset.i));
+  $('#wikisearch').placeholder=t('wiki_ph');
+  $('#gsearch').placeholder=t('gsearch_ph');
+  $$('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===LANG));
+}
+$$('.lang button').forEach(b=>b.onclick=()=>{
+  LANG=b.dataset.l;localStorage.setItem('lex_lang',LANG);
+  applyLang();if(DATA.summary){renderAll();if(G.ticks){updTick();renderWorldbar();}}
+  if($('#modal').classList.contains('on')&&G.curAct)openAct(G.curAct);
+});
+
+/* ---- nav ---- */
+$$('nav button').forEach(b=>b.onclick=()=>{
+  $$('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('.view').forEach(v=>v.classList.toggle('on',v.id===b.dataset.v));
+  if(b.dataset.v==='graph'){G.resize();drawDensity();}
+  if(b.dataset.v==='git')drawGit();
+});
+
+/* ---------- stats ---------- */
+function renderStats(){
+  const s=DATA.summary, p=s.patches||{};
+  const cells=[
+    ['acc',s.acts_fed+s.acts_by,'s_acts'],
+    ['acc',s.vorgaenge,'s_vorg'],
+    ['ok',(p.published||0),'s_pub'],
+    ['',(p.proposed||0)+(p.adopted||0),'s_pend'],
+    ['by',s.bay_bills,'s_bybills'],
+    ['by',s.bay_verkuendet,'s_byver'],
+    ['eu',s.eu_instruments,'s_eu'],
+    ['eu',s.transpositions,'s_transp'],
+    ['',s.graph.nodes,'s_nodes'],
+    ['',s.graph.beliefs,'s_beliefs'],
+  ];
+  $('#stats').innerHTML=cells.map(([c,n,l])=>
+    `<div class="stat ${c}"><div class="n">${n}</div><div class="l">${t(l)}</div></div>`).join('');
+}
+
+/* ---------- feed ---------- */
+let feedFilter=new Set();
+function jtag(j){
+  if(j==='EU')return'<span class="tag j-EU">EU</span>';
+  if(j==='DE')return'<span class="tag j-DE">Bund</span>';
+  if(j==='DE-BY')return'<span class="tag j-by">Bayern</span>';
+  return'<span class="tag j-land">'+esc(j.replace('DE-',''))+'</span>';
+}
+function renderFeed(){
+  const srcs=[...new Set(DATA.feed.map(e=>e.source))].sort();
+  $('#feedchips').innerHTML=srcs.map(s=>
+    `<span class="chip${feedFilter.has(s)?' on':''}" data-s="${esc(s)}">${esc(s)}</span>`).join('');
+  $$('#feedchips .chip').forEach(c=>c.onclick=()=>{
+    const s=c.dataset.s;
+    feedFilter.has(s)?feedFilter.delete(s):feedFilter.add(s);
+    c.classList.toggle('on');drawFeed();
+  });
+  drawFeed();
+}
+function drawFeed(){
+  const rows=DATA.feed.filter(e=>!feedFilter.size||feedFilter.has(e.source));
+  $('#feed').innerHTML=rows.map(e=>{
+    const bad=e.badge?`<span class="badge ${e.badge==='amtlich'?'amtlich':e.badge==='relevant'?'relevant':''}">${esc(e.badge)}</span>`:'';
+    const ti=e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.title)}</a>`:esc(e.title);
+    return `<div class="ev"><div class="date">${fmtDate(e.time)}</div><div class="body">
+      <div class="title">${jtag(e.juris)}${ti}${bad}</div>
+      <div class="meta">${esc(e.source)} · ${esc(e.kind)} · ${relTime(e.time)}</div></div></div>`;
+  }).join('')||`<div class="empty">${t('none')}</div>`;
+}
+
+/* ---------- wiki ---------- */
+function renderWiki(){$('#wikisearch').oninput=e=>drawWiki(e.target.value.toLowerCase());
+  drawWiki($('#wikisearch').value.toLowerCase());}
+function drawWiki(q){
+  const rows=DATA.wiki.filter(a=>!q||a.jurabk.toLowerCase().includes(q)||
+    (a.title||'').toLowerCase().includes(q));
+  $('#wiki').innerHTML=rows.map(a=>{
+    const parts=[];
+    if(a.last_change)parts.push(`<span><b>${t('last_change')}</b> ${fmtDate(a.last_change)}</span>`);
+    if(a.pending)parts.push(`<span class="dotp">● ${a.pending} ${t('pending')}</span>`);
+    if(a.next_change)parts.push(`<span class="dotn">⏳ ${fmtDate(a.next_change)}</span>`);
+    return `<div class="wikirow" data-id="${a.id}">
+      <div class="ab">${jtag(a.juris)}${esc(a.jurabk)} <span style="color:var(--dim2);font-weight:400;font-size:12px">· ${a.norms} ${t('norms')}</span></div>
+      <div class="ti">${esc(a.title)}</div>
+      <div class="mini">${parts.join('')}</div></div>`;
+  }).join('')||`<div class="empty">${t('notfound')}</div>`;
+  $$('#wiki .wikirow').forEach(r=>r.onclick=()=>openAct(r.dataset.id));
+}
+
+/* ---------- act sheet ---------- */
+async function openAct(id){
+  let d;try{d=await j('data/acts/'+id+'.json');}catch(e){return;}
+  G.curAct=id;
+  const tm=d.temporal||{};
+  const tline=[];
+  if(tm.last_change)tline.push(`<span><b>${t('last_change')}</b> ${dateRel(tm.last_change)}</span>`);
+  if(tm.change_count)tline.push(`<span><b>${tm.change_count}</b> ${t('changes')}</span>`);
+  if(tm.pending)tline.push(`<span class="dotp"><b>${tm.pending}</b> ${t('pending')}</span>`);
+  if(tm.next_change)tline.push(`<span class="dotn"><b>⏳ ${t('next_change')}</b> ${dateRel(tm.next_change)}</span>`);
+
+  let h=`<div class="top"><span class="x" onclick="closeModal()">✕</span>
+    <div>${jtag(d.juris)}<b>${esc(d.jurabk)}</b>${d.bayrs?' · '+t('bayrs')+' '+esc(d.bayrs):''}
+    ${d.build?` · ${t('build')} ${fmtDate(buildToIso(d.build))}`:''}</div>
+    <h2>${esc(d.title||d.jurabk)}</h2>
+    <div class="tline">${tline.join('')}</div>
+    ${d.permalink?`<a href="${esc(d.permalink)}" target="_blank" rel="noopener" style="font-size:12px">gesetze-bayern.de ↗</a>`:''}
+    </div><div class="pad">`;
+
+  // upcoming
+  if(d.upcoming&&d.upcoming.length){
+    h+=sec('sec_upcoming',d.upcoming.length)+`<div class="tl">`+d.upcoming.map(u=>
+      `<div class="item future"><div class="d">${dateRel(u.date)}</div>
+      <div class="tx">${u.url?`<a href="${esc(u.url)}" target="_blank" rel="noopener">${esc(u.title)}</a>`:esc(u.title)}</div></div>`).join('')+`</div>`;
+  }
+  // patches: pending (with diffs) + enacted (with diffs) + failed (count)
+  if(d.patches&&d.patches.length){
+    const live=d.patches.filter(p=>p.status==='proposed'||p.status==='adopted');
+    const done=d.patches.filter(p=>p.status==='published');
+    const dead=d.patches.filter(p=>p.status==='rejected'||p.status==='not_merged');
+    if(live.length)h+=sec('sec_pending',live.length)+patchGroups(live,'pending');
+    if(done.length)h+=sec('sec_merged',done.length)+patchGroups(done,'past');
+    if(dead.length)h+=sec('sec_killed',dead.length)+
+      `<div style="color:var(--dim)">${dead.length} ${t('cmds')} · ${t('no_effect')}</div>`;
+  }
+  // bavarian bills
+  if(d.bills&&d.bills.length){
+    h+=sec('sec_bills',d.bills.length)+`<div class="tl">`+d.bills.map(b=>
+      `<div class="item ${b.status==='verkuendet'?'past':'pending'}">
+      <div class="tx"><span class="pill st-${b.status}">${b.status}</span>[${esc(b.drs)}] ${esc(b.title)}</div>
+      ${b.gvbl?`<div style="font-size:11px;color:var(--dim2);margin-top:2px">${esc(b.gvbl)}</div>`:''}</div>`).join('')+`</div>`;
+  }
+  // gvbl events
+  if(d.gvbl_events&&d.gvbl_events.length){
+    h+=sec('sec_gvbl',d.gvbl_events.length)+`<div class="tl">`+d.gvbl_events.map(e=>
+      `<div class="item past"><div class="d">${dateRel(e.date)}</div>
+      <div class="tx">[${esc(e.gazette)}] <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.title)}</a></div></div>`).join('')+`</div>`;
+  }
+  // version history
+  if(d.versions&&d.versions.length){
+    h+=sec('sec_history',d.versions.length)+`<div class="tl">`+d.versions.slice(0,50).map(v=>
+      `<div class="item past"><div class="d">${dateRel(v.date)}</div>
+      <div class="tx">${v.url?`<a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.text)}</a>`:esc(v.text)}</div></div>`).join('')+`</div>`;
+  }
+  // norms
+  if(d.norms&&d.norms.length){
+    h+=sec('sec_norms',d.norms.length)+d.norms.slice(0,120).map(n=>
+      `<div class="norm"><span class="en">${esc(n.enbez)}</span>${n.titel?' — '+esc(n.titel):''}
+      <div class="tx">${esc((n.text||'').slice(0,600))}</div></div>`).join('');
+  }
+  h+=`</div>`;
+  $('#sheet').innerHTML=h;$('#modal').classList.add('on');$('#sheet').scrollTop=0;
+}
+function sec(key,n,extra){return `<div class="sec"><h4><span>${t(key)}${extra?' — '+extra:''}</span>${n!=null?`<span class="cnt">${n}</span>`:''}</h4></div>`;}
+// group patch commands by procedure -> timeline items with §-chips + diffs
+function patchGroups(patches,cls){
+  const byproc={};patches.forEach(p=>{(byproc[p.proc]=byproc[p.proc]||[]).push(p);});
+  let out=`<div class="tl">`;
+  for(const proc in byproc){const ps=byproc[proc];
+    const paras=[...new Set(ps.map(p=>p.para).filter(Boolean))];
+    const diffs=ps.filter(p=>p.old&&p.new).slice(0,5);
+    const vf=ps.find(p=>p.valid_from);
+    out+=`<div class="item ${cls}">
+      <div class="tx"><span class="pill st-${ps[0].status}">${ps[0].status}</span>${esc(proc)}</div>
+      <div class="paras">${paras.map(p=>`<span class="tag-para">§ ${esc(p)}</span>`).join('')}</div>
+      <div style="font-size:11px;color:var(--dim2);margin-top:3px">${esc(ps[0].doc||'')}${ps[0].stand?' · '+esc(ps[0].stand):''}${vf?' · '+t('in_force_from')+' '+fmtDate(vf.valid_from):''}</div>
+      ${diffs.map(p=>diffBlock(p.old,p.new)).join('')}</div>`;
+  }
+  return out+`</div>`;
+}
+function closeModal(){$('#modal').classList.remove('on');G.curAct=null;}
+$('#modal').onclick=e=>{if(e.target===$('#modal'))closeModal();};
+document.onkeydown=e=>{if(e.key==='Escape')closeModal();};
+
+/* ---------- git log ---------- */
+const LANE_COL=['#c58fff','#6ea8fe','#5fd0e0','#9aa7ff']; // EU Bund Bayern Länder
+const LANE_TAG=['eu','bund','bayern','land'];
+let gitLaneFilter=null;
+function renderGit(){
+  const g=DATA.git;
+  const counts=[0,0,0,0];g.commits.forEach(c=>counts[c.lane]++);
+  $('#gitlanes').innerHTML=
+    `<span class="chip${gitLaneFilter==null?' on':''}" data-l="all">${t('git_all')}</span>`+
+    g.lanes.map((L,i)=>`<span class="chip${gitLaneFilter===i?' on':''}" data-l="${i}">
+      <span style="color:${LANE_COL[i]}">●</span> ${esc(L)} <span style="color:var(--dim2)">${counts[i]}</span></span>`).join('');
+  $$('#gitlanes .chip').forEach(c=>c.onclick=()=>{
+    gitLaneFilter=c.dataset.l==='all'?null:+c.dataset.l;drawGit();});
+  const merges=g.commits.filter(c=>c.type==='merge').length;
+  const open=g.commits.filter(c=>c.type==='open').length;
+  $('#gitstat').textContent=`${g.total} ${t('git_commits')} · ${open} ${t('git_open')} · ${merges} ${t('git_merges')}`;
+  drawGit();
+}
+function drawGit(){
+  const rows=DATA.git.commits.filter(c=>gitLaneFilter==null||c.lane===gitLaneFilter);
+  const html=rows.map(c=>{
+    const col=LANE_COL[c.lane];
+    const tag=`<span class="mtag ${LANE_TAG[c.lane]}">${esc(DATA.git.lanes[c.lane])}</span>`;
+    const typ=c.type==='merge'?`<span class="mtag merge">⑃ merge</span>`:
+              c.type==='open'?`<span class="mtag open">◌ ${t('git_open').split(' ')[0]}</span>`:'';
+    const refs=(c.refs||[]).map(r=>{
+      const cl=r==='GEAS'?'geas':(/kraft|repeal/i.test(r)?'rel':'');
+      return `<span class="cref ${cl}">${esc(r)}</span>`;}).join('');
+    const acts=(c.acts&&c.acts.length)?`<span>${t('git_touches')} <span class="cact">${c.acts.map(esc).join(', ')}</span></span>`:'';
+    const paras=(c.paras&&c.paras.length)?`<span class="cpara">§§ ${c.paras.map(esc).join(', ')}</span>`:'';
+    const mref=c.merge_ref?`<span class="cref geas">${t('git_merge_of')} ${esc(c.merge_ref)}</span>`:'';
+    const msg=c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.msg)}</a>`:esc(c.msg);
+    return `<div class="commit" data-lane="${c.lane}" data-type="${c.type}">
+      <div class="rail" style="--lc:${col}"></div>
+      <div class="chash">${c.hash}</div>
+      <div class="cbody">
+        <div class="cmsg">${tag}${typ}${msg}</div>
+        <div class="cmeta"><span>${fmtDate(c.date)}</span><span>${esc(c.actor)}</span>${acts}${paras}${mref}${refs}</div>
+      </div></div>`;
+  }).join('')||`<div class="empty">${t('notfound')}</div>`;
+  $('#gitlog').innerHTML=html;
+  // draw the rail node on each row's mini-canvas
+  $$('#gitlog .commit').forEach(row=>{
+    const rail=row.querySelector('.rail');const c=getComputedStyle(rail).getPropertyValue('--lc').trim();
+    const cv=document.createElement('canvas');rail.appendChild(cv);
+    const w=rail.clientWidth,hh=row.clientHeight,dpr=devicePixelRatio||1;
+    cv.width=w*dpr;cv.height=hh*dpr;const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);
+    const cx=w/2,cy=15,type=row.dataset.type;
+    x.strokeStyle=c;x.globalAlpha=.5;x.lineWidth=2;
+    x.beginPath();x.moveTo(cx,0);x.lineTo(cx,hh);x.stroke();  // vertical rail
+    x.globalAlpha=1;
+    if(type==='merge'){x.strokeStyle='#4ec9a5';x.beginPath();
+      x.moveTo(cx,cy);x.bezierCurveTo(cx-16,cy-6,cx-16,4,cx-22,2);x.stroke();}
+    x.beginPath();x.arc(cx,cy,type==='commit'?5:type==='merge'?6:4.5,0,7);
+    if(type==='open'){x.fillStyle='#0d1017';x.fill();x.strokeStyle=c;x.lineWidth=2;x.stroke();}
+    else{x.fillStyle=type==='merge'?'#4ec9a5':c;x.fill();}
+  });
+}
+
+/* ---------- hierarchy ---------- */
+const STATE_ORDER=['Verkündet','Verabschiedet','Beschlussempfehlung liegt vor',
+  'Überwiesen','1. Durchgang im Bundesrat abgeschlossen','Abgelehnt'];
+function renderHier(){
+  const h=DATA.hier,s=DATA.summary;
+  const g=(label,count,inner,open,cls='')=>`<details ${open?'open':''} class="${cls}">
+    <summary><span class="tw">▶</span><b>${label}</b> <span class="cnt">${count}</span></summary>
+    <div class="grp">${inner}</div></details>`;
+  const leaf=(d,ti,u)=>`<div class="leaf">${d?`<span class="d">${fmtDate(d)}</span>`:''}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(ti)}</a>`:esc(ti)}</div>`;
+
+  const inst=h.eu.instruments;
+  const euInner=inst.map(i=>{
+    const mne=i.deu_mnes?`<span style="color:var(--ok)">→ ${i.deu_mnes} ${i.deu_mnes>1?t('deu_impls'):t('deu_impl')}</span>`:
+      `<span style="color:var(--dim2)">${t('no_impl')}</span>`;
+    const fl=i.in_force===false?` <span style="color:var(--bad)">${t('repealed')}</span>`:'';
+    const ge=i.geas?' <span class="pill st-adopted">GEAS</span>':'';
+    return `<div class="leaf"><span class="d">${i.celex}</span>${i.kind==='directive'?'RL':'VO'}${ge} ${esc(i.title)} — ${mne}${fl}</div>`;
+  }).join('');
+  const euHtml=g('🇪🇺 '+t('eu_union'),inst.length+' '+t('instruments'),euInner,true,'lvl1');
+
+  const bundActs=h.bund.acts.map(a=>`<div class="leaf" data-act="${a.id}" style="cursor:pointer">${esc(a.jurabk)} — ${esc(a.title)}</div>`).join('');
+  const bundPipe=Object.entries(h.bund.pipeline)
+    .sort((a,b)=>{const ia=STATE_ORDER.indexOf(a[0]),ib=STATE_ORDER.indexOf(b[0]);
+      return (ia<0?9:ia)-(ib<0?9:ib);})
+    .map(([st,arr])=>g(esc(st),arr.length,
+      arr.slice(0,60).map(v=>leaf(v.date,v.title)).join(''),false)).join('');
+  const bundHtml=g('🇩🇪 '+t('bund'),s.acts_fed+' '+t('s_acts')+' · '+s.vorgaenge+' '+t('s_vorg'),
+    g(t('corpus'),s.acts_fed,bundActs,false)+g(t('pipeline'),
+      Object.keys(h.bund.pipeline).length+' '+t('states'),bundPipe,false),true,'lvl1');
+
+  const byActs=h.bayern.acts.map(a=>`<div class="leaf" data-act="${a.id}" style="cursor:pointer">${esc(a.jurabk)} — ${esc(a.title)}</div>`).join('');
+  const byPipe=Object.entries(h.bayern.pipeline).map(([st,arr])=>
+    g(esc(st),arr.length,arr.slice(0,60).map(v=>leaf(v.date,'['+v.drs+'] '+v.title)).join(''),false)).join('');
+  const byHtml=g('🔵 '+t('bayern'),s.acts_by+' '+t('s_acts')+' · '+s.bay_bills+' '+t('bills_kind'),
+    g(t('corpus'),s.acts_by,byActs,false)+g('Landtag WP19',
+      Object.keys(h.bayern.pipeline).length+' '+t('states'),byPipe,false),true,'lvl1');
+
+  const landInner=Object.entries(h.laender).sort((a,b)=>b[1].length-a[1].length)
+    .map(([code,arr])=>g(code.replace('DE-',''),arr.length,
+      arr.slice(0,40).map(v=>leaf(v.date,v.title,v.url)).join(''),false)).join('');
+  const landHtml=g('🗺️ '+t('laender_monitor'),Object.keys(h.laender).length+' '+t('landtage'),landInner,false,'lvl1');
+
+  $('#hier').innerHTML=`<div class="tree" style="max-width:1100px">
+    <h2 style="margin-top:0">${t('hier_title')}</h2>
+    ${euHtml}${bundHtml}${byHtml}${landHtml}</div>`;
+  $$('#hier [data-act]').forEach(el=>el.onclick=()=>openAct(el.dataset.act));
+}
+
+/* ================= GRAPH ================= */
+const G={
+  nodes:[],edges:[],zoom:1,tx:0,ty:0,drag:null,pan:null,
+  off:new Set(),tick:null,playing:false,raf:null,hover:null,curAct:null,hl:null,
+  KIND:{
+    'hub':['#c9d2e0','Hubs'], 'fed-act':['#6ea8fe','Bundesgesetz'],
+    'vorgang':['#8b97a8','DIP-Vorgang'], 'initiator':['#e0b341','Initiator'],
+    'topic':['#7b8496','Sachgebiet'], 'by-act':['#5fd0e0','BY Gesetz'],
+    'by-bill':['#3fa8b8','BY Entwurf'], 'eu':['#c58fff','EU-Instrument'],
+    'land':['#9aa7ff','Landtag'],
+  },
+};
+function initGraph(){
+  const gr=DATA.graph;
+  const R=Math.min(innerWidth,innerHeight)*0.42;
+  G.nodes=gr.nodes.map((n,i)=>{const a=i*2.399963,rr=R*Math.sqrt(i/gr.nodes.length);
+    return{...n,i,x:Math.cos(a)*rr,y:Math.sin(a)*rr,vx:0,vy:0,deg:0,r:0};});
+  G.edges=gr.edges;
+  G.edges.forEach(e=>{G.nodes[e.s].deg++;G.nodes[e.t].deg++;});
+  G.nodes.forEach(n=>n.r=3+Math.sqrt(n.deg)*1.4+n.trust*0.35);
+  G.ticks=gr.ticks;G.tickLabels=gr.tick_labels;G.tick=G.ticks[G.ticks.length-1];
+  $('#legend').innerHTML=Object.entries(G.KIND).map(([k,[c,l]])=>
+    `<div class="leg" data-k="${k}"><span class="dot" style="background:${c}"></span>${l}</div>`).join('');
+  $$('#legend .leg').forEach(el=>el.onclick=()=>{
+    const k=el.dataset.k;G.off.has(k)?G.off.delete(k):G.off.add(k);
+    el.classList.toggle('off');draw();});
+  renderWorldbar();
+  const tr=$('#trange');tr.min=0;tr.max=G.ticks.length-1;tr.value=G.ticks.length-1;
+  tr.oninput=()=>{G.tick=G.ticks[+tr.value];updTick();draw();};
+  $('#play').onclick=togglePlay;
+  drawDensity();updTick();
+  const cv=$('#cv');
+  cv.onwheel=e=>{e.preventDefault();const f=e.deltaY<0?1.12:1/1.12;
+    const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    G.tx=mx-(mx-G.tx)*f;G.ty=my-(my-G.ty)*f;G.zoom*=f;draw();};
+  cv.onmousedown=e=>{const p=pick(e);if(p)G.drag=p;else G.pan={x:e.clientX-G.tx,y:e.clientY-G.ty};};
+  window.onmousemove=e=>{
+    if(G.drag){const w=screenToWorld(e);G.drag.x=w.x;G.drag.y=w.y;G.drag.vx=G.drag.vy=0;draw();}
+    else if(G.pan){G.tx=e.clientX-G.pan.x;G.ty=e.clientY-G.pan.y;draw();}
+    else if($('#graph').classList.contains('on'))hover(e);};
+  window.onmouseup=()=>{G.drag=null;G.pan=null;};
+  $('#gsearch').oninput=e=>{const q=e.target.value.toLowerCase();
+    G.hl=q?new Set(G.nodes.filter(n=>n.label.toLowerCase().includes(q)).map(n=>n.i)):null;draw();};
+  G.resize();sim(140);
+}
+G.resize=function(){const cv=$('#cv');if(!cv.clientWidth)return;
+  const dpr=devicePixelRatio||1;cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;
+  G.ctx=cv.getContext('2d');G.ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(!G.tx){G.tx=cv.clientWidth/2;G.ty=cv.clientHeight/2;}draw();};
+addEventListener('resize',()=>{G.resize();if($('#graph').classList.contains('on'))drawDensity();});
+function renderWorldbar(){
+  if(!DATA.graph)return;const wn={1:'world_bund',2:'world_bayern',3:'world_eu'};
+  $('#worldbar').innerHTML=DATA.graph.worlds.map(w=>
+    `<div class="wbox">${t(wn[w.id]||'')}<br><b>${Math.round(w.stability*100)}%</b>
+    <span style="color:var(--dim);font-size:10px"> ${t('stable')}</span></div>`).join('');}
+function visible(n){return !G.off.has(n.kind)&&n.born<=G.tick;}
+function screenToWorld(e){const r=$('#cv').getBoundingClientRect();
+  return{x:(e.clientX-r.left-G.tx)/G.zoom,y:(e.clientY-r.top-G.ty)/G.zoom};}
+function pick(e){const w=screenToWorld(e);let best=null,bd=1e9;
+  for(const n of G.nodes){if(!visible(n))continue;
+    const d=(n.x-w.x)**2+(n.y-w.y)**2;if(d<bd&&d<(n.r+6)**2){bd=d;best=n;}}return best;}
+function hover(e){const n=pick(e),tip=$('#tip');
+  if(n){G.hover=n.i;const kd=G.KIND[n.kind];
+    tip.innerHTML=`<b>${esc(n.label)}</b><br><span class="k">${kd?kd[1]:n.kind} · trust ${n.trust} · °${n.deg}</span><br>
+      <span class="k">${t('stand')} ${G.tickLabels[n.born]||'—'}</span>`;
+    tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px';}
+  else{G.hover=null;tip.style.display='none';}draw();}
+function sim(steps){cancelAnimationFrame(G.raf);let i=0;
+  const step=()=>{const vis=G.nodes.filter(visible);const k=2600;
+    for(let a=0;a<vis.length;a++){const na=vis[a];
+      for(let b=a+1;b<vis.length;b++){const nb=vis[b];
+        let dx=na.x-nb.x,dy=na.y-nb.y,d2=dx*dx+dy*dy||1;
+        if(d2>90000)continue;const f=k/d2,d=Math.sqrt(d2),fx=dx/d*f,fy=dy/d*f;
+        na.vx+=fx;na.vy+=fy;nb.vx-=fx;nb.vy-=fy;}}
+    for(const e of G.edges){const a=G.nodes[e.s],b=G.nodes[e.t];
+      if(!visible(a)||!visible(b))continue;
+      let dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+      const L=46+(1-e.d)*30,f=(d-L)*0.012,fx=dx/d*f,fy=dy/d*f;
+      a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;}
+    for(const n of vis){if(n===G.drag)continue;
+      n.vx-=n.x*0.0016;n.vy-=n.y*0.0016;
+      n.x+=Math.max(-8,Math.min(8,n.vx));n.y+=Math.max(-8,Math.min(8,n.vy));
+      n.vx*=0.86;n.vy*=0.86;}
+    draw();if(++i<steps)G.raf=requestAnimationFrame(step);};G.raf=requestAnimationFrame(step);}
+const RELC={10:'#e0b341',20:'#4a5262',21:'#4ec9a5',30:'#6ea8fe',
+  40:'#3a4252',60:'#c58fff',61:'#a06fdf',63:'#c58fff'};
+function draw(){const ctx=G.ctx;if(!ctx)return;const cv=$('#cv');
+  ctx.clearRect(0,0,cv.clientWidth,cv.clientHeight);
+  ctx.save();ctx.translate(G.tx,G.ty);ctx.scale(G.zoom,G.zoom);
+  ctx.lineWidth=0.6/G.zoom;
+  for(const e of G.edges){const a=G.nodes[e.s],b=G.nodes[e.t];
+    if(!visible(a)||!visible(b))continue;
+    const hot=G.hover!=null&&(e.s===G.hover||e.t===G.hover);
+    ctx.strokeStyle=hot?'#fff':(RELC[e.r]||'#333');ctx.globalAlpha=hot?0.9:0.22;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  ctx.globalAlpha=1;
+  for(const n of G.nodes){if(!visible(n))continue;
+    const kd=G.KIND[n.kind],dim=G.hl&&!G.hl.has(n.i);
+    ctx.globalAlpha=dim?0.15:1;
+    ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,7);ctx.fillStyle=kd?kd[0]:'#888';ctx.fill();
+    if(n.i===G.hover||(G.hl&&G.hl.has(n.i))){ctx.lineWidth=1.6/G.zoom;ctx.strokeStyle='#fff';ctx.stroke();}}
+  ctx.globalAlpha=1;
+  if(G.zoom>0.7){ctx.fillStyle='#cbd3e0';ctx.font=`${11/G.zoom}px -apple-system,sans-serif`;
+    for(const n of G.nodes){if(!visible(n))continue;
+      if(n.deg>=8||n.kind==='hub'||n.kind==='eu'||n.i===G.hover)
+        ctx.fillText(n.label.slice(0,26),n.x+n.r+2,n.y+3);}}
+  ctx.restore();}
+function drawDensity(){const c=$('#density');if(!c.clientWidth)return;
+  const dpr=devicePixelRatio||1;c.width=c.clientWidth*dpr;c.height=16*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);
+  const N=G.ticks.length,W=c.clientWidth,bins=new Array(N).fill(0),ti={};
+  G.ticks.forEach((tk,i)=>ti[tk]=i);
+  for(const n of G.nodes){let i=ti[n.born];if(i==null){i=0;while(i<N-1&&G.ticks[i]<n.born)i++;}bins[i]++;}
+  const mx=Math.max(...bins,1);
+  for(let i=0;i<N;i++){const hh=bins[i]/mx*14;
+    x.fillStyle='#6ea8fe';x.fillRect(i/N*W,16-hh,Math.max(1,W/N),hh);}}
+function updTick(){$('#tlab').textContent=G.tickLabels[G.tick]||'—';
+  const vis=G.nodes.filter(visible).length,be=DATA.graph.beliefs.filter(b=>b.b<=G.tick).length;
+  $('#tsub').textContent=`${vis} ${t('active_nodes')} · ${be} ${t('active_beliefs')}`;}
+function togglePlay(){G.playing=!G.playing;$('#play').textContent=G.playing?'❚❚':'▶';if(G.playing)advance();}
+function advance(){if(!G.playing)return;const tr=$('#trange');let v=+tr.value;
+  if(v>=G.ticks.length-1)v=0;else v++;tr.value=v;G.tick=G.ticks[v];updTick();sim(28);
+  setTimeout(()=>requestAnimationFrame(advance),380);}
+boot().catch(e=>{$('#built').textContent='Fehler: '+e.message;console.error(e);});
+</script>
+</body>
+</html>
