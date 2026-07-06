@@ -29,6 +29,7 @@ header{display:flex;align-items:center;gap:16px;padding:10px 18px;
   position:sticky;top:0;z-index:20}
 .brand{font-weight:700;font-size:16px;letter-spacing:.3px;white-space:nowrap;
   display:flex;align-items:center;gap:8px}
+.brand{line-height:24px}
 .brand .logo{width:22px;height:22px;border-radius:5px}
 .brand small{color:var(--dim);font-weight:400;font-size:12px;margin-left:2px}
 nav{display:flex;gap:4px;margin-left:8px}
@@ -42,6 +43,8 @@ nav button.on{color:var(--fg);background:var(--bg3);border-color:var(--line)}
   padding:6px 11px;cursor:pointer;font-size:12px;font-weight:600}
 .lang button.on{background:var(--acc);color:#08121f}
 .built{color:var(--dim2);font-size:12px;white-space:nowrap}
+.hlink{color:var(--dim);font-size:12.5px;font-weight:600;letter-spacing:.2px}
+.hlink:hover{color:var(--acc);text-decoration:none}
 .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;
   background:var(--ok);margin-right:6px;vertical-align:middle;
   animation:pulse 2.4s infinite}
@@ -51,9 +54,41 @@ nav button.on{color:var(--fg);background:var(--bg3);border-color:var(--line)}
 main{height:calc(100vh - 53px);overflow:hidden;position:relative}
 .view{display:none;height:100%}
 #overview.on{display:flex;flex-direction:column}
+#synopse.on{display:flex;flex-direction:column}
 #git.on{display:flex;flex-direction:column}
 #hier.on{display:block}
 #graph.on{display:block}
+
+/* ---- synopse (buzer-style law history) ---- */
+#synopse .split{flex:1;overflow:hidden}
+.col.syn-list{width:min(34%,420px);border-right:1px solid var(--line);background:var(--bg2)}
+.col.syn-main{flex:1}
+#syndetail{padding:0}
+.syn-head{position:sticky;top:0;background:var(--bg2);border-bottom:1px solid var(--line);
+  padding:16px 24px;z-index:2}
+.syn-head h2{margin:.2em 0;font-size:20px}
+.syn-body{padding:8px 24px 50px}
+.syn-toggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-left:auto}
+.syn-toggle button{background:var(--bg3);border:none;color:var(--dim);padding:5px 11px;
+  cursor:pointer;font-size:11.5px;font-weight:600}
+.syn-toggle button.on{background:var(--acc);color:#08121f}
+.chg{border-left:2px solid var(--line);margin:0 0 4px;padding:12px 0 12px 20px;position:relative}
+.chg::before{content:"";position:absolute;left:-6px;top:16px;width:10px;height:10px;
+  border-radius:50%;background:var(--ok);border:2px solid var(--bg)}
+.chg.pending::before{background:var(--acc)} .chg.future::before{background:var(--warn)}
+.chg .cd{font-family:ui-monospace,monospace;font-size:12px;color:var(--dim)}
+.chg .ct{font-size:13.5px;margin-top:2px}
+.chg .cpill{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:7px;
+  text-transform:uppercase;vertical-align:middle}
+.cpill.p{background:#1b2740;color:var(--acc)} .cpill.e{background:#123a2a;color:var(--ok)}
+.synp{display:inline-block;font-size:10.5px;background:var(--bg3);border:1px solid var(--line);
+  border-radius:4px;padding:0 6px;margin:3px 4px 0 0;color:var(--dim);font-family:ui-monospace,monospace}
+/* the synopse diff — bigger, buzer-like */
+.syn .diff{margin-top:8px;font-size:13px}
+.syn .drow{padding:7px 12px;line-height:1.6}
+del,ins{text-decoration:none;border-radius:3px}
+.syn del,.diff del{background:var(--del);color:var(--delfg);padding:0 1px}
+.syn ins,.diff ins{background:var(--add);color:var(--addfg);padding:0 1px}
 
 /* ---- git log ---- */
 #git .colhead{gap:14px}
@@ -260,11 +295,14 @@ input.search:focus{border-color:var(--acc)}
   <div class="brand"><img src="sntiq.svg" class="logo" alt="SNTIQ">Lexgraph <small data-i="tagline"></small></div>
   <nav>
     <button data-v="overview" class="on" data-i="nav_overview"></button>
+    <button data-v="synopse" data-i="nav_synopse"></button>
     <button data-v="git" data-i="nav_git"></button>
     <button data-v="hier" data-i="nav_hier"></button>
     <button data-v="graph" data-i="nav_graph"></button>
   </nav>
   <div class="right">
+    <a class="hlink" href="https://github.com/SNTIQ-Team/lexgraph/blob/main/docs/API.md" target="_blank" rel="noopener">Docs</a>
+    <a class="hlink" href="https://github.com/SNTIQ-Team/lexgraph/blob/main/docs/API.md" target="_blank" rel="noopener">API</a>
     <div class="lang">
       <button data-l="de" class="on">DE</button>
       <button data-l="en">EN</button>
@@ -297,6 +335,20 @@ input.search:focus{border-color:var(--acc)}
       <span class="gitstat" id="gitstat"></span>
     </div>
     <div class="scroll" id="gitlog"></div>
+  </section>
+
+  <section class="view" id="synopse">
+    <div class="split">
+      <div class="col syn-list">
+        <div class="colhead"><h3 data-i="syn_title"></h3>
+          <input class="search" id="synsearch"></div>
+        <div class="scroll" id="synlaws"></div>
+      </div>
+      <div class="col syn-main">
+        <div class="scroll" id="syndetail">
+          <div class="empty" id="synhint"></div></div>
+      </div>
+    </div>
   </section>
 
   <section class="view" id="hier"></section>
@@ -334,7 +386,12 @@ let DATA={}, LANG=localStorage.getItem('lex_lang')||'de';
 const T={
  de:{
   tagline:'Gesetze als git · Bund · Bayern · EU · Länder',
-  nav_overview:'Wiki & Realtime', nav_hier:'Hierarchie', nav_graph:'Graph', nav_git:'Git-Log',
+  nav_overview:'Wiki & Realtime', nav_synopse:'Synopse', nav_hier:'Hierarchie', nav_graph:'Graph', nav_git:'Git-Log',
+  syn_title:'Gesetz wählen', syn_ph:'Gesetz suchen …',
+  syn_hint:'Wähle links ein Gesetz — rechts erscheint seine Änderungshistorie mit wortgenauer Synopse (rot = gestrichen, grün = neu).',
+  syn_pending:'In Arbeit (noch nicht in Kraft)', syn_enacted:'Verkündet', syn_hist:'Änderungsverlauf',
+  syn_touches:'ändert', syn_nochanges:'Für dieses Gesetz liegen keine wortgenauen Änderungen im Datensatz vor — siehe Änderungsverlauf.',
+  syn_synopse:'Synopse bei buzer.de', syn_char:'Buchstabengenau', syn_word:'Wortweise',
   git_title:'Commit-Log der Normgebung', git_all:'alle',
   git_commits:'Commits', git_open:'offene Zweige', git_merges:'Merges (EU→DE)',
   git_touches:'ändert', git_merge_of:'merge von',
@@ -371,7 +428,12 @@ const T={
  },
  en:{
   tagline:'laws as git · Federal · Bavaria · EU · States',
-  nav_overview:'Wiki & Realtime', nav_hier:'Hierarchy', nav_graph:'Graph', nav_git:'Git log',
+  nav_overview:'Wiki & Realtime', nav_synopse:'Synopsis', nav_hier:'Hierarchy', nav_graph:'Graph', nav_git:'Git log',
+  syn_title:'Pick a law', syn_ph:'search a law …',
+  syn_hint:'Pick a law on the left — its amendment history appears on the right with a word-level synopsis (red = removed, green = added).',
+  syn_pending:'In progress (not yet in force)', syn_enacted:'Enacted', syn_hist:'Amendment history',
+  syn_touches:'touches', syn_nochanges:'No word-level changes for this law in the dataset — see the amendment history.',
+  syn_synopse:'Synopsis on buzer.de', syn_char:'Character-level', syn_word:'Word-level',
   git_title:'Commit log of lawmaking', git_all:'all',
   git_commits:'commits', git_open:'open branches', git_merges:'merges (EU→DE)',
   git_touches:'touches', git_merge_of:'merge of',
@@ -461,6 +523,113 @@ function diffBlock(o,n){
     <div class="drow o"><span class="mk">−</span>${d.o}</div>
     <div class="drow n"><span class="mk">+</span>${d.n}</div></div>`;
 }
+/* character-level LCS diff — buzer-style letter highlighting */
+function charDiff(o,n){
+  const A=[...(o||'')],B=[...(n||'')],m=A.length,k=B.length;
+  if(m>2000||k>2000)return wordDiff(o,n);         // fall back on huge text
+  const dp=Array.from({length:m+1},()=>new Int32Array(k+1));
+  for(let i=m-1;i>=0;i--)for(let j=k-1;j>=0;j--)
+    dp[i][j]=A[i]===B[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  let i=0,j=0,oh='',nh='',ob='',nb='';
+  const fl=(b,t)=>b?`<${t}>${esc(b)}</${t}>`:'';
+  while(i<m&&j<k){
+    if(A[i]===B[j]){oh+=fl(ob,'del');ob='';nh+=fl(nb,'ins');nb='';
+      oh+=esc(A[i]);nh+=esc(B[j]);i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1])ob+=A[i++];
+    else nb+=B[j++];}
+  while(i<m)ob+=A[i++]; while(j<k)nb+=B[j++];
+  oh+=fl(ob,'del');nh+=fl(nb,'ins');
+  return{o:oh,n:nh};
+}
+function diffBlock2(o,n,granular){
+  const d=(granular==='char'?charDiff:wordDiff)(o,n);
+  return `<div class="diff">
+    <div class="drow o"><span class="mk">−</span>${d.o}</div>
+    <div class="drow n"><span class="mk">+</span>${d.n}</div></div>`;
+}
+
+/* ---- Synopse (buzer-style law history) ---- */
+let synCur=null, synGran=localStorage.getItem('lex_syngran')||'char';
+function renderSynopse(){
+  $('#synsearch').placeholder=t('syn_ph');
+  $('#synhint').textContent=t('syn_hint');
+  $('#synsearch').oninput=e=>drawSynLaws(e.target.value.toLowerCase());
+  drawSynLaws($('#synsearch').value.toLowerCase());
+  if(synCur)openSynopse(synCur);
+}
+function drawSynLaws(q){
+  const rows=DATA.wiki.filter(a=>!q||a.jurabk.toLowerCase().includes(q)||
+    (a.title||'').toLowerCase().includes(q));
+  $('#synlaws').innerHTML=rows.map(a=>
+    `<div class="wikirow${a.id===synCur?' on':''}" data-id="${a.id}">
+      <div class="ab">${jtag(a.juris)}${esc(a.jurabk)}</div>
+      <div class="ti">${esc(a.title)}</div>
+      <div class="mini">${a.last_change?'<span><b>'+t('last_change')+'</b> '+fmtDate(a.last_change)+'</span>':''}${a.pending?'<span class="dotp">● '+a.pending+' '+t('pending')+'</span>':''}</div></div>`
+  ).join('')||`<div class="empty">${t('notfound')}</div>`;
+  $$('#synlaws .wikirow').forEach(r=>r.onclick=()=>openSynopse(r.dataset.id));
+}
+async function openSynopse(id){
+  let d;try{d=await j('data/acts/'+id+'.json');}catch(e){return;}
+  synCur=id;
+  $$('#synlaws .wikirow').forEach(r=>r.classList.toggle('on',r.dataset.id===id));
+  const tm=d.temporal||{};
+  const tl=[];
+  if(tm.last_change)tl.push(`<span><b>${t('last_change')}</b> ${dateRel(tm.last_change)}</span>`);
+  if(tm.change_count)tl.push(`<span><b>${tm.change_count}</b> ${t('changes')}</span>`);
+  if(tm.pending)tl.push(`<span class="dotp"><b>${tm.pending}</b> ${t('pending')}</span>`);
+  if(tm.next_change)tl.push(`<span class="dotn"><b>⏳</b> ${dateRel(tm.next_change)}</span>`);
+
+  // unified change list: pending patches, enacted patches (with diffs), versions
+  const items=[];
+  for(const p of (d.patches||[])){
+    if(!(p.old&&p.new))continue;
+    const pend=p.status==='proposed'||p.status==='adopted';
+    if(p.status==='rejected'||p.status==='not_merged')continue;
+    items.push({date:p.valid_from||tm.last_change||'',pending:pend,
+      para:p.para,absatz:p.absatz,proc:p.proc,old:p.old,new:p.new,
+      status:p.status,doc:p.doc});
+  }
+  for(const v of (d.versions||[])){
+    items.push({date:v.date,version:true,text:v.text,url:v.url});
+  }
+  items.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  const gran=t('syn_'+ (synGran==='char'?'char':'word'));
+  let h=`<div class="syn-head">
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <div style="flex:1"><div>${jtag(d.juris)}<b>${esc(d.jurabk)}</b></div>
+      <h2>${esc(d.title||d.jurabk)}</h2>
+      <div class="tline">${tl.join('')}</div></div>
+      <div class="syn-toggle">
+        <button data-g="char" class="${synGran==='char'?'on':''}">${t('syn_char')}</button>
+        <button data-g="word" class="${synGran==='word'?'on':''}">${t('syn_word')}</button>
+      </div>
+    </div></div><div class="syn-body syn">`;
+  const diffs=items.filter(x=>x.old&&x.new);
+  if(!diffs.length)h+=`<p class="hint" style="padding:8px 0">${t('syn_nochanges')}</p>`;
+  h+=`<div style="margin-left:6px">`;
+  for(const it of items){
+    if(it.version){
+      const txt=(it.text||'').replace(/geändert durch.*$/,'').trim();
+      h+=`<div class="chg past"><div class="cd">${dateRel(it.date)}</div>
+        <div class="ct">${it.url?`<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(txt)}</a> · <span class="hlink">${t('syn_synopse')} ↗</span>`:esc(txt)}</div></div>`;
+      continue;
+    }
+    const cls=it.pending?'pending':(it.date>fmtIso()? 'future':'past');
+    const paras=[it.para&&('§ '+it.para),it.absatz&&('Abs. '+it.absatz)].filter(Boolean);
+    h+=`<div class="chg ${cls}">
+      <div class="cd">${it.date?dateRel(it.date):''} ${it.pending?`<span class="cpill p">${esc(it.status)}</span>`:'<span class="cpill e">'+t('syn_enacted')+'</span>'}</div>
+      <div class="ct">${esc(it.proc||'')}</div>
+      <div>${paras.map(p=>`<span class="synp">${esc(p)}</span>`).join('')}${it.doc?`<span class="synp">${esc(it.doc)}</span>`:''}</div>
+      ${diffBlock2(it.old,it.new,synGran)}</div>`;
+  }
+  h+=`</div></div>`;
+  $('#syndetail').innerHTML=h;
+  $$('#syndetail .syn-toggle button').forEach(b=>b.onclick=()=>{
+    synGran=b.dataset.g;localStorage.setItem('lex_syngran',synGran);openSynopse(id);});
+  $('#syndetail').scrollTop=0;
+}
+function fmtIso(){return '2026-07-06';}
 
 async function j(p){const r=await fetch(p);if(!r.ok)throw new Error(p);return r.json();}
 
@@ -472,7 +641,7 @@ async function boot(){
   DATA.builtStr=fmtDate(summary.built_at)+' '+summary.built_at.slice(11,16)+' UTC';
   renderAll();
 }
-function renderAll(){renderStats();renderFeed();renderWiki();renderHier();renderGit();
+function renderAll(){renderStats();renderFeed();renderWiki();renderHier();renderGit();renderSynopse();
   $('#built').innerHTML='<span class="pulse"></span>'+t('stand')+' '+DATA.builtStr;}
 
 /* ---- lang ---- */
