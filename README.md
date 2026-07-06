@@ -42,6 +42,7 @@ from, when it may pass, when it was last amended, and what changed.**
 ```bash
 ./refresh.sh                       # pull the live legislative state, rebuild
 python3 -m http.server -d web 8777 # then open http://localhost:8777
+uvicorn api.server:server --port 8010   # REST API over web/data (see docs/API.md)
 python3 tools/lex_log.py AsylbLG   # git log for one act (federal or Bavarian)
 ```
 

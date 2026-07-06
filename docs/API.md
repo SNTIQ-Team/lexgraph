@@ -6,13 +6,16 @@ commit on a jurisdiction lane, HEAD is the consolidated text in force, pending
 bills are open branches, and an EU directive transposed into German law is a
 *merge*.
 
-Lexgraph has **no live REST server**. Its "API" is three things:
+Lexgraph's "API" is four things:
 
 - **A) A set of pre-built static JSON files** (`web/data/*.json`) consumed by
   the local web visualizer.
 - **B) The pipeline** (`refresh.sh` + `pipeline/fetch_*.py`) that produces the
   snapshots and the QFS arena from which everything else is built.
-- **C) CLI tools** (`tools/lex_log.py`, `tools/lex_blame.py`) that read the
+- **C) A REST API** (`api/`, FastAPI) that serves those static JSON files as
+  live HTTP endpoints — same shapes, with CORS — so a browser frontend can call
+  it directly. Mirrors the sibling Amtsgraph project's `api/`.
+- **D) CLI tools** (`tools/lex_log.py`, `tools/lex_blame.py`) that read the
   snapshot archive directly.
 
 ---
@@ -396,7 +399,141 @@ Step 15 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
 ---
 
-# C) CLI tools
+# C) REST API — `api/` (FastAPI)
+
+A small, read-only HTTP wrapper around the section-A data plane. It does **not**
+recompute anything: `tools/build_web_data.py` is the build step, `web/data/*.json`
+*are* the data, and each endpoint just projects one of those files. **Response
+shapes equal the JSON files' shapes** documented in section A, so the frontend
+and these docs share one contract. This mirrors the sibling
+[Amtsgraph](https://github.com/SNTIQ-Team/amtsgraph) project's `api/`
+(`api/main.py` = the app, `api/server.py` = the ASGI composition root).
+
+## Run
+
+```bash
+pip install fastapi uvicorn            # or: pip install -r requirements.txt
+python3 tools/build_web_data.py        # ensure web/data/*.json exists
+uvicorn api.server:server --host 127.0.0.1 --port 8010 --workers 1
+# → http://127.0.0.1:8010  (interactive docs at /docs)
+```
+
+The data directory defaults to `<repo>/web/data`; override it with the
+`LEXGRAPH_DATA` environment variable (e.g. a deployment path). The dataset is
+static per deploy, so responses are cached in-process and sent with
+`Cache-Control: public, max-age=3600`. **CORS is open (`*`)** so any browser
+frontend can call the API. The data plane is loaded lazily and cached; there is
+no database.
+
+## Endpoint summary
+
+| Method & path | Serves | Notes |
+|---|---|---|
+| `GET /` | service index | operator, dataset, endpoint list |
+| `GET /health` | liveness | `{status, built_at, data_dir}`; 503 if data missing |
+| `GET /version` | build id | `dataset`, `version`, `built_at` |
+| `GET /stats` | `summary.json` | the dashboard counts, verbatim |
+| `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
+| `GET /acts` | `wiki.json` | the act index |
+| `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
+| `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
+| `GET /graph` | `graph.json` | the QFS arena export |
+| `GET /hierarchy` | `hierarchy.json` | the jurisdiction tree |
+| `GET /search?q=` | `wiki.json` rows | substring match on `jurabk`/`title` |
+
+`/stats`, `/acts`, `/acts/{id}`, `/graph`, `/hierarchy` return the underlying
+JSON **unchanged** (see section A for every field). The endpoints below add a
+thin envelope.
+
+## `GET /health`
+
+```json
+{ "status": "ok", "built_at": "2026-07-06T17:43:26+00:00",
+  "data_dir": "…/web/data" }
+```
+
+Returns **503** if `summary.json` is missing (run `tools/build_web_data.py`).
+
+## `GET /version`
+
+```json
+{ "dataset": "Lexgraph", "version": "1.0",
+  "built_at": "2026-07-06T17:43:26+00:00",
+  "source": "https://github.com/SNTIQ-Team/lexgraph" }
+```
+
+## `GET /feed?limit=`
+
+Newest-first slice of `feed.json`. `limit` ∈ [1, 600], default 100.
+
+```bash
+curl 'http://127.0.0.1:8010/feed?limit=2'
+```
+
+```json
+{ "total": 600, "limit": 2, "events": [ { "time": "2026-10-01", "juris": "DE",
+  "source": "buzer", "kind": "tritt in Kraft ⏳", "title": "…", "url": "…",
+  "badge": null } ] }
+```
+
+## `GET /acts` and `GET /acts/{id}`
+
+`/acts` is `wiki.json` verbatim (the act index). `/acts/{id}` returns the full
+per-act record `acts/<id>.json` (federal or Bavarian shape — see section A) and
+**404** for an unknown id.
+
+```bash
+curl http://127.0.0.1:8010/acts/fed_asylblg
+```
+
+```json
+{ "id": "fed_asylblg", "jurabk": "AsylbLG", "juris": "DE",
+  "title": "Asylbewerberleistungsgesetz", "stand": "…", "build": "20260611",
+  "norm_count": 31, "patches": [ … ], "upcoming": [], "versions": [ … ],
+  "temporal": { … }, "norms": [ … ] }
+```
+
+## `GET /git?lane=&limit=`
+
+The commit-graph `git.json`. Optional `lane` filters by the integer lane index
+(`0`=EU, `1`=Bund, `2`=Bayern, `3`=Länder); `limit` ∈ [1, 1000], default 100.
+
+```bash
+curl 'http://127.0.0.1:8010/git?lane=0&limit=3'
+```
+
+```json
+{ "lanes": ["EU","Bund","Bayern","Länder"], "lane": 0, "total": 47,
+  "commits": [ { "hash": "db392498", "date": "2026-01-01", "lane": 0,
+  "type": "commit", "actor": "EU", "msg": "Verordnung (EU) 2025/2649 …",
+  "acts": [], "paras": [], "refs": [ … ], "merge_ref": null, "doc": "…",
+  "celex": "…" } ] }
+```
+
+## `GET /search?q=`
+
+Case-insensitive substring match on `jurabk` and `title` across `wiki.json`;
+returns act-index rows (same shape as `/acts`). `limit` ∈ [1, 200], default 25.
+
+```bash
+curl 'http://127.0.0.1:8010/search?q=Asyl'
+```
+
+```json
+{ "query": "Asyl", "total": 4, "matches": [
+  { "id": "fed_asylblg", "jurabk": "AsylbLG", "title": "Asylbewerberleistungsgesetz", … },
+  { "id": "fed_asylvfg_1992", "jurabk": "AsylVfG 1992", "title": "Asylgesetz", … } ] }
+```
+
+## Dependencies
+
+`fastapi` + `uvicorn` (see [`requirements.txt`](../requirements.txt)); the app
+itself uses only the standard library beyond those. If FastAPI is not installed,
+the section-A static files remain fully usable without the server.
+
+---
+
+# D) CLI tools
 
 Read-only over `data/snapshots` — **no network, no snapshot writes**. Acts
 resolve case-insensitively by `jurabk` (federal GII corpus first, then the

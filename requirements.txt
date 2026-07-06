@@ -1,0 +1,6 @@
+# pipeline (fetchers + extractor)
+requests
+beautifulsoup4
+# api (optional until serving; stdlib json is the only hard dep)
+fastapi
+uvicorn
