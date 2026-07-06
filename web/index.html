@@ -81,6 +81,8 @@ main{height:calc(100vh - 53px);overflow:hidden;position:relative}
 .chg .cpill{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:7px;
   text-transform:uppercase;vertical-align:middle}
 .cpill.p{background:#1b2740;color:var(--acc)} .cpill.e{background:#123a2a;color:var(--ok)}
+.synref{font-size:11px;color:var(--dim2);margin-left:6px}
+.synref:hover{color:var(--acc)}
 .synp{display:inline-block;font-size:10.5px;background:var(--bg3);border:1px solid var(--line);
   border-radius:4px;padding:0 6px;margin:3px 4px 0 0;color:var(--dim);font-family:ui-monospace,monospace}
 /* the synopse diff — bigger, buzer-like */
@@ -302,7 +304,7 @@ input.search:focus{border-color:var(--acc)}
   </nav>
   <div class="right">
     <a class="hlink" href="https://github.com/SNTIQ-Team/lexgraph/blob/main/docs/API.md" target="_blank" rel="noopener">Docs</a>
-    <a class="hlink" href="https://github.com/SNTIQ-Team/lexgraph/blob/main/docs/API.md" target="_blank" rel="noopener">API</a>
+    <a class="hlink" href="https://api.sntiq.com/lex/docs" target="_blank" rel="noopener">API</a>
     <div class="lang">
       <button data-l="de" class="on">DE</button>
       <button data-l="en">EN</button>
@@ -391,7 +393,7 @@ const T={
   syn_hint:'Wähle links ein Gesetz — rechts erscheint seine Änderungshistorie mit wortgenauer Synopse (rot = gestrichen, grün = neu).',
   syn_pending:'In Arbeit (noch nicht in Kraft)', syn_enacted:'Verkündet', syn_hist:'Änderungsverlauf',
   syn_touches:'ändert', syn_nochanges:'Für dieses Gesetz liegen keine wortgenauen Änderungen im Datensatz vor — siehe Änderungsverlauf.',
-  syn_synopse:'Synopse bei buzer.de', syn_char:'Buchstabengenau', syn_word:'Wortweise',
+  syn_synopse:'Volltext ↗', syn_char:'Buchstabengenau', syn_word:'Wortweise',
   git_title:'Commit-Log der Normgebung', git_all:'alle',
   git_commits:'Commits', git_open:'offene Zweige', git_merges:'Merges (EU→DE)',
   git_touches:'ändert', git_merge_of:'merge von',
@@ -433,7 +435,7 @@ const T={
   syn_hint:'Pick a law on the left — its amendment history appears on the right with a word-level synopsis (red = removed, green = added).',
   syn_pending:'In progress (not yet in force)', syn_enacted:'Enacted', syn_hist:'Amendment history',
   syn_touches:'touches', syn_nochanges:'No word-level changes for this law in the dataset — see the amendment history.',
-  syn_synopse:'Synopsis on buzer.de', syn_char:'Character-level', syn_word:'Word-level',
+  syn_synopse:'full text ↗', syn_char:'Character-level', syn_word:'Word-level',
   git_title:'Commit log of lawmaking', git_all:'all',
   git_commits:'commits', git_open:'open branches', git_merges:'merges (EU→DE)',
   git_touches:'touches', git_merge_of:'merge of',
@@ -612,7 +614,7 @@ async function openSynopse(id){
     if(it.version){
       const txt=(it.text||'').replace(/geändert durch.*$/,'').trim();
       h+=`<div class="chg past"><div class="cd">${dateRel(it.date)}</div>
-        <div class="ct">${it.url?`<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(txt)}</a> · <span class="hlink">${t('syn_synopse')} ↗</span>`:esc(txt)}</div></div>`;
+        <div class="ct">${esc(txt)}${it.url?` <a class="synref" href="${esc(it.url)}" target="_blank" rel="noopener">${t('syn_synopse')}</a>`:''}</div></div>`;
       continue;
     }
     const cls=it.pending?'pending':(it.date>fmtIso()? 'future':'past');
