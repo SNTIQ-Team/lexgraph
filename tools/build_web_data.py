@@ -44,6 +44,30 @@ def slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
 
 
+def _para_sort(p: str) -> tuple:
+    m = re.match(r"(\d+)([a-z]?)", p or "")
+    return (int(m.group(1)), m.group(2)) if m else (10 ** 9, p or "")
+
+
+def _clean_changes(changes: list | None) -> list:
+    """De-noise scraped synopse changes: drop the act-title row and the
+    Inhaltsübersicht heading-only duplicates, keep the fullest body per §,
+    order by § number."""
+    best: dict[str, dict] = {}
+    for c in changes or []:
+        para = c.get("para")
+        old, new = c.get("old") or "", c.get("new") or ""
+        if not para or not (old or new):
+            continue                       # act-title / empty rows
+        score = len(old) + len(new)
+        if para not in best or score > best[para]["_s"]:
+            best[para] = {"para": para, "old": old, "new": new, "_s": score}
+    rows = sorted(best.values(), key=lambda c: _para_sort(c["para"]))
+    for c in rows:
+        c.pop("_s", None)
+    return rows[:80]
+
+
 def month_str(ord_: int) -> str:
     return f"{ord_ // 12:04d}-{ord_ % 12 + 1:02d}"
 
@@ -129,6 +153,10 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     patches = load("patches", "patches.jsonl")
     buz_v = load("buzer", "versions.jsonl")
     buz_up = load("buzer", "upcoming.jsonl")
+    # per-§ old/new text scraped from buzer synopse pages, keyed (act_id, date)
+    syn_by_key: dict[tuple, list] = {}
+    for s in load("buzer_synopse", "synopse.jsonl"):
+        syn_by_key[(s["act_id"], s["date"])] = _clean_changes(s.get("changes"))
     gvbl = load("gvbl_events", "events.jsonl")
     by_v = load("bayern_recht", "versions.jsonl")
     bay_bills = load("bay_landtag", "bills.jsonl")
@@ -147,8 +175,12 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             t = re.sub(r"^\d{2}\.\d{2}\.\d{4}\s*", "", t)
             t = t.replace("Synopse gesamt oder einzeln für", "§§") \
                  .replace("Synopse gesamt", "").strip()
-            versions.append({"date": v["date"], "text": t[:130],
-                             "url": v.get("synopsis_url")})
+            row = {"date": v["date"], "text": t[:130],
+                   "url": v.get("synopsis_url")}
+            ch = syn_by_key.get((v["act_id"], v["date"]))
+            if ch:
+                row["changes"] = ch
+            versions.append(row)
         upcoming = [{"date": u["date"], "title": u["title"][:120],
                      "url": u.get("url")}
                     for u in buz_up if u.get("act_id") in ids]

@@ -83,6 +83,16 @@ main{height:calc(100vh - 53px);overflow:hidden;position:relative}
 .cpill.p{background:#1b2740;color:var(--acc)} .cpill.e{background:#123a2a;color:var(--ok)}
 .synref{font-size:11px;color:var(--dim2);margin-left:6px}
 .synref:hover{color:var(--acc)}
+details.vchg{padding:0}
+details.vchg>summary{list-style:none;cursor:pointer;padding:2px 0;display:flex;gap:10px;align-items:baseline}
+details.vchg>summary::-webkit-details-marker{display:none}
+details.vchg>summary::before{content:'▸';color:var(--dim2);font-size:11px;transition:transform .12s}
+details.vchg[open]>summary::before{transform:rotate(90deg);display:inline-block}
+details.vchg>summary:hover .ct{color:var(--fg)}
+.vcount{font-size:10.5px;font-weight:700;color:var(--acc);background:#1b2740;border-radius:4px;padding:1px 6px;margin-left:4px}
+.vdiffs{margin:6px 0 4px 16px;border-left:2px solid var(--line);padding-left:12px}
+.vd{margin:0 0 12px}
+.voob{font-size:11.5px;color:var(--dim2);font-style:italic;padding:2px 0}
 .synp{display:inline-block;font-size:10.5px;background:var(--bg3);border:1px solid var(--line);
   border-radius:4px;padding:0 6px;margin:3px 4px 0 0;color:var(--dim);font-family:ui-monospace,monospace}
 /* the synopse diff — bigger, buzer-like */
@@ -394,6 +404,7 @@ const T={
   syn_pending:'In Arbeit (noch nicht in Kraft)', syn_enacted:'Verkündet', syn_hist:'Änderungsverlauf',
   syn_touches:'ändert', syn_nochanges:'Für dieses Gesetz liegen keine wortgenauen Änderungen im Datensatz vor — siehe Änderungsverlauf.',
   syn_synopse:'Volltext ↗', syn_char:'Buchstabengenau', syn_word:'Wortweise',
+  syn_source:'buzer ↗', syn_paras_changed:'§§ geändert', syn_oob:'Änderung außerhalb des Textausschnitts —',
   git_title:'Commit-Log der Normgebung', git_all:'alle',
   git_commits:'Commits', git_open:'offene Zweige', git_merges:'Merges (EU→DE)',
   git_touches:'ändert', git_merge_of:'merge von',
@@ -436,6 +447,7 @@ const T={
   syn_pending:'In progress (not yet in force)', syn_enacted:'Enacted', syn_hist:'Amendment history',
   syn_touches:'touches', syn_nochanges:'No word-level changes for this law in the dataset — see the amendment history.',
   syn_synopse:'full text ↗', syn_char:'Character-level', syn_word:'Word-level',
+  syn_source:'buzer ↗', syn_paras_changed:'§§ changed', syn_oob:'Change beyond the excerpt —',
   git_title:'Commit log of lawmaking', git_all:'all',
   git_commits:'commits', git_open:'open branches', git_merges:'merges (EU→DE)',
   git_touches:'touches', git_merge_of:'merge of',
@@ -592,7 +604,7 @@ async function openSynopse(id){
       status:p.status,doc:p.doc});
   }
   for(const v of (d.versions||[])){
-    items.push({date:v.date,version:true,text:v.text,url:v.url});
+    items.push({date:v.date,version:true,text:v.text,url:v.url,changes:v.changes});
   }
   items.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -613,8 +625,22 @@ async function openSynopse(id){
   for(const it of items){
     if(it.version){
       const txt=(it.text||'').replace(/geändert durch.*$/,'').trim();
-      h+=`<div class="chg past"><div class="cd">${dateRel(it.date)}</div>
-        <div class="ct">${esc(txt)}${it.url?` <a class="synref" href="${esc(it.url)}" target="_blank" rel="noopener">${t('syn_synopse')}</a>`:''}</div></div>`;
+      const ch=it.changes||[];
+      const link=it.url?`<a class="synref" href="${esc(it.url)}" target="_blank" rel="noopener">${t('syn_source')}</a>`:'';
+      if(ch.length){
+        const body=ch.map(c=>{
+          const o=c.old||'',n=c.new||'';
+          const hd=c.para?`<div><span class="synp">§ ${esc(c.para)}</span></div>`:'';
+          if(o===n)return `<div class="vd">${hd}<div class="voob">${t('syn_oob')}${it.url?` <a class="synref" href="${esc(it.url)}" target="_blank" rel="noopener">buzer ↗</a>`:''}</div></div>`;
+          return `<div class="vd">${hd}${diffBlock2(o,n,synGran)}</div>`;
+        }).join('');
+        h+=`<details class="chg past vchg"><summary><span class="cd">${dateRel(it.date)}</span>
+          <span class="ct">${esc(txt)} <span class="vcount">${ch.length} ${t('syn_paras_changed')}</span> ${link}</span></summary>
+          <div class="vdiffs">${body}</div></details>`;
+      }else{
+        h+=`<div class="chg past"><div class="cd">${dateRel(it.date)}</div>
+          <div class="ct">${esc(txt)} ${link}</div></div>`;
+      }
       continue;
     }
     const cls=it.pending?'pending':(it.date>fmtIso()? 'future':'past');
