@@ -47,8 +47,14 @@ re-tested by a second. Full audit with sample snippets:
   for an arbitrary window. Testphase — treat as rising primary, keep GII
   as HEAD source until coverage is proven.
 - **buzer.de**: no ToS prohibiting scraping (Impressum + usage notes read
-  in full); still: polite crawl, identify ourselves, use as
-  **non-authoritative** back-history hints tiered below official sources.
+  in full); robots.txt permits `/gesetz/` + version pages (only `/s2.htm`
+  search is disallowed — never fetched). Polite crawl, self-identifying,
+  used as **non-authoritative** back-history hints tiered below official
+  sources. The per-§ old/new **text** we extract from synopse pages is
+  itself statutory text — **amtliches Werk, § 5 UrhG, no copyright**, also
+  free at gesetze-im-internet.de / BGBl; buzer is credited as the
+  retrieval channel only. We do **not** reproduce buzer's synopse
+  arrangement or diff markup — diffs are recomputed locally.
 - **OLDP**: keyless REST + bulk dumps; laws under ODbL, citation graph
   CC-BY; alive again in 2026 after a dump hiatus.
 - **gesetze-bayern.de**: robots fully permissive; doc keys ≠ official
