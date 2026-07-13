@@ -39,10 +39,14 @@ MODELS_URL = "https://openrouter.ai/api/v1/models"
 # Free-tier slugs churn over time; when the whole curated list fails, the
 # live /models catalog is queried for any remaining :free chat model.
 FALLBACK_MODELS = [
-    "openai/gpt-oss-120b:free",
+    # ordered by measured nightly RELIABILITY, not raw benchmark rank:
+    # nemotron-super is the only slug that consistently finishes the full
+    # digest prompt on the free tier (2026-07: gpt-oss-120b rotated out
+    # with 404, qwen3-next rate-limits with 429, hy3 reasons for >400 s)
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
     "google/gemma-4-31b-it:free",
+    "tencent/hy3:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
     "meta-llama/llama-3.3-70b-instruct:free",
 ]
 

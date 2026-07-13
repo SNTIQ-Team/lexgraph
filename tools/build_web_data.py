@@ -306,6 +306,9 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
                 if (a.get("bayrs_nr") or "†") in
                 [x.strip() for x in
                  (e.get("gliederungs_nr") or "").split(",")]],
+            # no DIP patch stream for Bavarian acts — ship the keys anyway
+            # so every act detail has one shape (clients iterate patches)
+            "patches": [], "upcoming": [],
             "versions": versions,
             "temporal": temporal(versions, [], []),
             "norms": [],
