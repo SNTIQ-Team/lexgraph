@@ -35,12 +35,33 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web" / "data"
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODELS_URL = "https://openrouter.ai/api/v1/models"
+# Free-tier slugs churn over time; when the whole curated list fails, the
+# live /models catalog is queried for any remaining :free chat model.
 FALLBACK_MODELS = [
-    "deepseek/deepseek-chat-v3-0324:free",
+    "openai/gpt-oss-120b:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "google/gemma-4-31b-it:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
-    "mistralai/mistral-small-3.1-24b-instruct:free",
 ]
+
+
+def discover_free_models(limit: int = 5) -> list[str]:
+    """Last-resort dynamic discovery of :free chat models (largest first)."""
+    try:
+        rsp = requests.get(MODELS_URL, timeout=30)
+        rsp.raise_for_status()
+        rows = rsp.json().get("data", [])
+    except Exception:  # noqa: BLE001 — discovery is best-effort
+        return []
+    free = [m for m in rows
+            if ":free" in (m.get("id") or "")
+            and m.get("pricing", {}).get("prompt") == "0"
+            and m.get("pricing", {}).get("completion") == "0"
+            and "coder" not in m["id"] and "code" not in m["id"]]
+    free.sort(key=lambda m: -(m.get("context_length") or 0))
+    return [m["id"] for m in free[:limit]]
 PERIODS = ("year", "month", "upcoming")
 LANGS = ("de", "en", "ru", "ua")
 
@@ -178,7 +199,7 @@ def ask(key: str, model: str, facts: dict) -> dict | None:
                       {"role": "user",
                        "content": json.dumps(facts, ensure_ascii=False)}],
                   "response_format": {"type": "json_object"}},
-            timeout=180)
+            timeout=120)
     except requests.RequestException as exc:
         print(f"  [warn] {model}: {exc}")
         return None
@@ -214,6 +235,16 @@ def main() -> int:
         periods = ask(key, model, facts)
         if periods:
             break
+    if not periods:
+        # the curated slugs may all have rotated out of the free tier —
+        # ask the live catalog for whatever :free chat models exist today
+        discovered = [m for m in discover_free_models() if m not in models]
+        print(f"[warn] curated models failed — trying discovered: "
+              f"{', '.join(discovered) or 'none'}")
+        for model in discovered:
+            periods = ask(key, model, facts)
+            if periods:
+                break
     if not periods:
         print("[warn] no model produced a valid digest — "
               "digest.json unchanged")
