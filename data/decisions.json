@@ -1,0 +1,144 @@
+{
+  "_comment": "Curated court decisions (Rechtsprechung) affecting acts in the Lexgraph corpus. Personal data anonymized per German court-publication practice. Consumed by tools/build_web_data.py -> web/data/decisions.json.",
+  "decisions": [
+    {
+      "id": "sg-muenchen-2026-s-42-ay-55-26-er",
+      "court": "Sozialgericht München",
+      "court_short": "SG München",
+      "level": "SG",
+      "az": "S 42 AY 55/26 ER",
+      "date": "2026-07-06",
+      "kind": "Beschluss",
+      "proc": "Einstweiliger Rechtsschutz (§ 86b SGG)",
+      "juris": "DE-BY",
+      "title": "Leistungskürzung nach § 1a AsylbLG wegen abgelehnter Arbeitsgelegenheit unionsrechtswidrig",
+      "summary": {
+        "de": "Das SG München lässt § 5 Abs. 4 Satz 2 i.V.m. § 1a Abs. 1 AsylbLG wegen des Anwendungsvorrangs des Unionsrechts unangewendet: Die Rechtsfolge des § 1a Abs. 1 AsylbLG (kein Bekleidungsbedarf, kein Taschengeld) verstößt gegen Art. 17 Abs. 2 i.V.m. Art. 2 lit. g der Aufnahmerichtlinie 2013/33/EU — so der EuGH im Urteil C-621/24 vom 04.06.2026. Die Nichtwahrnehmung einer Arbeitsgelegenheit ist weder nach der RL 2013/33/EU noch nach der Neufassung RL (EU) 2024/1346 (Art. 23 Abs. 2) ein zulässiger Kürzungsgrund. Der Landkreis wurde verpflichtet, vorläufig ungekürzte Grundleistungen nach §§ 3, 3a AsylbLG zu gewähren.",
+        "en": "The Munich Social Court disapplied § 5(4) sent. 2 in conjunction with § 1a(1) AsylbLG under the primacy of EU law: the legal consequence of § 1a(1) AsylbLG (no clothing allowance, no pocket money) violates Art. 17(2) in conjunction with Art. 2(g) of Reception Directive 2013/33/EU — as held by the CJEU in C-621/24 (4 June 2026). Refusing a work opportunity is not a permissible ground for benefit cuts under either Directive 2013/33/EU or the recast Directive (EU) 2024/1346 (Art. 23(2)). The district was ordered to provisionally grant full basic benefits under §§ 3, 3a AsylbLG.",
+        "ru": "Социальный суд Мюнхена не применил § 5 абз. 4 предл. 2 в связке с § 1a абз. 1 AsylbLG в силу приоритета права ЕС: правовое последствие § 1a абз. 1 AsylbLG (без пособия на одежду и карманных денег) нарушает ст. 17 (2) в связке со ст. 2 (g) Директивы о приёме 2013/33/EU — так решил Суд ЕС в деле C-621/24 (04.06.2026). Отказ от предложенной работы (Arbeitsgelegenheit) не является допустимым основанием урезания пособий ни по Директиве 2013/33/EU, ни по новой Директиве (EU) 2024/1346 (ст. 23 (2)). Округ обязали временно выплачивать полные базовые пособия по §§ 3, 3a AsylbLG.",
+        "ua": "Соціальний суд Мюнхена не застосував § 5 абз. 4 реч. 2 у поєднанні з § 1a абз. 1 AsylbLG через примат права ЄС: правовий наслідок § 1a абз. 1 AsylbLG (без допомоги на одяг і кишенькових грошей) порушує ст. 17 (2) у поєднанні зі ст. 2 (g) Директиви про прийом 2013/33/EU — так вирішив Суд ЄС у справі C-621/24 (04.06.2026). Відмова від запропонованої роботи (Arbeitsgelegenheit) не є допустимою підставою для скорочення виплат ні за Директивою 2013/33/EU, ні за новою Директивою (EU) 2024/1346 (ст. 23 (2)). Округ зобов'язали тимчасово виплачувати повні базові виплати за §§ 3, 3a AsylbLG."
+      },
+      "outcome": "stattgegeben (im Wesentlichen)",
+      "effects": [
+        {
+          "act_id": "fed_asylblg",
+          "jurabk": "AsylbLG",
+          "paras": ["1a", "5"],
+          "kind": "disapplied",
+          "note": "§ 5 Abs. 4 Satz 2 i.V.m. § 1a Abs. 1 AsylbLG wegen Unionsrechtswidrigkeit unangewendet gelassen (Anwendungsvorrang, EuGH C-621/24)"
+        },
+        {
+          "act_id": "fed_asylblg",
+          "jurabk": "AsylbLG",
+          "paras": ["3", "3a"],
+          "kind": "applied",
+          "note": "Vorläufige Verpflichtung zu ungekürzten Grundleistungen §§ 3, 3a AsylbLG (04.05.2026–31.10.2026)"
+        },
+        {
+          "act_id": "fed_asylblg",
+          "jurabk": "AsylbLG",
+          "paras": ["7"],
+          "kind": "interpreted",
+          "note": "§ 7 Abs. 1 Satz 1 AsylbLG: nur tatsächlich zur Verfügung stehendes Einkommen ist anzurechnen — eingestellte ukrainische Sozialleistungen zählen nicht"
+        },
+        {
+          "eu_celex": "32013L0033",
+          "jurabk": "RL 2013/33/EU",
+          "paras": ["17", "2"],
+          "kind": "applied",
+          "note": "Art. 17 Abs. 2 i.V.m. Art. 2 lit. g: angemessener Lebensstandard umfasst Bekleidung und Bedarf des täglichen Lebens"
+        },
+        {
+          "eu_celex": "32024L1346",
+          "jurabk": "RL (EU) 2024/1346",
+          "paras": ["19", "23"],
+          "kind": "applied",
+          "note": "Auch nach der Neufassung: Nichtwahrnehmung einer Arbeitsgelegenheit ist kein Kürzungsgrund i.S.v. Art. 23 Abs. 2; Arbeitsgelegenheit ist keine „obligatorische Integrationsmaßnahme“ (lit. f)"
+        }
+      ],
+      "related": [
+        { "rel": "follows", "ref": "eugh-2026-c-621-24", "label": "EuGH, Urt. v. 04.06.2026 — C-621/24" },
+        { "rel": "cites", "ref": "bsg-2024-b-8-ay-6-23-r", "label": "BSG, Vorlagebeschl. v. 25.07.2024 — B 8 AY 6/23 R" }
+      ],
+      "quote": "Aus dem Anwendungsvorrang des Unionsrechts folgt unmittelbar die Verpflichtung der Kammer, § 5 Abs. 4 i.V.m. § 1a AsylbLG als unionsrechtswidrige Norm unangewendet zu lassen, ohne dass deren Aufhebung durch den Gesetzgeber oder ein Verfassungsgericht abgewartet werden müsste.",
+      "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2026-N-15104",
+      "source": "BAYERN.RECHT (BeckRS 2026, 15104)",
+      "text": "In dem Antragsverfahren [des Antragstellers] gegen Landkreis Erding — Sozialhilfeverwaltung — wegen Angelegenheiten nach dem Asylbewerberleistungsgesetz erlässt der Vorsitzende der 42. Kammer, Richter am Sozialgericht Ehegartner, ohne mündliche Verhandlung am 6. Juli 2026 folgenden Beschluss:\n\nI. Der Antragsgegner wird unter Anordnung der aufschiebenden Wirkung des Widerspruchs vom 04.05.2026 gegen den Bescheid vom 07.04.2026 im Wege der einstweiligen Anordnung verpflichtet, dem Antragsteller vorläufig Grundleistungen nach §§ 3, 3a AsylbLG für die Zeit von 04.05.2026 bis 31.10.2026 zu gewähren. Im Übrigen wird der Antrag abgelehnt.\nII. Der Antragsgegner hat die notwendigen außergerichtlichen Kosten des Antragstellers zu erstatten.\n\nGründe (I.):\nIn Streit steht eine Einschränkung des Leistungsanspruchs gemäß § 5 Abs. 4 Satz 2 i.V.m. § 1a Abs. 1 AsylbLG wegen Nichtwahrnehmung einer Arbeitsgelegenheit. Der 1976 in der Ukraine geborene Antragsteller ist 2025 mit seinem minderjährigen Sohn eingereist und hat Asyl beantragt, nachdem sein Haus durch Bombenangriffe zerstört worden sei. Über den Asylantrag wurde noch nicht entschieden. Der Antragsgegner verpflichtete ihn mit Bescheid vom 30.07.2025 zu Reinigungstätigkeiten in der Gemeinschaftsunterkunft als Arbeitsgelegenheit (§ 5 AsylbLG); der Antragsteller lehnte dies unter Verweis auf gesundheitliche Probleme ab. Ein ärztliches Attest vom 23.04.2026 dokumentiert eine komplexe Erkrankung des rechten Auges (Zustand nach dreimaligem Netzhautriss, Hornhauttrübung, Glaskörpertrübung, Katarakt, Myopie); Tätigkeiten mit hohen Anforderungen an die Sehqualität sowie das Heben schwerer Lasten seien zu vermeiden. Mit Bescheid vom 07.04.2026 hob der Antragsgegner die Grundleistungen zum 30.04.2026 auf und gewährte für 01.05.–31.10.2026 nur noch Leistungen zur Deckung des unabwendbar gebotenen Bedarfs (insgesamt € 103,54), gestützt auf § 9 Abs. 4 AsylbLG i.V.m. § 48 Abs. 1 Satz 1 SGB X sowie § 5 Abs. 4 Satz 2 i.V.m. § 1a Abs. 1 AsylbLG. Widerspruch vom 04.05.2026; zugleich Antrag auf einstweiligen Rechtsschutz.\n\nGründe (II., gekürzt):\n1. Der angefochtene Bescheid stellt sich als rechtswidrig dar. Nach Aktenlage kann dahinstehen, ob der Antragsteller einen berechtigten Grund hatte, die Arbeitsgelegenheit abzulehnen.\n2. Denn ungeachtet der Tatbestandsvoraussetzungen stellt sich die Anspruchseinschränkung als rechtswidrig dar, weil die in § 1a Abs. 1 AsylbLG geregelte Rechtsfolge unionsrechtswidrig ist. Auf die Vorlage des BSG (Beschluss vom 25.07.2024 — B 8 AY 6/23 R) hat der EuGH mit Urteil vom 04.06.2026 (C-621/24) erkannt, dass Art. 17 Abs. 2 i.V.m. Art. 2 lit. g der RL 2013/33/EU einer nationalen Regelung entgegensteht, nach der die im Rahmen der Aufnahme gewährten materiellen Leistungen so eingeschränkt werden, dass sie — außer in besonderen Fällen — Sachleistungen zur Deckung des Bedarfs an Kleidung und Geldleistungen zur Deckung des notwendigen persönlichen Bedarfs nicht mehr umfassen. Von dem gebotenen angemessenen Lebensstandard darf nur in den von der Richtlinie ausdrücklich geregelten Fällen (Art. 17 Abs. 3 und 4, Art. 20) abgewichen werden; Art. 17 Abs. 5 ist keine Ermächtigung zur Absenkung des Leistungsniveaus (EuGH, a.a.O., Rn. 63, 69 f.).\n3. Die unberechtigte Nichtwahrnehmung einer Arbeitsgelegenheit ist weder von Art. 17 Abs. 3 und 4 noch von Art. 20 der RL 2013/33/EU erfasst. Da § 1a Abs. 1 AsylbLG weder Leistungen für Bekleidung noch ein Taschengeld vorsieht, verstößt die Norm gegen Art. 17 Abs. 2 i.V.m. Art. 2 lit. g der Richtlinie. Einer unionsrechtskonformen Auslegung ist § 5 Abs. 4 Satz 2 i.V.m. § 1a Abs. 1 AsylbLG nicht zugänglich; dies widerspräche der klaren Intention des Gesetzgebers und dem Regel-Ausnahme-Verhältnis der Norm. Aus dem Anwendungsvorrang des Unionsrechts folgt unmittelbar die Verpflichtung der Kammer, die Norm unangewendet zu lassen (vgl. EuGH, C-715/20; C-42/17; BVerfG, „Solange II“).\n4. Gleiches gilt im Anwendungsbereich der Neufassung RL (EU) 2024/1346 (Umsetzungsfrist 12.06.2026): Aus Art. 2 Nr. 7 i.V.m. Art. 19 Abs. 2 UA 1 folgt die Verpflichtung zur Gewährung von Bekleidung; die Sanktion der Nichtwahrnehmung einer Arbeitsgelegenheit ist kein Kürzungsgrund nach dem abschließenden Katalog des Art. 23 Abs. 2 — insbesondere ist die Arbeitsgelegenheit zur Reinigung der Gemeinschaftsunterkunft keine „obligatorische Integrationsmaßnahme“ i.S.v. Art. 23 Abs. 2 lit. f.\n5. Anordnungsanspruch und Anordnungsgrund sind glaubhaft gemacht. Für die aktuelle Bedürftigkeit spielt keine Rolle, dass der Antragsteller früher Sozialleistungen aus der Ukraine erhielt: Nach § 7 Abs. 1 Satz 1 AsylbLG kann nur Einkommen berücksichtigt werden, das tatsächlich zur Bestreitung des Lebensunterhalts zur Verfügung steht; die Zahlungen sind seit 30.10.2025 eingestellt.\n6. Vorläufige Leistungen werden zur Meidung einer Vorwegnahme der Hauptsache befristet bis 31.10.2026 zugesprochen. Die Kostenentscheidung folgt aus § 193 SGG analog."
+    },
+    {
+      "id": "eugh-2026-c-621-24",
+      "court": "Gerichtshof der Europäischen Union",
+      "court_short": "EuGH",
+      "level": "EuGH",
+      "az": "C-621/24",
+      "date": "2026-06-04",
+      "kind": "Urteil",
+      "proc": "Vorabentscheidungsverfahren (Art. 267 AEUV)",
+      "juris": "EU",
+      "title": "Leistungsniveau des § 1a Abs. 1 AsylbLG mit der Aufnahmerichtlinie unvereinbar",
+      "summary": {
+        "de": "Auf Vorlage des Bundessozialgerichts entscheidet der EuGH: Art. 17 Abs. 2 i.V.m. Art. 2 lit. g der RL 2013/33/EU steht einer nationalen Regelung entgegen, die die materiellen Aufnahmeleistungen so einschränkt, dass sie — außer in besonderen Fällen — weder Sachleistungen für Kleidung und Haushaltsgüter noch Geldleistungen für den notwendigen persönlichen Bedarf (Taschengeld) umfassen. Abweichungen vom angemessenen Lebensstandard sind nur nach Art. 17 Abs. 3, 4 und Art. 20 der Richtlinie zulässig; Art. 17 Abs. 5 ist keine Ermächtigung zur Leistungsabsenkung. Damit ist das Leistungsniveau des § 1a Abs. 1 AsylbLG unionsrechtswidrig.",
+        "en": "On a reference from the Federal Social Court, the CJEU ruled: Art. 17(2) in conjunction with Art. 2(g) of Directive 2013/33/EU precludes national rules that restrict material reception conditions so that — except in special cases — they no longer cover clothing and household goods in kind, or cash benefits for essential personal needs (pocket money). Derogations from the adequate standard of living are permitted only under Art. 17(3), (4) and Art. 20 of the Directive; Art. 17(5) is not a basis for lowering the benefit level. The benefit level of § 1a(1) AsylbLG is therefore contrary to EU law.",
+        "ru": "По запросу Федерального социального суда Суд ЕС постановил: ст. 17 (2) в связке со ст. 2 (g) Директивы 2013/33/EU противоречит национальным нормам, урезающим материальные условия приёма так, что они — кроме особых случаев — больше не покрывают одежду и хозяйственные товары в натуральной форме, а также денежные выплаты на необходимые личные нужды (карманные деньги). Отступления от достаточного уровня жизни допустимы только по ст. 17 (3), (4) и ст. 20 Директивы; ст. 17 (5) не даёт права снижать уровень выплат. Уровень выплат по § 1a абз. 1 AsylbLG противоречит праву ЕС.",
+        "ua": "За запитом Федерального соціального суду Суд ЄС постановив: ст. 17 (2) у поєднанні зі ст. 2 (g) Директиви 2013/33/EU суперечить національним нормам, що обмежують матеріальні умови прийому так, що вони — крім особливих випадків — більше не покривають одяг і господарські товари в натуральній формі, а також грошові виплати на необхідні особисті потреби (кишенькові гроші). Відступи від належного рівня життя допустимі лише за ст. 17 (3), (4) і ст. 20 Директиви; ст. 17 (5) не дає права знижувати рівень виплат. Рівень виплат за § 1a абз. 1 AsylbLG суперечить праву ЄС."
+      },
+      "outcome": "Unvereinbarkeit festgestellt",
+      "effects": [
+        {
+          "act_id": "fed_asylblg",
+          "jurabk": "AsylbLG",
+          "paras": ["1a"],
+          "kind": "incompatible",
+          "note": "Leistungsniveau des § 1a Abs. 1 AsylbLG (ohne Bekleidung, ohne Taschengeld) mit Art. 17 Abs. 2 i.V.m. Art. 2 lit. g RL 2013/33/EU unvereinbar (Rn. 63, 72)"
+        },
+        {
+          "eu_celex": "32013L0033",
+          "jurabk": "RL 2013/33/EU",
+          "paras": ["17", "20"],
+          "kind": "interpreted",
+          "note": "Abschließender Charakter der Abweichungstatbestände: nur Art. 17 Abs. 3, 4 und Art. 20; Art. 17 Abs. 5 ist keine Absenkungsermächtigung (Rn. 69 f.)"
+        }
+      ],
+      "related": [
+        { "rel": "answers", "ref": "bsg-2024-b-8-ay-6-23-r", "label": "BSG, Vorlagebeschl. v. 25.07.2024 — B 8 AY 6/23 R" }
+      ],
+      "quote": "Unterbleiben Maßnahmen zur Deckung des Bedarfs der Antragsteller auf internationalen Schutz an Kleidung sowie Geldleistungen zur Deckung des täglichen Bedarfs, so ist dies nicht mit dem Erfordernis eines angemessenen Lebensstandards im Sinne von Art. 17 Abs. 2 der RL (EU) 2013/33 vereinbar.",
+      "url": "https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:62024CJ0621",
+      "source": "EUR-Lex",
+      "text": null
+    },
+    {
+      "id": "bsg-2024-b-8-ay-6-23-r",
+      "court": "Bundessozialgericht",
+      "court_short": "BSG",
+      "level": "BSG",
+      "az": "B 8 AY 6/23 R",
+      "date": "2024-07-25",
+      "kind": "Vorlagebeschluss",
+      "proc": "Vorlage an den EuGH (Art. 267 AEUV)",
+      "juris": "DE",
+      "title": "BSG legt dem EuGH die Vereinbarkeit von § 1a AsylbLG mit der Aufnahmerichtlinie vor",
+      "summary": {
+        "de": "Das Bundessozialgericht setzt ein Revisionsverfahren zu Anspruchseinschränkungen nach § 1a AsylbLG aus und legt dem EuGH die Frage vor, ob das abgesenkte Leistungsniveau (nur Ernährung, Unterkunft, Heizung, Körper- und Gesundheitspflege — ohne Bekleidung und Taschengeld) mit Art. 17 Abs. 2 i.V.m. Art. 2 lit. g der Aufnahmerichtlinie 2013/33/EU vereinbar ist. Die Vorlage führt zum Urteil des EuGH vom 04.06.2026 (C-621/24).",
+        "en": "The Federal Social Court stayed an appeal on points of law concerning benefit restrictions under § 1a AsylbLG and referred to the CJEU the question whether the reduced benefit level (food, housing, heating, personal and health care only — no clothing, no pocket money) is compatible with Art. 17(2) in conjunction with Art. 2(g) of Reception Directive 2013/33/EU. The reference led to the CJEU judgment of 4 June 2026 (C-621/24).",
+        "ru": "Федеральный социальный суд приостановил ревизионное производство по урезанию пособий по § 1a AsylbLG и направил в Суд ЕС вопрос: совместим ли сниженный уровень выплат (только питание, жильё, отопление, гигиена и медицинский уход — без одежды и карманных денег) со ст. 17 (2) в связке со ст. 2 (g) Директивы о приёме 2013/33/EU. Запрос привёл к решению Суда ЕС от 04.06.2026 (C-621/24).",
+        "ua": "Федеральний соціальний суд призупинив ревізійне провадження щодо скорочення виплат за § 1a AsylbLG і направив до Суду ЄС питання: чи сумісний знижений рівень виплат (лише харчування, житло, опалення, гігієна та медичний догляд — без одягу та кишенькових грошей) зі ст. 17 (2) у поєднанні зі ст. 2 (g) Директиви про прийом 2013/33/EU. Запит привів до рішення Суду ЄС від 04.06.2026 (C-621/24)."
+      },
+      "outcome": "ausgesetzt und vorgelegt",
+      "effects": [
+        {
+          "act_id": "fed_asylblg",
+          "jurabk": "AsylbLG",
+          "paras": ["1a"],
+          "kind": "referred",
+          "note": "Vereinbarkeit des Leistungsniveaus des § 1a AsylbLG mit Art. 17 Abs. 2 RL 2013/33/EU dem EuGH vorgelegt"
+        }
+      ],
+      "related": [],
+      "quote": null,
+      "url": "https://dejure.org/dienste/vernetzung/rechtsprechung?Gericht=BSG&Datum=25.07.2024&Aktenzeichen=B%208%20AY%206%2F23%20R",
+      "source": "BSG",
+      "text": null
+    }
+  ]
+}

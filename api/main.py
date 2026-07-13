@@ -18,6 +18,9 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              the jurisdiction tree (eu/bund/bayern/laender)
   GET /search?q=              search acts by jurabk/title (from wiki.json)
+  GET /decisions?q=&act=      court decisions (decisions.json), filterable
+  GET /decisions/{id}         one decision; 404 if unknown
+  GET /digest                 LLM digest of legislative activity; 404 if none
 
 Data is loaded once at startup and cached in-process; the dataset is static
 per deploy. Override the data directory with LEXGRAPH_DATA=/path/to/web/data.
@@ -159,3 +162,58 @@ def search(q: str = Query(..., min_length=1),
                if needle in str(r.get("jurabk", "")).casefold()
                or needle in str(r.get("title", "")).casefold()]
     return {"query": q, "total": len(matches), "matches": matches[:limit]}
+
+
+@app.get("/decisions")
+def decisions(q: str | None = Query(None, min_length=1),
+              act: str | None = Query(None, min_length=1),
+              limit: int = Query(50, ge=1, le=200)):
+    """Court decisions (decisions.json), newest first, optionally filtered.
+
+    `q` matches case-insensitively in az, court, court_short, title, every
+    summary language, and effects[].jurabk; `act` filters by effects[].act_id
+    (an act index id like fed_asylblg).
+    """
+    rows = _load("decisions")
+    if act:
+        rows = [d for d in rows
+                if any(e.get("act_id") == act
+                       for e in d.get("effects") or [])]
+    if q:
+        needle = q.strip().casefold()
+
+        def hit(d: dict) -> bool:
+            hay = [d.get("az"), d.get("court"), d.get("court_short"),
+                   d.get("title"),
+                   *(d.get("summary") or {}).values(),
+                   *(e.get("jurabk") for e in d.get("effects") or [])]
+            return any(needle in str(h).casefold() for h in hay if h)
+
+        rows = [d for d in rows if hit(d)]
+    return {"query": q, "act": act, "total": len(rows),
+            "decisions": rows[:limit]}
+
+
+@app.get("/decisions/{decision_id}")
+def decision_detail(decision_id: str):
+    """One decision by id (a decisions.json row, incl. anonymized full text)."""
+    for d in _load("decisions"):
+        if d.get("id") == decision_id:
+            return _cached(d)
+    raise HTTPException(404, f"unknown decision '{decision_id}'")
+
+
+@app.get("/digest")
+def digest():
+    """The LLM digest (digest.json): {generated_at, model, llm, periods}.
+
+    Read fresh per request, NOT via _load(): the file is rewritten by every
+    refresh (tools/build_digest.py) and is legitimately absent when no
+    OPENROUTER_API_KEY is configured — that must stay a 404, not a
+    permanently cached copy or a 503. The file is tiny, so no cache needed.
+    """
+    path = DATA_DIR / "digest.json"
+    if not path.exists():
+        raise HTTPException(404, "no digest available")
+    with path.open(encoding="utf-8") as fh:
+        return _cached(json.load(fh))

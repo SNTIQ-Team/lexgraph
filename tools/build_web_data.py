@@ -8,6 +8,7 @@ Outputs:
     web/data/feed.json         merged event stream, newest first (~500)
     web/data/wiki.json         act index (federal + Bavaria)
     web/data/acts/<id>.json    per-act article: head, patches, versions, norms
+    web/data/decisions.json    curated court decisions, newest first
     web/data/hierarchy.json    jurisdiction tree (no graphs)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
 """
@@ -38,6 +39,18 @@ def load(source: str, name: str) -> list[dict]:
     if not snap or not (snap / name).is_file():
         return []
     return list(read_jsonl(snap / name))
+
+
+def load_decisions() -> list[dict]:
+    """Curated court decisions (data/decisions.json, maintained by hand,
+    next to the snapshots). Optional input: a missing file must not kill
+    the build. Returned newest first."""
+    f = ROOT / "data" / "decisions.json"
+    if not f.is_file():
+        return []
+    rows = json.loads(f.read_text(encoding="utf-8")).get("decisions") or []
+    rows.sort(key=lambda d: d.get("date") or "", reverse=True)
+    return rows
 
 
 def slug(s: str) -> str:
@@ -117,8 +130,21 @@ def build_feed() -> list[dict]:
     for u in load("buzer", "upcoming.jsonl"):
         add(u.get("date"), "DE", "buzer", "tritt in Kraft ⏳",
             u.get("title"), u.get("url"))
+    for d in load_decisions():
+        add(d.get("date"), d.get("juris"), d.get("court_short"),
+            "Entscheidung",
+            (d.get("az") or "") + " — " + (d.get("title") or ""),
+            d.get("url"))
     rows.sort(key=lambda r: r["time"], reverse=True)
-    return rows[:600]
+    # court decisions are rare and high-value — never let the 600-row cap
+    # crowd them out: seat decisions first, fill the rest with the newest
+    # other events, keep the merged window newest-first (the API caps
+    # /feed at 600, so rescued rows must live INSIDE the window)
+    decs = [r for r in rows if r["kind"] == "Entscheidung"]
+    rest = [r for r in rows if r["kind"] != "Entscheidung"]
+    head = decs + rest[:max(0, 600 - len(decs))]
+    head.sort(key=lambda r: r["time"], reverse=True)
+    return head
 
 
 TODAY = date.today().isoformat()
@@ -148,8 +174,23 @@ def temporal(versions: list[dict], upcoming: list[dict],
 
 
 # ------------------------------------------------------------------ wiki
+def _act_decisions(decisions: list[dict], aid: str) -> list[dict]:
+    """Minimal per-act projection of the curated decisions: only rows whose
+    effects touch this act, and only those effects (input is newest first)."""
+    rows = []
+    for d in decisions:
+        eff = [e for e in d.get("effects") or [] if e.get("act_id") == aid]
+        if eff:
+            rows.append({"id": d["id"], "court_short": d.get("court_short"),
+                         "level": d.get("level"), "az": d.get("az"),
+                         "date": d.get("date"), "kind": d.get("kind"),
+                         "title": d.get("title"), "effects": eff})
+    return rows
+
+
 def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     idx, details = [], {}
+    decisions = load_decisions()
     patches = load("patches", "patches.jsonl")
     buz_v = load("buzer", "versions.jsonl")
     buz_up = load("buzer", "upcoming.jsonl")
@@ -195,13 +236,15 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             "new": (p.get("new_text") or "")[:400] or None,
         } for p in pats]
         _tmp = temporal(versions, upcoming, patch_rows)
+        decs = _act_decisions(decisions, aid)
         idx.append({"id": aid, "jurabk": jb, "juris": "DE",
                     "title": a.get("long_title") or jb,
                     "norms": a.get("norm_count"),
                     "build": a.get("builddate", "")[:8],
                     "last_change": _tmp["last_change"],
                     "next_change": _tmp["next_change"],
-                    "pending": _tmp["pending"]})
+                    "pending": _tmp["pending"],
+                    "decisions": len(decs)})
         details[aid] = {
             "id": aid, "jurabk": jb, "juris": "DE",
             "title": a.get("long_title"), "stand": a.get("stand"),
@@ -213,6 +256,8 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             "temporal": temporal(versions, upcoming, patch_rows),
             "norms": [],
         }
+        if decs:
+            details[aid]["decisions"] = decs
 
     for a in load("bayern_recht", "acts.jsonl"):
         jb = a["jurabk"]
@@ -236,12 +281,14 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
                  if _by_needle(jb) and _by_needle(jb) in
                  (b.get("titel") or "").lower()]
         _tmp = temporal(versions, [], [])
+        decs = _act_decisions(decisions, aid)
         idx.append({"id": aid, "jurabk": jb, "juris": "DE-BY",
                     "title": a.get("long_title") or jb,
                     "norms": a.get("norm_count"),
                     "build": a.get("builddate", "")[:10],
                     "last_change": _tmp["last_change"],
-                    "next_change": _tmp["next_change"], "pending": 0})
+                    "next_change": _tmp["next_change"], "pending": 0,
+                    "decisions": len(decs)})
         details[aid] = {
             "id": aid, "jurabk": jb, "juris": "DE-BY",
             "title": a.get("long_title"), "bayrs": a.get("bayrs_nr"),
@@ -263,6 +310,8 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             "temporal": temporal(versions, [], []),
             "norms": [],
         }
+        if decs:
+            details[aid]["decisions"] = decs
 
     # norms in one pass per corpus (files are big)
     for src, prefix in (("gii", "fed_"), ("bayern_recht", "by_")):
@@ -528,6 +577,7 @@ def main() -> int:
     hierarchy = build_hierarchy(wiki_idx)
     graph = build_graph()
     git = build_git()
+    decisions = load_decisions()
 
     patches = load("patches", "patches.jsonl")
     sts: dict[str, int] = {}
@@ -547,6 +597,7 @@ def main() -> int:
         "eu_instruments": len(load("eu_layer", "instruments.jsonl")),
         "transpositions": len(load("eu_layer", "transpositions.jsonl")),
         "feed_events": len(feed),
+        "decisions": len(decisions),
         "graph": {k: len(v) for k, v in graph.items()
                   if isinstance(v, list)},
     }
@@ -561,6 +612,7 @@ def main() -> int:
         "summary.json": dump("summary.json", summary),
         "feed.json": dump("feed.json", feed),
         "wiki.json": dump("wiki.json", wiki_idx),
+        "decisions.json": dump("decisions.json", decisions),
         "hierarchy.json": dump("hierarchy.json", hierarchy),
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),

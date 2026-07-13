@@ -47,6 +47,7 @@ Files written:
 | `feed.json` | Merged realtime event stream, newest first (≤600). |
 | `wiki.json` | Act index (federal + Bavaria). |
 | `acts/<id>.json` | One full act (head, patches/bills, versions, norms). |
+| `decisions.json` | Curated court decisions (Rechtsprechung), newest first. |
 | `hierarchy.json` | Jurisdiction tree (EU / Bund / Bayern / Länder). |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
 | `git.json` | The commit-graph of lawmaking. |
@@ -70,6 +71,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "eu_instruments": 47,
   "transpositions": 136,
   "feed_events": 600,
+  "decisions": 3,
   "graph": { "nodes": 720, "edges": 1451, "beliefs": 2558, "ticks": 262, "worlds": 3 }
 }
 ```
@@ -83,6 +85,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
 | `eu_instruments` / `transpositions` | EU instruments / DEU transposition mentions. |
 | `feed_events` | Rows in `feed.json`. |
+| `decisions` | Curated court decisions in `decisions.json`. |
 | `graph` | Element counts of the arena export (`nodes`, `edges`, `beliefs`, `ticks`, `worlds`). |
 
 ---
@@ -110,8 +113,8 @@ at ~600. Array of:
 |-------|---------|
 | `time` | Event date (`YYYY-MM-DD`). |
 | `juris` | Jurisdiction: `DE`, `DE-BY`, `EU`, `DE-<Land>`, … |
-| `source` | Originating source label (`BGBl`, `GVBl`, `OJ L`, `Landtag`, `Parlamentsspiegel`, `buzer`, …). |
-| `kind` | Event kind (`verkündet`, `veröffentlicht`, `gesetzentwurf`, `tritt in Kraft ⏳`, …). |
+| `source` | Originating source label (`BGBl`, `GVBl`, `OJ L`, `Landtag`, `Parlamentsspiegel`, `buzer`, a court short name like `SG München`, …). |
+| `kind` | Event kind (`verkündet`, `veröffentlicht`, `gesetzentwurf`, `tritt in Kraft ⏳`, `Entscheidung`, …). |
 | `title` | Truncated to 160 chars. |
 | `url` | Source link, or `null`. |
 | `badge` | Optional tag (`relevant`, gazette authenticity, …), or `null`. |
@@ -133,7 +136,8 @@ The act index — the left-hand list in the *Wiki* view. Array of:
     "build": "20260611",
     "last_change": "2026-06-12",
     "next_change": "2029-06-12",
-    "pending": 10
+    "pending": 10,
+    "decisions": 3
   }
 ]
 ```
@@ -149,6 +153,7 @@ The act index — the left-hand list in the *Wiki* view. Array of:
 | `last_change` | Most recent past amendment date. |
 | `next_change` | Nearest **future** amendment/version date, or `null`. |
 | `pending` | Count of pending patches (`proposed` + `adopted`). |
+| `decisions` | Count of curated court decisions touching this act (`0` if none). |
 
 ---
 
@@ -157,7 +162,8 @@ The act index — the left-hand list in the *Wiki* view. Array of:
 The full per-act record. **The shape differs between federal and Bavarian
 acts** (they draw from different pipelines) — the common keys are `id`,
 `jurabk`, `juris`, `title`, `build`, `norm_count`, `versions`, `temporal`,
-`norms`.
+`norms`. Both shapes gain an optional `decisions` key (see below) when a
+curated court decision touches the act.
 
 ### Federal act (e.g. `acts/fed_asylblg.json`)
 
@@ -257,6 +263,97 @@ Keys: `id`, `jurabk`, `juris`, `title`, `bayrs`, `build`, `norm_count`,
 - `versions[]` — amendment history (`{date, text}`; federal rows also carry a
   synopsis `url`).
 - `norms[]` — `{enbez, titel, text, glied}`.
+
+### `decisions[]` (both shapes, optional)
+
+Curated court decisions touching this act, embedded from `decisions.json` as a
+**minimal projection**, newest first; the key is **omitted** when there are
+none (the `wiki.json` row's `decisions` count is `0` then).
+
+```json
+"decisions": [
+  {
+    "id": "eugh-2026-c-621-24",
+    "court_short": "EuGH",
+    "level": "EuGH",
+    "az": "C-621/24",
+    "date": "2026-06-04",
+    "kind": "Urteil",
+    "title": "Leistungseinschränkung nach § 1a AsylbLG …",
+    "effects": [
+      { "act_id": "fed_asylblg", "jurabk": "AsylbLG", "paras": ["1a"],
+        "kind": "incompatible", "note": "…" }
+    ]
+  }
+]
+```
+
+Only the effects whose `act_id` equals this act are embedded. The full record
+(multilingual summaries, related decisions, anonymized full text) lives in
+`decisions.json` / `GET /decisions/{id}`.
+
+---
+
+## `decisions.json`
+
+Curated court decisions (Rechtsprechung) affecting acts in the corpus —
+maintained by hand in `data/decisions.json`, exported as a **plain array**
+sorted by date, newest first. Personal data is anonymized per German
+court-publication practice. Array of:
+
+```json
+[
+  {
+    "id": "eugh-2026-c-621-24",
+    "court": "Gerichtshof der Europäischen Union",
+    "court_short": "EuGH",
+    "level": "EuGH",
+    "az": "C-621/24",
+    "date": "2026-06-04",
+    "kind": "Urteil",
+    "proc": "Vorabentscheidungsverfahren (Art. 267 AEUV)",
+    "juris": "EU",
+    "title": "Leistungseinschränkung nach § 1a AsylbLG …",
+    "summary": { "de": "…", "en": "…", "ru": "…", "ua": "…" },
+    "outcome": "unvereinbar",
+    "effects": [
+      { "act_id": "fed_asylblg", "jurabk": "AsylbLG", "paras": ["1a"],
+        "kind": "incompatible", "note": "…" }
+    ],
+    "related": [
+      { "rel": "answers", "ref": "bsg-2024-b-8-ay-6-23-r", "label": "…" }
+    ],
+    "quote": "…",
+    "url": "https://…",
+    "source": "EuGH",
+    "text": "…"
+  }
+]
+```
+
+| Field | Meaning |
+|-------|---------|
+| `id` | Decision id (slug) — the `GET /decisions/{id}` key. |
+| `court` / `court_short` | Full / short court name. |
+| `level` | Court level: `EuGH`, `BVerfG`, `BSG`, `LSG`, `SG`, … |
+| `az` | Aktenzeichen (case number). |
+| `date` | Decision date. |
+| `kind` | `Urteil` / `Beschluss` / `Vorlagebeschluss`. |
+| `proc` | Procedure type. |
+| `juris` | `EU`, `DE`, `DE-BY`. |
+| `title` | German headline. |
+| `summary` | One summary per UI language: `{de, en, ru, ua}`. |
+| `outcome` | Outcome in a few words. |
+| `effects[]` | What the decision does to which norms: `act_id` (corpus act id, when the act is in the index), `eu_celex` (for EU instruments), `jurabk`, `paras`, `kind` (`disapplied` / `incompatible` / `referred` / `interpreted` / `applied`), `note`. |
+| `related[]` | Links between decisions: `rel` (`follows` / `answers` / `cites`), `ref` (decision id), `label`. |
+| `quote` | Key quote from the decision, or `null`. |
+| `url` | Source link, or `null`. |
+| `source` | Source label (court / database). |
+| `text` | Anonymized full text, or `null`. |
+
+Each decision also appears in `feed.json` (`kind: "Entscheidung"`, `source` =
+`court_short`), as a per-act embedding in `acts/<id>.json`, and as a
+`decisions` count on the `wiki.json` rows.
 
 ---
 
@@ -429,21 +526,24 @@ no database.
 
 | Method & path | Serves | Notes |
 |---|---|---|
-| `GET /` | service index | operator, dataset, endpoint list |
+| `GET /` | service index | operator, dataset, endpoint list; browsers (`Accept: text/html`) get an HTML landing page |
 | `GET /health` | liveness | `{status, built_at, data_dir}`; 503 if data missing |
 | `GET /version` | build id | `dataset`, `version`, `built_at` |
 | `GET /stats` | `summary.json` | the dashboard counts, verbatim |
 | `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
+| `GET /decisions?q=&act=` | `decisions.json` | court decisions, newest first; `limit` 1–200 (default 50) |
+| `GET /decisions/{id}` | one `decisions.json` row | full decision; **404** if unknown |
 | `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
 | `GET /graph` | `graph.json` | the QFS arena export |
 | `GET /hierarchy` | `hierarchy.json` | the jurisdiction tree |
 | `GET /search?q=` | `wiki.json` rows | substring match on `jurabk`/`title` |
+| `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |
 
-`/stats`, `/acts`, `/acts/{id}`, `/graph`, `/hierarchy` return the underlying
-JSON **unchanged** (see section A for every field). The endpoints below add a
-thin envelope.
+`/stats`, `/acts`, `/acts/{id}`, `/decisions/{id}`, `/graph`, `/hierarchy`
+return the underlying JSON **unchanged** (see section A for every field). The
+endpoints below add a thin envelope.
 
 ## `GET /health`
 
@@ -524,6 +624,48 @@ curl 'http://127.0.0.1:8010/search?q=Asyl'
   { "id": "fed_asylblg", "jurabk": "AsylbLG", "title": "Asylbewerberleistungsgesetz", … },
   { "id": "fed_asylvfg_1992", "jurabk": "AsylVfG 1992", "title": "Asylgesetz", … } ] }
 ```
+
+## `GET /decisions?q=&act=` and `GET /decisions/{id}`
+
+Court decisions from `decisions.json` (full rows — see section A), newest
+first. `q` matches case-insensitively in `az`, `court`, `court_short`,
+`title`, all `summary` languages, and `effects[].jurabk`; `act` filters by
+`effects[].act_id` (an act index id); `limit` ∈ [1, 200], default 50.
+`/decisions/{id}` returns one full decision and **404** for an unknown id.
+
+```bash
+curl 'http://127.0.0.1:8010/decisions?act=fed_asylblg&limit=1'
+```
+
+```json
+{ "query": null, "act": "fed_asylblg", "total": 3, "decisions": [
+  { "id": "sg-muenchen-2026-s-42-ay-55-26-er", "court_short": "SG München",
+    "level": "SG", "az": "S 42 AY 55/26 ER", "date": "2026-07-06",
+    "kind": "Beschluss", "title": "Leistungskürzung nach § 1a AsylbLG …",
+    "summary": { "de": "…", "en": "…", "ru": "…", "ua": "…" },
+    "effects": [ … ], … } ] }
+```
+
+## `GET /digest`
+
+**Experimental.** A short multilingual digest of legislative activity —
+`web/data/digest.json`, written by `tools/build_digest.py` (refresh step 17)
+when `OPENROUTER_API_KEY` is set. The facts are computed deterministically
+from the section-A data; the phrasing is **LLM-generated** (the winning
+model id is in `model`). Informational only, not legal advice.
+
+```json
+{ "generated_at": "2026-07-13T04:00:00+00:00",
+  "model": "deepseek/deepseek-chat-v3-0324:free", "llm": true,
+  "periods": {
+    "year":     { "de": "…", "en": "…", "ru": "…", "ua": "…" },
+    "month":    { "de": "…", "en": "…", "ru": "…", "ua": "…" },
+    "upcoming": { "de": "…", "en": "…", "ru": "…", "ua": "…" } } }
+```
+
+Returns **404** (`{"detail": "no digest available"}`) when no digest has
+been generated yet; the file is read fresh per request (never cached in
+process), so a refresh replaces it without a restart.
 
 ## Dependencies
 

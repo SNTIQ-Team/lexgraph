@@ -50,4 +50,6 @@ VIS="/home/echo0x22/Documents/Projects/03_PROJECTS_HOBBY/qfs_visualizer/public"
 
 echo "==> [16/16] export web data (Wiki/Realtime/Hierarchie/Graph)"
 python3 tools/build_web_data.py
+
+step "17/17" "LLM digest (skips without OPENROUTER_API_KEY)" python3 tools/build_digest.py
 echo "OK — serve with: python3 -m http.server -d web 8777"
