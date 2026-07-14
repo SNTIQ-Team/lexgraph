@@ -129,8 +129,8 @@ def build_facts(summary: dict, feed: list[dict], wiki: list[dict],
         "window": f"{d30} .. {today}",
         "event_counts_by_kind_source": month_counts,
         "recent_events": [{"date": e["time"], "kind": e["kind"],
-                           "title": (e["title"] or "")[:110]}
-                          for e in month_ev[:25]],
+                           "title": (e["title"] or "")[:90]}
+                          for e in month_ev[:14]],
     }
 
     year_ev = [e for e in feed if d365 <= e["time"] <= today]
@@ -143,13 +143,13 @@ def build_facts(summary: dict, feed: list[dict], wiki: list[dict],
         "window": f"{d365} .. {today}",
         "event_counts_by_kind": year_counts,
         "recently_changed_acts": [
-            {"act": a["jurabk"], "title": (a.get("title") or "")[:110],
-             "last_change": a["last_change"]} for a in changed[:12]],
+            {"act": a["jurabk"], "title": (a.get("title") or "")[:90],
+             "last_change": a["last_change"]} for a in changed[:8]],
         "published_patches_total": patches.get("published", 0),
         "court_decisions": [
             {"court": d.get("court_short"), "az": d.get("az"),
-             "date": d.get("date"), "title": (d.get("title") or "")[:110]}
-            for d in decisions[:15]],
+             "date": d.get("date"), "title": (d.get("title") or "")[:90]}
+            for d in decisions[:8]],
     }
 
     fut_ev = sorted((e for e in feed if e["time"] > today),
@@ -157,10 +157,10 @@ def build_facts(summary: dict, feed: list[dict], wiki: list[dict],
     upcoming = {
         "today": today,
         "scheduled_events": [{"date": e["time"], "kind": e["kind"],
-                              "title": (e["title"] or "")[:110]}
-                             for e in fut_ev[:25]],
+                              "title": (e["title"] or "")[:90]}
+                             for e in fut_ev[:14]],
         "acts_with_scheduled_changes": [
-            {"act": a["jurabk"], "title": (a.get("title") or "")[:110],
+            {"act": a["jurabk"], "title": (a.get("title") or "")[:90],
              "next_change": a["next_change"]}
             for a in sorted((a for a in wiki
                              if (a.get("next_change") or "") > today),
@@ -304,9 +304,7 @@ def ask_g4f(facts: dict) -> tuple[dict | None, str]:
     # Reasoning/large models tend to give the richest digest; the terse ones
     # get rejected by _valid's length floor and fall through anyway.
     candidates = [m for m in (os.environ.get("G4F_MODEL", ""),
-                              "gpt-5", "gpt-4.1", "claude-sonnet-4",
-                              "gemini-2.5-flash", "deepseek-v3", "gpt-4o",
-                              "llama-4-maverick", "qwen-2.5-72b") if m]
+                              "gpt-5", "gpt-4o") if m]
     seen: set[str] = set()
     for gm in candidates:
         if gm in seen:
