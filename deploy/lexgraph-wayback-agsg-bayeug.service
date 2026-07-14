@@ -1,0 +1,33 @@
+[Unit]
+Description=Lexgraph Bavarian Wayback backfill (AGSG and BayEUG)
+Documentation=https://github.com/SNTIQ-Team/lexgraph
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=3600
+StartLimitBurst=2
+
+[Service]
+Type=exec
+WorkingDirectory=/srv/sntiq-lexgraph
+ExecStart=/usr/bin/flock -n /run/lock/lexgraph-wayback.lock /srv/sntiq-lexgraph/venv/bin/python -u pipeline/fetch_bayern_wayback.py --acts AGSG,BayEUG --workers 1 --output /srv/sntiq-lexgraph/data/by-wayback-AGSG-BayEUG-candidate.jsonl
+
+# This backfill is deliberately subordinate to the public web/API services.
+Nice=19
+CPUWeight=10
+CPUQuota=35%
+IOWeight=10
+IOSchedulingClass=idle
+MemoryHigh=128M
+MemoryMax=192M
+MemorySwapMax=32M
+TasksMax=16
+OOMPolicy=stop
+
+Restart=on-failure
+RestartSec=10min
+TimeoutStopSec=30s
+StandardOutput=append:/srv/sntiq-lexgraph/data/logs/wayback-agsg-bayeug.log
+StandardError=append:/srv/sntiq-lexgraph/data/logs/wayback-agsg-bayeug.log
+
+[Install]
+WantedBy=multi-user.target
