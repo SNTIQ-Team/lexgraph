@@ -74,16 +74,22 @@ SYSTEM_PROMPT = (
     "for a public legal-information website. You are given pre-computed "
     "facts as JSON. You must ONLY restate those facts in plain language — "
     "never invent names, numbers, dates or any specifics that are not in "
-    "the facts. Hedge everything about the future (\"voraussichtlich\" / "
-    "\"likely\"). Give NO legal advice. Respond with STRICT JSON, no "
-    "markdown, exactly this shape: "
+    "the facts. BE CONCRETE: name the specific laws by their abbreviation "
+    "(AsylbLG, SGB II, AufenthG …), the concrete court decisions by court "
+    "and docket number, and concrete dates from the facts. Generic filler "
+    "like 'multiple publications', 'various changes' or 'several notices' "
+    "is forbidden when the facts name the items — pick the 2-4 most "
+    "relevant concrete items instead. Hedge everything about the future "
+    "(\"voraussichtlich\" / \"likely\"). Give NO legal advice. Respond "
+    "with STRICT JSON, no markdown, exactly this shape: "
     '{"year":{"de":str,"en":str,"ru":str,"ua":str},'
     '"month":{"de":str,"en":str,"ru":str,"ua":str},'
     '"upcoming":{"de":str,"en":str,"ru":str,"ua":str}} '
     "with 2-4 plain-language sentences per value: 'year' = what changed "
     "over the last 12 months, 'month' = the last 30 days, 'upcoming' = "
     "what is scheduled or likely next. 'de' is German, 'en' English, "
-    "'ru' Russian, 'ua' Ukrainian."
+    "'ru' Russian, 'ua' Ukrainian. Write native-quality prose in each "
+    "language — no words from other languages mixed in."
 )
 
 
@@ -222,47 +228,131 @@ def ask(key: str, model: str, facts: dict) -> dict | None:
     return {p: {lg: raw[p][lg].strip() for lg in LANGS} for p in PERIODS}
 
 
+GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
+              "{model}:generateContent")
+
+
+def ask_gemini(key: str, model: str, facts: dict) -> dict | None:
+    """One native Gemini API attempt (official free tier — markedly better
+    multilingual prose than the OpenRouter free slugs). Same validation
+    contract as ask()."""
+    try:
+        resp = requests.post(
+            GEMINI_URL.format(model=model),
+            params={"key": key},
+            json={"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                  "contents": [{"role": "user", "parts": [
+                      {"text": json.dumps(facts, ensure_ascii=False)}]}],
+                  "generationConfig": {
+                      "responseMimeType": "application/json",
+                      "temperature": 0.4}},
+            timeout=120)
+    except requests.RequestException as exc:
+        print(f"  [warn] gemini/{model}: {exc}")
+        return None
+    if resp.status_code != 200:
+        print(f"  [warn] gemini/{model}: HTTP {resp.status_code}")
+        return None
+    try:
+        content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        print(f"  [warn] gemini/{model}: malformed API response")
+        return None
+    raw = _parse_json(content)
+    if raw is None or not _valid(raw):
+        print(f"  [warn] gemini/{model}: invalid digest JSON")
+        return None
+    return {p: {lg: raw[p][lg].strip() for lg in LANGS} for p in PERIODS}
+
+
+def ask_g4f(facts: dict) -> tuple[dict | None, str]:
+    """gpt4free (g4f) — community provider-rotating free access. Tried
+    between Gemini and the OpenRouter chain whenever the package is
+    installed. Providers churn and violate upstream ToS at their own risk —
+    every failure just falls through to the next tier."""
+    try:
+        from g4f.client import Client  # heavy optional dependency
+    except ImportError:
+        return None, ""
+    candidates = [m for m in (os.environ.get("G4F_MODEL", ""),
+                              "gpt-4o", "gpt-4o-mini", "deepseek-v3") if m]
+    for gm in candidates:
+        try:
+            rsp = Client().chat.completions.create(
+                model=gm,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",
+                     "content": json.dumps(facts, ensure_ascii=False)}],
+                timeout=120)
+            content = rsp.choices[0].message.content
+        except Exception as exc:  # noqa: BLE001 — g4f raises anything
+            print(f"  [warn] g4f/{gm}: {type(exc).__name__}: {exc}")
+            continue
+        raw = _parse_json(content)
+        if raw is not None and _valid(raw):
+            return ({p: {lg: raw[p][lg].strip() for lg in LANGS}
+                     for p in PERIODS}, f"g4f/{gm}")
+        print(f"  [warn] g4f/{gm}: invalid digest JSON")
+    return None, ""
+
+
+def _write(periods: dict, model: str) -> int:
+    f = WEB / "digest.json"
+    f.write_text(json.dumps(
+        {"generated_at": datetime.now(timezone.utc).isoformat(
+             timespec="seconds"),
+         "model": model, "llm": True, "periods": periods},
+        ensure_ascii=False, separators=(",", ":")))
+    print(f"digest -> {f}   (model: {model})")
+    print(f"  {'digest.json':16} {f.stat().st_size / 1024:8.1f} KB")
+    return 0
+
+
 def main() -> int:
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
-    if not key:
-        print("digest skipped — no OPENROUTER_API_KEY "
-              "(existing digest.json kept)")
-        return 0
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
     facts = build_facts(read("summary", {}), read("feed", []),
                         read("wiki", []), read("decisions", []))
 
+    # Provider tiers, best prose first:
+    # 1. Gemini (official free tier) when a key is present
+    if gemini_key:
+        for gm in [os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                   "gemini-2.0-flash"]:
+            periods = ask_gemini(gemini_key, gm, facts)
+            if periods:
+                return _write(periods, f"google/{gm}")
+
+    # 2. gpt4free, when installed
+    periods, model = ask_g4f(facts)
+    if periods:
+        return _write(periods, model)
+
+    # 3. OpenRouter free slugs
+    if not key:
+        print("[warn] no provider produced a digest and no "
+              "OPENROUTER_API_KEY — digest.json unchanged")
+        return 1
     models = [os.environ["OPENROUTER_MODEL"]] \
         if os.environ.get("OPENROUTER_MODEL") else FALLBACK_MODELS
-    periods = None
     for model in models:
         periods = ask(key, model, facts)
         if periods:
-            break
-    if not periods:
-        # the curated slugs may all have rotated out of the free tier —
-        # ask the live catalog for whatever :free chat models exist today
-        discovered = [m for m in discover_free_models() if m not in models]
-        print(f"[warn] curated models failed — trying discovered: "
-              f"{', '.join(discovered) or 'none'}")
-        for model in discovered:
-            periods = ask(key, model, facts)
-            if periods:
-                break
-    if not periods:
-        print("[warn] no model produced a valid digest — "
-              "digest.json unchanged")
-        return 1
+            return _write(periods, model)
+    # the curated slugs may all have rotated out of the free tier —
+    # ask the live catalog for whatever :free chat models exist today
+    discovered = [m for m in discover_free_models() if m not in models]
+    print(f"[warn] curated models failed — trying discovered: "
+          f"{', '.join(discovered) or 'none'}")
+    for model in discovered:
+        periods = ask(key, model, facts)
+        if periods:
+            return _write(periods, model)
 
-    out = {"generated_at": datetime.now(timezone.utc).isoformat(
-               timespec="seconds"),
-           "model": model, "llm": True, "periods": periods}
-    f = WEB / "digest.json"
-    f.write_text(json.dumps(out, ensure_ascii=False,
-                            separators=(",", ":")))
-    print(f"digest -> {f}   (model: {model})")
-    print(f"  {'digest.json':16} {f.stat().st_size / 1024:8.1f} KB")
-    return 0
+    print("[warn] no model produced a valid digest — digest.json unchanged")
+    return 1
 
 
 if __name__ == "__main__":
