@@ -23,6 +23,10 @@ from typing import Iterable
 
 SCHEMA_VERSION = "2"
 TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+# Repeated concept tokens encode the curated 1..5 target priority.  A step
+# deliberately outweighs a coincidental literal body match, so a Ukraine
+# query surfaces the controlling/benefit norms before raw mentions.
+CONCEPT_PRIORITY_STEP = 60
 
 
 def normalize_search_text(value: object) -> str:
@@ -88,6 +92,30 @@ def build_search_database(details: dict[str, dict], output: Path,
     tmp = output.with_name(output.name + ".tmp")
     tmp.unlink(missing_ok=True)
     synonyms = _read_synonyms(synonyms_path)
+    # Curated semantic links must never disappear silently after an act-id or
+    # norm-label change.  Fail the deterministic build with a useful message.
+    missing_targets: list[str] = []
+    norm_refs = {
+        act_id: {str(norm.get("enbez") or "")
+                 for norm in act.get("norms") or []}
+        for act_id, act in details.items()
+    }
+    for group in synonyms:
+        targets = group["targets"]
+        act_targets = (list(targets.get("acts") or []) +
+                       list(targets.get("norm_acts") or []))
+        for act_id in act_targets:
+            if str(act_id) not in details:
+                missing_targets.append(f"{group['id']}: act {act_id}")
+        for norm in targets.get("norms") or []:
+            act_id = str(norm.get("act_id") or "")
+            enbez = str(norm.get("enbez") or "")
+            if act_id not in details or enbez not in norm_refs.get(act_id, set()):
+                missing_targets.append(
+                    f"{group['id']}: norm {act_id} {enbez}")
+    if missing_targets:
+        raise ValueError("missing search synonym target(s): " +
+                         "; ".join(missing_targets))
     conn = sqlite3.connect(tmp)
     try:
         conn.executescript("""
@@ -347,7 +375,7 @@ class SearchEngine:
         if "concept" in fields and concepts:
             tagged = str(row["concepts_n"] or "").split()
             repeats = sum(tagged.count(concept) for concept in concepts)
-            score += max(0, repeats - 1) * 18
+            score += max(0, repeats - 1) * CONCEPT_PRIORITY_STEP
         direct = normalize_search_text(query)
         if direct:
             values = {

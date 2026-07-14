@@ -28,7 +28,15 @@
           "fed_ukraineaufenthfgv"
         ],
         "norms": [
-          {"act_id": "fed_aufenthg_2004", "enbez": "§ 24", "weight": 3},
+          {"act_id": "fed_aufenthg_2004", "enbez": "§ 24", "weight": 5},
+          {"act_id": "fed_sgb_2", "enbez": "§ 74", "weight": 4},
+          {"act_id": "fed_sgb_12", "enbez": "§ 146", "weight": 4},
+          {"act_id": "fed_asylblg", "enbez": "§ 1", "weight": 4},
+          {"act_id": "fed_sgb_5", "enbez": "§ 417", "weight": 3},
+          {"act_id": "fed_sgb_9_2018", "enbez": "§ 150a", "weight": 3},
+          {"act_id": "fed_asylblg", "enbez": "§ 18", "weight": 3},
+          {"act_id": "fed_aufenthg_2004", "enbez": "§ 81", "weight": 3},
+          {"act_id": "fed_asylblg", "enbez": "§ 6", "weight": 2},
           {"act_id": "fed_ukraineaufenth_v", "enbez": "§ 1", "weight": 2},
           {"act_id": "fed_ukraineaufenth_v", "enbez": "§ 2", "weight": 2},
           {"act_id": "fed_ukraineaufenthfgv", "enbez": "§ 1", "weight": 2},

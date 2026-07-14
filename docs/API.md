@@ -694,9 +694,12 @@ case-insensitive; accents and German umlauts are folded consistently. A
 versioned, data-driven synonym file (`data/search_synonyms.json`) supplies
 multilingual/domain aliases, so e.g. `Ukraine`, `ukrainisch`, `Украина`, and
 `Україна` find the same corpus area, including temporary-protection norms.
-This is lexical retrieval, not an embedding or an assertion that two legal
-terms are equivalent. An explicit `§ 24` or `Art. 24` is constrained to the
-norm identifier; a plain numeric word remains an ordinary full-text token.
+Explicit target priorities in that file put the controlling and benefit norms
+(for example AufenthG § 24, SGB II § 74 and SGB XII § 146) before incidental
+text mentions. These are transparent retrieval hints, not an embedding or an
+assertion that two legal terms are equivalent. An explicit `§ 24` or `Art. 24`
+is constrained to the norm identifier; a plain numeric word remains an
+ordinary full-text token.
 
 `limit` caps act results and `norm_limit` caps norm results; each is in
 [1, 200] (defaults 25 and 50). For compatibility, `total` and `matches` retain
@@ -718,9 +721,9 @@ curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
   "matches": [
     {"id":"fed_ukraineaufenthfgv","jurabk":"UkraineAufenthFGV", …}
   ],
-  "result_total": 16,
+  "result_total": 24,
   "act_total": 2,
-  "norm_total": 14,
+  "norm_total": 22,
   "act_matches": [
     {"id":"fed_ukraineaufenthfgv","score":156,
      "source":"gii","url":"/acts/fed_ukraineaufenthfgv", …}
