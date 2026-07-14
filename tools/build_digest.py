@@ -85,11 +85,18 @@ SYSTEM_PROMPT = (
     '{"year":{"de":str,"en":str,"ru":str,"ua":str},'
     '"month":{"de":str,"en":str,"ru":str,"ua":str},'
     '"upcoming":{"de":str,"en":str,"ru":str,"ua":str}} '
-    "with 2-4 plain-language sentences per value: 'year' = what changed "
-    "over the last 12 months, 'month' = the last 30 days, 'upcoming' = "
-    "what is scheduled or likely next. 'de' is German, 'en' English, "
-    "'ru' Russian, 'ua' Ukrainian. Write native-quality prose in each "
-    "language — no words from other languages mixed in."
+    "with 5-8 sentences (roughly 100-170 words) per value: 'year' = what "
+    "changed over the last 12 months, 'month' = the last 30 days, "
+    "'upcoming' = what is scheduled or likely next. NO REPETITION between "
+    "periods: mention each notable item exactly once, in the single period "
+    "it fits best — an event from the last 30 days belongs in 'month' and "
+    "must NOT be retold in 'year'; 'year' covers the broader arc beyond "
+    "the current month. Go deep, not wide: pick the most consequential "
+    "items and explain in one clause WHY each matters for the reader "
+    "(which group is affected, what changes for them), citing the exact "
+    "§§, dates and docket numbers from the facts. 'de' is German, 'en' "
+    "English, 'ru' Russian, 'ua' Ukrainian. Write native-quality prose in "
+    "each language — no words from other languages mixed in."
 )
 
 
@@ -180,15 +187,34 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
+# A period shorter than this is terse filler ("multiple laws were
+# published") — reject it so the chain moves to a model that elaborates.
+_MIN_PERIOD_CHARS = 400
+
+# Appended to the user message: models weigh the final instruction heavier
+# than the system prompt, and the terse ones need the numeric floor spelled
+# out right next to the data.
+_LENGTH_REMINDER = (
+    "\n\nIMPORTANT: every one of the 12 string values must contain 5-8 full "
+    "sentences (at least 450 characters). For the most relevant items "
+    "explain WHO is affected and WHAT changes for them. Responses with "
+    "short summary paragraphs will be rejected."
+)
+
+
+def _user_message(facts: dict) -> str:
+    return json.dumps(facts, ensure_ascii=False) + _LENGTH_REMINDER
+
+
 def _valid(digest: dict) -> bool:
-    """All 3 periods × 4 languages present as non-empty strings."""
+    """All 3 periods × 4 languages present as substantial strings."""
     for p in PERIODS:
         block = digest.get(p)
         if not isinstance(block, dict):
             return False
         for lang in LANGS:
             v = block.get(lang)
-            if not isinstance(v, str) or not v.strip():
+            if not isinstance(v, str) or len(v.strip()) < _MIN_PERIOD_CHARS:
                 return False
     return True
 
@@ -207,7 +233,7 @@ def ask(key: str, model: str, facts: dict) -> dict | None:
                   "messages": [
                       {"role": "system", "content": SYSTEM_PROMPT},
                       {"role": "user",
-                       "content": json.dumps(facts, ensure_ascii=False)}],
+                       "content": _user_message(facts)}],
                   "response_format": {"type": "json_object"}},
             timeout=120)
     except requests.RequestException as exc:
@@ -242,7 +268,7 @@ def ask_gemini(key: str, model: str, facts: dict) -> dict | None:
             params={"key": key},
             json={"systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
                   "contents": [{"role": "user", "parts": [
-                      {"text": json.dumps(facts, ensure_ascii=False)}]}],
+                      {"text": _user_message(facts)}]}],
                   "generationConfig": {
                       "responseMimeType": "application/json",
                       "temperature": 0.4}},
@@ -274,20 +300,29 @@ def ask_g4f(facts: dict) -> tuple[dict | None, str]:
         from g4f.client import Client  # heavy optional dependency
     except ImportError:
         return None, ""
+    # Best first, but each capped so a hanging provider can't eat the run.
+    # Reasoning/large models tend to give the richest digest; the terse ones
+    # get rejected by _valid's length floor and fall through anyway.
     candidates = [m for m in (os.environ.get("G4F_MODEL", ""),
-                              "gpt-4o", "gpt-4o-mini", "deepseek-v3") if m]
+                              "gpt-5", "gpt-4.1", "claude-sonnet-4",
+                              "gemini-2.5-flash", "deepseek-v3", "gpt-4o",
+                              "llama-4-maverick", "qwen-2.5-72b") if m]
+    seen: set[str] = set()
     for gm in candidates:
+        if gm in seen:
+            continue
+        seen.add(gm)
         try:
             rsp = Client().chat.completions.create(
                 model=gm,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user",
-                     "content": json.dumps(facts, ensure_ascii=False)}],
-                timeout=120)
+                     "content": _user_message(facts)}],
+                timeout=75)
             content = rsp.choices[0].message.content
         except Exception as exc:  # noqa: BLE001 — g4f raises anything
-            print(f"  [warn] g4f/{gm}: {type(exc).__name__}: {exc}")
+            print(f"  [warn] g4f/{gm}: {type(exc).__name__}: {str(exc)[:70]}")
             continue
         raw = _parse_json(content)
         if raw is not None and _valid(raw):
@@ -312,6 +347,21 @@ def _write(periods: dict, model: str) -> int:
 def main() -> int:
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+
+    # Strictly one generation per day (the nightly retrieval run) — a
+    # manual refresh.sh re-run must not burn provider quota or churn the
+    # published text. Override with --force.
+    existing = WEB / "digest.json"
+    if "--force" not in sys.argv and existing.is_file():
+        try:
+            prev_day = (json.loads(existing.read_text(encoding="utf-8"))
+                        .get("generated_at") or "")[:10]
+        except (ValueError, OSError):
+            prev_day = ""
+        if prev_day == datetime.now(timezone.utc).date().isoformat():
+            print(f"digest already generated today ({prev_day}) — "
+                  "skipping (--force to regenerate)")
+            return 0
 
     facts = build_facts(read("summary", {}), read("feed", []),
                         read("wiki", []), read("decisions", []))
