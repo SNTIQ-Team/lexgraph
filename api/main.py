@@ -16,7 +16,7 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /acts/{id}              one full act (acts/<id>.json); 404 if unknown
   GET /git?lane=&limit=       the commit-graph, optionally filtered by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
-  GET /hierarchy              the jurisdiction tree (eu/bund/bayern/laender)
+  GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
   GET /eu-index               all in-force EU directives + basic regulations
   GET /search?q=              ranked full-text search over acts + current norms
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
@@ -150,7 +150,7 @@ def graph():
 
 @app.get("/hierarchy")
 def hierarchy():
-    """The jurisdiction tree (hierarchy.json): eu / bund / bayern / laender."""
+    """Competence-aware legal layers (hierarchy.json), not a total ranking."""
     return _cached(_load("hierarchy"))
 
 

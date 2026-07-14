@@ -11,7 +11,7 @@ Outputs:
     web/data/decisions.json    merged manual/RII decisions, newest first
     web/data/eu_index.json     in-force EU breadth metadata
     web/data/search.sqlite     ranked full-text index (acts + current norms)
-    web/data/hierarchy.json    jurisdiction tree (no graphs)
+    web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
 """
 from __future__ import annotations
@@ -453,6 +453,83 @@ def _by_needle(jb: str) -> str:
 
 
 # ------------------------------------------------------------- hierarchy
+EU_PRIMARY_REFERENCES = [
+    {
+        "celex": "12016M/TXT",
+        "kind": "treaty",
+        "title": "Vertrag über die Europäische Union "
+                 "(konsolidierte Fassung)",
+        "in_force": True,
+        "in_corpus": False,
+    },
+    {
+        "celex": "12016E/TXT",
+        "kind": "treaty",
+        "title": "Vertrag über die Arbeitsweise der Europäischen Union "
+                 "(konsolidierte Fassung)",
+        "in_force": True,
+        "in_corpus": False,
+    },
+    {
+        "celex": "12016P/TXT",
+        "kind": "charter",
+        "title": "Charta der Grundrechte der Europäischen Union",
+        "in_force": True,
+        "in_corpus": False,
+    },
+]
+
+
+def _is_constitutional_act(act: dict) -> bool:
+    """Recognise the constitutional texts in the curated corpora.
+
+    Keep both Bavarian identifiers: BAYERN.RECHT currently exposes BayVerf,
+    while older/local fixtures may use the conventional abbreviation BV.
+    """
+    act_id = str(act.get("id") or "").casefold()
+    jurabk = str(act.get("jurabk") or "").casefold()
+    title = str(act.get("title") or "").casefold().strip()
+    return (act_id in {"fed_gg", "by_bayverf", "by_bv"}
+            or jurabk in {"gg", "bayverf", "bv"}
+            or title.startswith("grundgesetz für")
+            or title.startswith("verfassung des freistaates bayern"))
+
+
+def _is_ordinance(act: dict) -> bool:
+    """Classify the curated Rechtsverordnungen conservatively.
+
+    Source snapshots do not currently expose a legal-form field.  Prefer the
+    explicit corpus ids and only use an exact formal-title boundary as a
+    forward-compatible fallback.  In particular, LStVG's "Verordnungsrecht"
+    describes a statute and must not turn it into a Rechtsverordnung.
+    """
+    ordinance_ids = {
+        "fed_aufenthv", "fed_beschv_2013", "fed_intv",
+        "fed_ukraineaufenth_v", "fed_ukraineaufenthfgv",
+        "by_dvasyl", "by_zustvauslr",
+    }
+    act_id = str(act.get("id") or "").casefold()
+    title = str(act.get("title") or "").casefold().strip()
+    return (act_id in ordinance_ids
+            or title.startswith("verordnung ")
+            or title.endswith("verordnung"))
+
+
+def _legal_layers(acts: list[dict]) -> dict[str, list[dict]]:
+    """Partition a flat corpus exactly once by constitutional/legal form."""
+    layers: dict[str, list[dict]] = {
+        "constitution": [], "statutes": [], "ordinances": [],
+    }
+    for act in acts:
+        if _is_constitutional_act(act):
+            layers["constitution"].append(act)
+        elif _is_ordinance(act):
+            layers["ordinances"].append(act)
+        else:
+            layers["statutes"].append(act)
+    return layers
+
+
 def build_hierarchy(wiki_idx: list[dict]) -> dict:
     vorgaenge = load("dip", "vorgaenge.jsonl")
     by_stand: dict[str, list] = {}
@@ -479,24 +556,50 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
             {"title": (e.get("titel") or "")[:120],
              "date": e.get("datum"),
              "url": (e.get("doc_urls") or [None])[0]})
+    eu_instruments = [{
+        "celex": i["celex"], "kind": i["kind"],
+        "title": (i.get("title") or "")[:130],
+        "in_force": i.get("in_force"),
+        "geas": i.get("in_geas_core"),
+        "deu_mnes": tr_count.get(i["celex"], 0),
+    } for i in instruments]
+    bund_acts = [a for a in wiki_idx if a["juris"] == "DE"]
+    bayern_acts = [a for a in wiki_idx if a["juris"] == "DE-BY"]
     return {
+        "meta": {
+            "schema_version": 2,
+            "model": "competence-aware",
+            "not_a_total_order": True,
+        },
         "eu": {
-            "instruments": [{
-                "celex": i["celex"], "kind": i["kind"],
-                "title": (i.get("title") or "")[:130],
-                "in_force": i.get("in_force"),
-                "geas": i.get("in_geas_core"),
-                "deu_mnes": tr_count.get(i["celex"], 0),
-            } for i in instruments],
+            # Keep the flat list for API clients using hierarchy schema v1.
+            "instruments": eu_instruments,
+            # Primary EU law is not indexed in the deep corpus.  These are
+            # honest external references; secondary law below is the indexed
+            # curated layer.
+            "primary": {
+                "indexed": False,
+                "references": EU_PRIMARY_REFERENCES,
+            },
+            "secondary": {
+                "directives": [i for i in eu_instruments
+                               if i["kind"] == "directive"],
+                "regulations": [i for i in eu_instruments
+                                if i["kind"] == "regulation"],
+                "other": [i for i in eu_instruments
+                          if i["kind"] not in {"directive", "regulation"}],
+            },
         },
         "bund": {
-            "acts": [a for a in wiki_idx if a["juris"] == "DE"],
+            "acts": bund_acts,
+            "layers": _legal_layers(bund_acts),
             "pipeline": {k: sorted(v, key=lambda x: x["date"] or "",
                                    reverse=True)
                          for k, v in sorted(by_stand.items())},
         },
         "bayern": {
-            "acts": [a for a in wiki_idx if a["juris"] == "DE-BY"],
+            "acts": bayern_acts,
+            "layers": _legal_layers(bayern_acts),
             "pipeline": {k: v for k, v in sorted(by_status.items())},
         },
         "laender": {k: v for k, v in sorted(laender.items())},

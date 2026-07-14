@@ -43,6 +43,32 @@
           {"act_id": "fed_ukraineaufenthfgv", "enbez": "§ 2", "weight": 2}
         ]
       }
+    },
+    {
+      "id": "bavaria-constitution",
+      "terms": [
+        "BayVerf",
+        "BV",
+        "Bayerische Verfassung",
+        "Verfassung des Freistaates Bayern",
+        "Bavarian constitution",
+        "Конституция Баварии",
+        "Конституция Свободного государства Бавария",
+        "Конституція Баварії",
+        "Конституція Вільної держави Баварія"
+      ],
+      "prefixes": [
+        "bayverf",
+        "bayerische verfass",
+        "конституц бавар",
+        "конституц бавар"
+      ],
+      "targets": {
+        "acts": [
+          "by_bayverf"
+        ],
+        "norms": []
+      }
     }
   ]
 }

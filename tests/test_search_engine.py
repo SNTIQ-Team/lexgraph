@@ -110,12 +110,18 @@ def engine(tmp_path: Path) -> SearchEngine:
                  "text": "Aufenthaltserlaubnis nach § 24."},
             ],
         },
+        "by_bayverf": {
+            "id": "by_bayverf", "jurabk": "BayVerf", "juris": "DE-BY",
+            "title": "Verfassung des Freistaates Bayern",
+            "norms": [{"enbez": "Art. 1", "titel": "Freistaat Bayern",
+                       "text": "Bayern ist ein Freistaat."}],
+        },
     }
     wiki = [{key: act[key] for key in ("id", "jurabk", "juris", "title")}
             for act in details.values()]
     path = tmp_path / "search.sqlite"
     counts = build_search_database(details, path, SYNONYMS)
-    assert counts == {"acts": 9, "norms": 15}
+    assert counts == {"acts": 10, "norms": 16}
     search = SearchEngine(path, wiki)
     yield search
     search.close()
@@ -151,6 +157,16 @@ def test_multilingual_ukraine_aliases_find_acts_and_relevant_norm(
     assert result["result_total"] == \
         result["act_total"] + result["norm_total"]
     assert all("<" not in row["snippet"] for row in result["norm_matches"])
+
+
+@pytest.mark.parametrize(
+    "query", ["BayVerf", "Bayerische Verfassung", "Bavarian constitution",
+              "Конституция Баварии", "Конституція Баварії"])
+def test_multilingual_bavarian_constitution_aliases_find_act(
+        engine: SearchEngine, query: str) -> None:
+    result = engine.search(query, act_limit=10, norm_limit=10)
+
+    assert result["act_matches"][0]["id"] == "by_bayverf"
 
 
 def test_norm_query_ranks_exact_section_first(engine: SearchEngine) -> None:

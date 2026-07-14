@@ -51,7 +51,7 @@ Files written:
 | `decisions.json` | Manual + official cumulative RII decisions, newest first. |
 | `eu_index.json` | In-force EU directives + basic regulations, metadata only. |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
-| `hierarchy.json` | Jurisdiction tree (EU / Bund / Bayern / Länder). |
+| `hierarchy.json` | Competence-aware legal layers (EU / Bund / Bayern / Länder). |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
 | `git.json` | The commit-graph of lawmaking. |
 
@@ -64,9 +64,9 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 
 ```json
 {
-  "built_at": "2026-07-14T18:34:37+00:00",
+  "built_at": "2026-07-14T22:33:57+00:00",
   "acts_fed": 51,
-  "acts_by": 11,
+  "acts_by": 12,
   "patches": { "proposed": 607, "adopted": 9, "rejected": 23, "published": 841, "not_merged": 4 },
   "vorgaenge": 362,
   "bay_bills": 123,
@@ -76,7 +76,8 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "transpositions": 136,
   "feed_events": 600,
   "decisions": 82,
-  "graph": { "nodes": 727, "edges": 1471, "beliefs": 2574, "ticks": 262, "worlds": 3 }
+  "search": { "acts": 63, "norms": 11852 },
+  "graph": { "nodes": 745, "edges": 1471, "beliefs": 2588, "ticks": 264, "worlds": 3 }
 }
 ```
 
@@ -91,6 +92,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
 | `feed_events` | Rows in `feed.json`. |
 | `decisions` | Merged manual + official RII decisions in `decisions.json`. |
+| `search` | Acts and current norms indexed in `search.sqlite`. |
 | `graph` | Element counts of the arena export (`nodes`, `edges`, `beliefs`, `ticks`, `worlds`). |
 
 ---
@@ -403,21 +405,30 @@ Each decision also appears in `feed.json` (`kind: "Entscheidung"`, `source` =
 
 ## `hierarchy.json`
 
-The jurisdiction tree (no graph geometry) — the *Hierarchy* view.
+The competence-aware legal structure (no graph geometry) used by the
+*Hierarchy* view. Its display order is navigation, **not** a claim that every
+entry is subordinate to the preceding section.
 
 ```json
 {
-  "eu":     { "instruments": [ { "celex": "32001L0055", "kind": "directive", "title": "…", "in_force": true, "geas": true, "deu_mnes": 3 } ] },
-  "bund":   { "acts": [ /* wiki rows where juris=DE */ ], "pipeline": { "<beratungsstand>": [ { "title": "…", "date": "…" } ] } },
-  "bayern": { "acts": [ /* wiki rows where juris=DE-BY */ ], "pipeline": { "<status>": [ { "title": "…", "drs": "…", "date": "…" } ] } },
+  "meta": { "schema_version": 2, "model": "competence-aware", "not_a_total_order": true },
+  "eu": {
+    "instruments": [ { "celex": "32001L0055", "kind": "directive", "title": "…", "in_force": true, "geas": true, "deu_mnes": 3 } ],
+    "primary": { "indexed": false, "references": [ { "celex": "12016M/TXT", "kind": "treaty", "title": "…", "in_corpus": false } ] },
+    "secondary": { "directives": [ … ], "regulations": [ … ], "other": [] }
+  },
+  "bund":   { "acts": [ … ], "layers": { "constitution": [ … ], "statutes": [ … ], "ordinances": [ … ] }, "pipeline": { "<beratungsstand>": [ … ] } },
+  "bayern": { "acts": [ … ], "layers": { "constitution": [ … ], "statutes": [ … ], "ordinances": [ … ] }, "pipeline": { "<status>": [ … ] } },
   "laender": { "DE-BB": [ { "title": "…", "date": "…", "url": "…" } ], "DE-BE": [ … ] }
 }
 ```
 
-- `eu.instruments[]`: `celex`, `kind`, `title`, `in_force`, `geas` (in the GEAS
-  core), `deu_mnes` (number of DEU transposition mentions).
-- `bund` / `bayern`: `acts` (the matching `wiki.json` rows) plus a `pipeline`
-  bucketed by parliamentary status.
+- `eu.instruments[]` is the schema-v1-compatible flat list. `eu.primary`
+  contains official external references because primary EU law is not part of
+  the deep corpus; `eu.secondary` groups the indexed list by legal form.
+- `bund` / `bayern` retain their flat `acts` arrays and additionally partition
+  every act exactly once into `constitution`, `statutes`, or `ordinances`.
+  Their `pipeline` remains bucketed by parliamentary status.
 - `laender`: bills/activity per Land, keyed by `DE-<code>`.
 
 ---
@@ -583,7 +594,7 @@ no database.
 | `GET /decisions/{id}` | one `decisions.json` row | full exported row; **404** if unknown |
 | `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
 | `GET /graph` | `graph.json` | the QFS arena export |
-| `GET /hierarchy` | `hierarchy.json` | the jurisdiction tree |
+| `GET /hierarchy` | `hierarchy.json` | competence-aware legal layers |
 | `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
 | `GET /search?q=&limit=&norm_limit=` | `search.sqlite` + `wiki.json` | ranked Unicode full-text search over acts and current norms |
 | `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |

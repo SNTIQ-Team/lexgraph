@@ -54,6 +54,10 @@ ZIP_URL = BASE + "/Content/Zip/{key}"
 # practice corpus (asylum/social): official abbr -> candidates as they
 # appear in ffn register titles, tried in order
 CORPUS = {
+    # Land constitutional layer (kept in the same official BayRS feed so the
+    # hierarchy never has to present a constitution-shaped placeholder).
+    "BayVerf": ("BayVerf",
+                 "Verfassung des Freistaates Bayern in der Fassung"),
     "AufnG": ("AufnG",),
     "DVAsyl": ("DVAsyl",),
     "ZustVAuslR": ("ZustVAuslR",),
