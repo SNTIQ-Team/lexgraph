@@ -348,15 +348,23 @@ def main() -> int:
 
     # Strictly one generation per day (the nightly retrieval run) — a
     # manual refresh.sh re-run must not burn provider quota or churn the
-    # published text. Override with --force.
+    # published text. A hand-curated digest can carry "pinned_until"
+    # (YYYY-MM-DD): until that date the nightly run leaves it alone.
+    # Override both guards with --force.
     existing = WEB / "digest.json"
     if "--force" not in sys.argv and existing.is_file():
         try:
-            prev_day = (json.loads(existing.read_text(encoding="utf-8"))
-                        .get("generated_at") or "")[:10]
+            prev = json.loads(existing.read_text(encoding="utf-8"))
         except (ValueError, OSError):
-            prev_day = ""
-        if prev_day == datetime.now(timezone.utc).date().isoformat():
+            prev = {}
+        today_utc = datetime.now(timezone.utc).date().isoformat()
+        pinned = str(prev.get("pinned_until") or "")
+        if pinned >= today_utc:
+            print(f"digest pinned until {pinned} — "
+                  "skipping (--force to regenerate)")
+            return 0
+        prev_day = (prev.get("generated_at") or "")[:10]
+        if prev_day == today_utc:
             print(f"digest already generated today ({prev_day}) — "
                   "skipping (--force to regenerate)")
             return 0
