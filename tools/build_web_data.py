@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
-from common import latest_snapshot, read_jsonl          # noqa: E402
+from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
 
 WEB = ROOT / "web" / "data"
@@ -32,6 +32,61 @@ HUBS = {"WIRD_GESETZ", "BGBl (verkündet)", "Gesetzgebungsverfahren",
         "GVBl/BayMBl (Bayern)", "TEXTÄNDERUNG (BayRS)",
         "TEXTÄNDERUNG in Kraft", "KONSOLIDIERT (NeuRIS)",
         "Amtsblatt der EU (OJ L)", "Asyl/Migration (Länder-Monitor)"}
+
+
+# Cumulative word-diff ledger for BAVARIAN law: no official version archive
+# exists (BAYERN.RECHT serves only the current consolidation), so each build
+# compares the two most recent daily norm snapshots and appends every changed
+# norm here. History cannot be backfilled — coverage starts July 2026.
+BY_DIFF_LEDGER = ROOT / "data" / "by_diffs.jsonl"
+
+
+def _update_by_diff_ledger() -> None:
+    base = SNAPSHOTS / "bayern_recht"
+    days = sorted(d.name for d in base.iterdir() if d.is_dir()) \
+        if base.is_dir() else []
+    if len(days) < 2:
+        return
+
+    def norms(day: str) -> dict[tuple, str]:
+        f = base / day / "norms.jsonl"
+        if not f.is_file():
+            return {}
+        return {(n["jurabk"], n.get("enbez") or n.get("titel") or "?"):
+                (n.get("text") or "") for n in read_jsonl(f)}
+
+    old, new = norms(days[-2]), norms(days[-1])
+    if not old or not new:
+        return
+    existing = set()
+    if BY_DIFF_LEDGER.is_file():
+        existing = {(r["jurabk"], r["date"], r["para"])
+                    for r in read_jsonl(BY_DIFF_LEDGER)}
+    added = []
+    for key in sorted(set(old) | set(new)):
+        jb, enbez = key
+        o, n = old.get(key, ""), new.get(key, "")
+        if o == n or (jb, days[-1], enbez) in existing:
+            continue
+        added.append({"jurabk": jb, "date": days[-1], "para": enbez,
+                      "old": o[:1200], "new": n[:1200]})
+    if added:
+        with BY_DIFF_LEDGER.open("a", encoding="utf-8") as f:
+            for r in added:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        print(f"  by-diffs: +{len(added)} changed norms "
+              f"({days[-2]} -> {days[-1]})")
+
+
+def load_by_diffs() -> dict[str, dict[str, list[dict]]]:
+    """{jurabk: {date: [{para, old, new}, …]}} from the ledger."""
+    _update_by_diff_ledger()
+    out: dict[str, dict[str, list[dict]]] = {}
+    if BY_DIFF_LEDGER.is_file():
+        for r in read_jsonl(BY_DIFF_LEDGER):
+            out.setdefault(r["jurabk"], {}).setdefault(r["date"], []).append(
+                {"para": r["para"], "old": r["old"], "new": r["new"]})
+    return out
 
 
 def load(source: str, name: str) -> list[dict]:
@@ -201,6 +256,7 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     gvbl = load("gvbl_events", "events.jsonl")
     by_v = load("bayern_recht", "versions.jsonl")
     bay_bills = load("bay_landtag", "bills.jsonl")
+    by_diffs = load_by_diffs()
 
     for a in load("gii", "acts.jsonl"):
         jb = a["jurabk"]
@@ -277,6 +333,16 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
                 else ""
             versions.append({"date": v["date"],
                              "text": (v["description"][:110] + cite)})
+        # attach snapshot-derived word diffs: onto the matching GVBl row
+        # when the dates line up, else as their own version row
+        for d, chs in (by_diffs.get(jb) or {}).items():
+            row = next((r for r in versions if r["date"] == d), None)
+            if row is None:
+                row = {"date": d, "text":
+                       "Konsolidierte Fassung geändert (BAYERN.RECHT)"}
+                versions.append(row)
+            row["changes"] = chs
+        versions.sort(key=lambda r: r["date"], reverse=True)
         bills = [b for b in bay_bills
                  if _by_needle(jb) and _by_needle(jb) in
                  (b.get("titel") or "").lower()]
