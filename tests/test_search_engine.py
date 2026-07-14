@@ -74,6 +74,12 @@ def engine(tmp_path: Path) -> SearchEngine:
                        "Fiktionsbescheinigung", "text": "Leistungen bei "
                        "beantragter Aufenthaltserlaubnis nach § 24."}],
         },
+        "fed_sgb_3": {
+            "id": "fed_sgb_3", "jurabk": "SGB 3", "juris": "DE",
+            "title": "Sozialgesetzbuch Drittes Buch (III)",
+            "norms": [{"enbez": "§ 74", "titel": "Assistierte Ausbildung",
+                       "text": "Ausbildungsbegleitende Unterstützung."}],
+        },
         "fed_sgb_12": {
             "id": "fed_sgb_12", "jurabk": "SGB 12", "juris": "DE",
             "title": "Sozialgesetzbuch Zwölftes Buch",
@@ -109,7 +115,7 @@ def engine(tmp_path: Path) -> SearchEngine:
             for act in details.values()]
     path = tmp_path / "search.sqlite"
     counts = build_search_database(details, path, SYNONYMS)
-    assert counts == {"acts": 8, "norms": 14}
+    assert counts == {"acts": 9, "norms": 15}
     search = SearchEngine(path, wiki)
     yield search
     search.close()
@@ -157,6 +163,34 @@ def test_norm_query_ranks_exact_section_first(engine: SearchEngine) -> None:
     assert hit["source"] == "gii"
     assert hit["url"] == "/acts/fed_aufenthg_2004"
     assert {"enbez", "norm_title", "text"} <= set(hit["matched_fields"])
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["SGB II § 74", "SGB 2 §74", "sgb-ii, §74", "§ 74 SGB II"],
+)
+def test_act_abbreviation_constrains_exact_norm_reference(
+        engine: SearchEngine, query: str) -> None:
+    result = engine.search(query, act_limit=10, norm_limit=10)
+
+    assert result["norm_total"] == 1
+    assert [(row["jurabk"], row["enbez"])
+            for row in result["norm_matches"]] == [("SGB 2", "§ 74")]
+
+
+@pytest.mark.parametrize(
+    ("query", "jurabk", "enbez"),
+    [("SGB III §74", "SGB 3", "§ 74"),
+     ("SGB XII §146", "SGB 12", "§ 146"),
+     ("AufenthG §24", "AufenthG 2004", "§ 24")],
+)
+def test_act_alias_variants_resolve_without_prefix_collisions(
+        engine: SearchEngine, query: str, jurabk: str, enbez: str) -> None:
+    result = engine.search(query, act_limit=10, norm_limit=10)
+
+    assert result["norm_total"] == 1
+    assert [(row["jurabk"], row["enbez"])
+            for row in result["norm_matches"]] == [(jurabk, enbez)]
 
 
 def test_legacy_matches_keep_plain_wiki_shape(engine: SearchEngine) -> None:

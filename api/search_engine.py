@@ -23,6 +23,11 @@ from typing import Iterable
 
 SCHEMA_VERSION = "2"
 TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+NORM_REF_RE = re.compile(
+    r"(?P<kind>§+|\bArt(?:ikel)?\.?)[\s\u00a0]*"
+    r"(?P<number>\d+[a-z]?)",
+    flags=re.IGNORECASE,
+)
 # Repeated concept tokens encode the curated 1..5 target priority.  A step
 # deliberately outweighs a coincidental literal body match, so a Ukraine
 # query surfaces the controlling/benefit norms before raw mentions.
@@ -57,6 +62,43 @@ def normalize_search_text(value: object) -> str:
 
 def _tokens(value: object) -> list[str]:
     return TOKEN_RE.findall(normalize_search_text(value))
+
+
+def _roman_number(value: int) -> str:
+    """Return a compact Roman numeral for statute-book aliases."""
+    numerals = (
+        (50, "l"), (40, "xl"), (10, "x"), (9, "ix"), (5, "v"),
+        (4, "iv"), (1, "i"),
+    )
+    out = []
+    for number, numeral in numerals:
+        while value >= number:
+            out.append(numeral)
+            value -= number
+    return "".join(out)
+
+
+def _jurabk_aliases(value: object) -> set[tuple[str, ...]]:
+    """Build exact token aliases for an official act abbreviation.
+
+    The corpus spells the social-code books as ``SGB 2`` while users often
+    type ``SGB II``.  A trailing edition year is also optional when it does
+    not make the alias ambiguous (for example ``AufenthG 2004``).
+    """
+    tokens = tuple(_tokens(value))
+    if not tokens:
+        return set()
+    aliases = {tokens}
+    if (len(tokens) > 1 and tokens[-1].isdigit()
+            and 1800 <= int(tokens[-1]) <= 2200):
+        aliases.add(tokens[:-1])
+    for alias in tuple(aliases):
+        for position, token in enumerate(alias):
+            if token.isdigit() and 1 <= int(token) <= 50:
+                roman = list(alias)
+                roman[position] = _roman_number(int(token))
+                aliases.add(tuple(roman))
+    return aliases
 
 
 def _read_synonyms(path: Path) -> list[dict]:
@@ -264,6 +306,7 @@ class SearchEngine:
             self.conn.close()
             raise RuntimeError("unsupported Lexgraph search index schema")
         self.synonym_groups = self._load_synonyms()
+        self.act_aliases = self._load_act_aliases()
 
     def close(self) -> None:
         self.conn.close()
@@ -282,6 +325,44 @@ class SearchEngine:
                  "prefixes": sorted(value["prefixes"])}
                 for key, value in sorted(groups.items())]
 
+    def _load_act_aliases(self) -> dict[tuple[str, ...], set[str]]:
+        aliases: dict[tuple[str, ...], set[str]] = {}
+        for act_id, row in self.wiki.items():
+            for alias in _jurabk_aliases(row.get("jurabk")):
+                aliases.setdefault(alias, set()).add(act_id)
+        return aliases
+
+    def _act_reference_constraint(
+            self, query: str) -> tuple[set[str] | None, set[int]]:
+        """Resolve a unique act abbreviation next to an explicit norm ref.
+
+        Returns both the exact act id and the matched token positions.  Those
+        alias tokens are removed from the FTS expression because the SQL act
+        id constraint is stronger and avoids prefix accidents such as
+        ``II`` matching the ``III`` in an SGB III title.
+        """
+        if not NORM_REF_RE.search(query):
+            return None, set()
+        tokens = _tokens(query)
+        matches: list[tuple[int, int, str]] = []
+        for alias, act_ids in self.act_aliases.items():
+            if len(act_ids) != 1 or len(alias) > len(tokens):
+                continue
+            act_id = next(iter(act_ids))
+            width = len(alias)
+            for start in range(len(tokens) - width + 1):
+                if tuple(tokens[start:start + width]) == alias:
+                    matches.append((width, start, act_id))
+        if not matches:
+            return None, set()
+        longest = max(width for width, _, _ in matches)
+        best = [match for match in matches if match[0] == longest]
+        act_ids = {act_id for _, _, act_id in best}
+        if len(act_ids) != 1:
+            return None, set()
+        width, start, act_id = min(best, key=lambda item: item[1])
+        return {act_id}, set(range(start, start + width))
+
     def _concepts_for(self, value: str, *, whole: bool = False) -> set[str]:
         concepts = set()
         for group in self.synonym_groups:
@@ -291,13 +372,12 @@ class SearchEngine:
                 concepts.add(group["concept"])
         return concepts
 
-    def _match_expression(self, query: str, *, norm: bool = False
+    def _match_expression(self, query: str, *, norm: bool = False,
+                          skip_token_indexes: set[int] | None = None
                           ) -> tuple[str, list[str], set[str]]:
         tokens = _tokens(query)
         explicit_refs: dict[str, set[str]] = {}
-        for match in re.finditer(
-                r"(?P<kind>§+|\bArt(?:ikel)?\.?)[\s\u00a0]*"
-                r"(?P<number>\d+[a-z]?)", query, flags=re.IGNORECASE):
+        for match in NORM_REF_RE.finditer(query):
             number = normalize_search_text(match.group("number"))
             marker = match.group("kind").casefold()
             ref = number if marker.startswith("§") else f"art {number}"
@@ -305,7 +385,9 @@ class SearchEngine:
         clauses = []
         snippet_terms: set[str] = set(tokens)
         matched_concepts: set[str] = set()
-        for token in tokens:
+        for position, token in enumerate(tokens):
+            if skip_token_indexes and position in skip_token_indexes:
+                continue
             # Section numbers are identifiers: § 24 must not expand to § 241,
             # § 249a, or § 24b.  Word prefixes remain useful for inflection
             # and concatenated German abbreviations.
@@ -418,26 +500,36 @@ class SearchEngine:
         return ("… " if start else "") + excerpt + \
             (" …" if end < len(value) else "")
 
-    def _rows(self, expression: str, kind: str, limit: int) -> tuple[int, list]:
+    def _rows(self, expression: str, kind: str, limit: int,
+              act_ids: set[str] | None = None) -> tuple[int, list]:
+        act_filter = ""
+        params: list[object] = [expression, kind]
+        if act_ids:
+            placeholders = ",".join("?" for _ in act_ids)
+            act_filter = f" AND act_id IN ({placeholders})"
+            params.extend(sorted(act_ids))
         total = self.conn.execute(
             "SELECT count(*) FROM search_fts WHERE search_fts MATCH ? "
-            "AND kind = ?", (expression, kind)).fetchone()[0]
-        rows = self.conn.execute("""
+            "AND kind = ?" + act_filter, params).fetchone()[0]
+        rows = self.conn.execute(f"""
             SELECT rowid, *, bm25(search_fts,
                 0.0, 0.0, 0.0, 0.0,
                 14.0, 9.0, 12.0, 6.0, 1.0, 30.0,
                 0.0, 0.0, 0.0, 0.0, 0.0) AS rank
             FROM search_fts
             WHERE search_fts MATCH ? AND kind = ?
+            {act_filter}
             ORDER BY rank, act_id, enbez, rowid
             LIMIT ?
-        """, (expression, kind, limit)).fetchall()
+        """, [*params, limit]).fetchall()
         return total, rows
 
     def search(self, query: str, act_limit: int = 25,
                norm_limit: int = 50) -> dict:
         expression, terms, concepts = self._match_expression(query)
-        norm_expression, _, _ = self._match_expression(query, norm=True)
+        norm_act_ids, skip_indexes = self._act_reference_constraint(query)
+        norm_expression, _, _ = self._match_expression(
+            query, norm=True, skip_token_indexes=skip_indexes)
         if not expression:
             return {"query": query, "total": 0, "matches": [],
                     "result_total": 0, "act_total": 0, "norm_total": 0,
@@ -449,7 +541,7 @@ class SearchEngine:
         # short title-only rows dominating meaningful full-text hits.
         norm_candidates = min(3000, max(500, norm_limit * 10))
         norm_total, norm_rows = self._rows(
-            norm_expression, "norm", norm_candidates)
+            norm_expression, "norm", norm_candidates, norm_act_ids)
 
         def rerank(rows: list[sqlite3.Row], kind: str) -> list[sqlite3.Row]:
             return sorted(rows, key=lambda row: (
