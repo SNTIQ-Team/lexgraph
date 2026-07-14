@@ -18,7 +18,7 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              the jurisdiction tree (eu/bund/bayern/laender)
   GET /eu-index               all in-force EU directives + basic regulations
-  GET /search?q=              search acts by jurabk/title (from wiki.json)
+  GET /search?q=              ranked full-text search over acts + current norms
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
   GET /digest                 LLM digest of legislative activity; 404 if none
@@ -30,10 +30,13 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+
+from api.search_engine import SearchEngine, normalize_search_text
 
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
@@ -47,6 +50,8 @@ LANES = ["EU", "Bund", "Bayern", "Länder"]
 
 # in-process cache of the (static per deploy) data plane
 _CACHE: dict[str, object] = {}
+_SEARCH_ENGINE: SearchEngine | None = None
+_SEARCH_LOCK = threading.RLock()
 
 
 def _load(name: str) -> object:
@@ -178,18 +183,80 @@ def eu_index(q: str | None = Query(None, min_length=1),
 
 @app.get("/search")
 def search(q: str = Query(..., min_length=1),
-           limit: int = Query(25, ge=1, le=200)):
-    """Search acts by jurabk or title (substring, case-insensitive).
+           limit: int = Query(25, ge=1, le=200),
+           norm_limit: int = Query(50, ge=1, le=200)):
+    """Ranked Unicode full-text search over acts and current norms.
 
-    Returns matching rows from the act index (wiki.json), so the shape equals
-    an `/acts` slice — clients can render the same list.
+    ``matches`` and ``total`` retain the original act-search contract.
+    Enriched act results live in ``act_matches``; norm results include their
+    act, §/Art., a plain-text snippet, provenance, score, and detail link.
+    Synonyms (including multilingual Ukraine/temporary-protection terms) are
+    data-driven and embedded into the built ``search.sqlite`` artifact.
+
+    If an old deployment has no FTS artifact yet, the endpoint degrades to the
+    previous title/abbreviation substring search instead of failing.
     """
-    needle = q.strip().casefold()
     rows = _load("wiki")
-    matches = [r for r in rows
-               if needle in str(r.get("jurabk", "")).casefold()
-               or needle in str(r.get("title", "")).casefold()]
-    return {"query": q, "total": len(matches), "matches": matches[:limit]}
+    index_path = DATA_DIR / "search.sqlite"
+    if not index_path.is_file():
+        needle = normalize_search_text(q)
+        all_matches = [r for r in rows
+                       if needle in normalize_search_text(r.get("id"))
+                       or needle in normalize_search_text(r.get("jurabk"))
+                       or needle in normalize_search_text(r.get("title"))]
+        matches = all_matches[:limit]
+        return {"query": q, "total": len(all_matches), "matches": matches,
+                "result_total": len(all_matches),
+                "act_total": len(all_matches),
+                "norm_total": 0, "act_matches": matches,
+                "norm_matches": []}
+
+    global _SEARCH_ENGINE
+    with _SEARCH_LOCK:
+        if _SEARCH_ENGINE is None or _SEARCH_ENGINE.path != index_path:
+            if _SEARCH_ENGINE is not None:
+                _SEARCH_ENGINE.close()
+            _SEARCH_ENGINE = SearchEngine(index_path, rows)
+        # There are only dozens of curated acts.  Ask the engine for all act
+        # candidates so the legacy substring union below has an exact count,
+        # then apply the public limit after de-duplication.
+        result = _SEARCH_ENGINE.search(q, act_limit=max(limit, len(rows)),
+                                       norm_limit=norm_limit)
+
+    # Preserve the old arbitrary-substring behavior for act abbreviations
+    # (FTS prefix matching cannot find a query in the middle of one token).
+    needle = normalize_search_text(q)
+    legacy = [r for r in rows
+              if needle and (needle in normalize_search_text(r.get("id"))
+                             or needle in normalize_search_text(
+                                 r.get("jurabk"))
+                             or needle in normalize_search_text(
+                                 r.get("title")))]
+    seen = {r["id"] for r in result["act_matches"]}
+    for row in legacy:
+        if row["id"] in seen:
+            continue
+        enriched = dict(row)
+        enriched.update({
+            "score": 0.0,
+            "snippet": row.get("title") or row.get("jurabk") or "",
+            "matched_fields": ["legacy_substring"],
+            "source": "gii" if row.get("juris") == "DE"
+            else "bayern_recht",
+            "url": f"/acts/{row['id']}",
+        })
+        result["act_matches"].append(enriched)
+        seen.add(row["id"])
+    result["act_matches"] = result["act_matches"][:limit]
+    result["matches"] = [
+        {key: value for key, value in row.items()
+         if key not in {"score", "snippet", "matched_fields", "source",
+                        "url"}}
+        for row in result["act_matches"]]
+    result["act_total"] = len(seen)
+    result["total"] = len(seen)
+    result["result_total"] = result["act_total"] + result["norm_total"]
+    return result
 
 
 @app.get("/decisions")

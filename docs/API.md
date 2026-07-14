@@ -50,6 +50,7 @@ Files written:
 | `acts/<id>.json` | One full act (head, patches/bills, versions, norms). |
 | `decisions.json` | Manual + official cumulative RII decisions, newest first. |
 | `eu_index.json` | In-force EU directives + basic regulations, metadata only. |
+| `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
 | `hierarchy.json` | Jurisdiction tree (EU / Bund / Bayern / Länder). |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
 | `git.json` | The commit-graph of lawmaking. |
@@ -584,7 +585,7 @@ no database.
 | `GET /graph` | `graph.json` | the QFS arena export |
 | `GET /hierarchy` | `hierarchy.json` | the jurisdiction tree |
 | `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
-| `GET /search?q=` | `wiki.json` rows | substring match on `jurabk`/`title` |
+| `GET /search?q=&limit=&norm_limit=` | `search.sqlite` + `wiki.json` | ranked Unicode full-text search over acts and current norms |
 | `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |
 
 `/stats`, `/acts`, `/acts/{id}`, `/decisions/{id}`, `/graph`, `/hierarchy`
@@ -685,20 +686,56 @@ curl 'http://127.0.0.1:8010/eu-index?q=internationalen%20Schutz&kind=DIR&limit=2
 `total` is the unfiltered file total; `matched` is the count after `q` and
 `kind`, before pagination. Returns **404** until `eu_index.json` has been built.
 
-## `GET /search?q=`
+## `GET /search?q=&limit=&norm_limit=`
 
-Case-insensitive substring match on `jurabk` and `title` across `wiki.json`;
-returns act-index rows (same shape as `/acts`). `limit` ∈ [1, 200], default 25.
+Ranked SQLite FTS5 search across act id/abbreviation/title and every current
+norm's §/Art. identifier, heading, and complete text. Matching is Unicode- and
+case-insensitive; accents and German umlauts are folded consistently. A
+versioned, data-driven synonym file (`data/search_synonyms.json`) supplies
+multilingual/domain aliases, so e.g. `Ukraine`, `ukrainisch`, `Украина`, and
+`Україна` find the same corpus area, including temporary-protection norms.
+This is lexical retrieval, not an embedding or an assertion that two legal
+terms are equivalent. An explicit `§ 24` or `Art. 24` is constrained to the
+norm identifier; a plain numeric word remains an ordinary full-text token.
+
+`limit` caps act results and `norm_limit` caps norm results; each is in
+[1, 200] (defaults 25 and 50). For compatibility, `total` and `matches` retain
+the original act-only contract and every `matches` row keeps the `/acts` index
+shape. `act_matches` adds ranking metadata; `norm_matches` contains
+`{act_id,jurabk,juris,act_title,enbez,norm_title,snippet,score,matched_fields,
+source,url}`. Snippets are plain text, `source` is `gii` or `bayern_recht`, and
+`url` is the API-relative act detail path. `result_total` is
+`act_total + norm_total` before result limits.
 
 ```bash
-curl 'http://127.0.0.1:8010/search?q=Asyl'
+curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
 ```
 
 ```json
-{ "query": "Asyl", "total": 4, "matches": [
-  { "id": "fed_asylblg", "jurabk": "AsylbLG", "title": "Asylbewerberleistungsgesetz", … },
-  { "id": "fed_asylvfg_1992", "jurabk": "AsylVfG 1992", "title": "Asylgesetz", … } ] }
+{
+  "query": "Ukraine",
+  "total": 2,
+  "matches": [
+    {"id":"fed_ukraineaufenthfgv","jurabk":"UkraineAufenthFGV", …}
+  ],
+  "result_total": 16,
+  "act_total": 2,
+  "norm_total": 14,
+  "act_matches": [
+    {"id":"fed_ukraineaufenthfgv","score":156,
+     "source":"gii","url":"/acts/fed_ukraineaufenthfgv", …}
+  ],
+  "norm_matches": [
+    {"act_id":"fed_aufenthg_2004","jurabk":"AufenthG 2004",
+     "enbez":"§ 24","norm_title":"Aufenthaltsgewährung zum vorübergehenden Schutz",
+     "snippet":"Einem Ausländer kann zum vorübergehenden Schutz …",
+     "source":"gii","url":"/acts/fed_aufenthg_2004", …}
+  ]
+}
 ```
+
+An older data deployment without `search.sqlite` degrades to the former act
+title/abbreviation substring search rather than returning an error.
 
 ## `GET /decisions?q=&act=` and `GET /decisions/{id}`
 

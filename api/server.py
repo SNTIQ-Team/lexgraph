@@ -108,7 +108,7 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="graph">/graph</a></td><td class="what">the QFS arena export</td></tr>
     <tr><td class="ep"><a href="hierarchy">/hierarchy</a></td><td class="what">jurisdiction tree (EU / Bund / Bayern / Länder)</td></tr>
     <tr><td class="ep"><a href="eu-index">/eu-index</a></td><td class="what">all in-force EU directives + basic regulations</td></tr>
-    <tr><td class="ep"><a href="search?q=asyl">/search?q=</a></td><td class="what">search acts by jurabk / title</td></tr>
+    <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>
   </table>
   <footer>

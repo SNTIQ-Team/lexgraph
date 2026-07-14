@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "ukraine-temporary-protection",
+      "terms": [
+        "Ukraine",
+        "Ukrainian",
+        "ukrainisch",
+        "Украина",
+        "украинский",
+        "Україна",
+        "український",
+        "temporary protection",
+        "vorübergehend Schutzberechtigte",
+        "vorübergehender Schutz",
+        "временная защита",
+        "тимчасовий захист"
+      ],
+      "prefixes": [
+        "ukrain",
+        "украин",
+        "україн"
+      ],
+      "targets": {
+        "acts": [
+          "fed_ukraineaufenth_v",
+          "fed_ukraineaufenthfgv"
+        ],
+        "norms": [
+          {"act_id": "fed_aufenthg_2004", "enbez": "§ 24", "weight": 3},
+          {"act_id": "fed_ukraineaufenth_v", "enbez": "§ 1", "weight": 2},
+          {"act_id": "fed_ukraineaufenth_v", "enbez": "§ 2", "weight": 2},
+          {"act_id": "fed_ukraineaufenthfgv", "enbez": "§ 1", "weight": 2},
+          {"act_id": "fed_ukraineaufenthfgv", "enbez": "§ 2", "weight": 2}
+        ]
+      }
+    }
+  ]
+}

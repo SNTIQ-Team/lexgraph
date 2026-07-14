@@ -10,6 +10,7 @@ Outputs:
     web/data/acts/<id>.json    per-act article: head, patches, versions, norms
     web/data/decisions.json    merged manual/RII decisions, newest first
     web/data/eu_index.json     in-force EU breadth metadata
+    web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    jurisdiction tree (no graphs)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
 """
@@ -23,9 +24,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
+from api.search_engine import build_search_database       # noqa: E402
 
 WEB = ROOT / "web" / "data"
 
@@ -686,6 +689,8 @@ def main() -> int:
     git = build_git()
     decisions = load_decisions()
     eu_index = build_eu_index()
+    search_counts = build_search_database(
+        details, WEB / "search.sqlite", ROOT / "data" / "search_synonyms.json")
 
     patches = load("patches", "patches.jsonl")
     sts: dict[str, int] = {}
@@ -707,6 +712,7 @@ def main() -> int:
         "transpositions": len(load("eu_layer", "transpositions.jsonl")),
         "feed_events": len(feed),
         "decisions": len(decisions),
+        "search": search_counts,
         "graph": {k: len(v) for k, v in graph.items()
                   if isinstance(v, list)},
     }
@@ -736,6 +742,8 @@ def main() -> int:
     for k, v in sizes.items():
         print(f"  {k:16} {v/1024:8.1f} KB")
     print(f"  acts/*.json      {len(details)} files")
+    print(f"  search.sqlite    {search_counts['acts']} acts / "
+          f"{search_counts['norms']} norms")
     return 0
 
 
