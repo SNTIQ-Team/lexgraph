@@ -28,7 +28,7 @@ SERVICE_INDEX = {
     "endpoints": [
         "/health", "/version", "/stats", "/feed",
         "/acts", "/acts/{id}", "/decisions", "/decisions/{id}",
-        "/git", "/graph", "/hierarchy", "/search", "/digest",
+        "/git", "/graph", "/hierarchy", "/eu-index", "/search", "/digest",
     ],
 }
 
@@ -103,10 +103,11 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="acts">/acts</a></td><td class="what">the act index (federal + Bavaria)</td></tr>
     <tr><td class="ep">/acts/{id}</td><td class="what">one full act — head, patches, versions, norms</td></tr>
     <tr><td class="ep"><a href="decisions">/decisions</a></td><td class="what">court decisions (Rechtsprechung)</td></tr>
-    <tr><td class="ep">/decisions/{id}</td><td class="what">one decision, incl. anonymized full text</td></tr>
+    <tr><td class="ep">/decisions/{id}</td><td class="what">one complete exported decision row</td></tr>
     <tr><td class="ep"><a href="git">/git</a></td><td class="what">the commit-graph of lawmaking</td></tr>
     <tr><td class="ep"><a href="graph">/graph</a></td><td class="what">the QFS arena export</td></tr>
     <tr><td class="ep"><a href="hierarchy">/hierarchy</a></td><td class="what">jurisdiction tree (EU / Bund / Bayern / Länder)</td></tr>
+    <tr><td class="ep"><a href="eu-index">/eu-index</a></td><td class="what">all in-force EU directives + basic regulations</td></tr>
     <tr><td class="ep"><a href="search?q=asyl">/search?q=</a></td><td class="what">search acts by jurabk / title</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>
   </table>

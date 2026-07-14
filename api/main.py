@@ -17,6 +17,7 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /git?lane=&limit=       the commit-graph, optionally filtered by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              the jurisdiction tree (eu/bund/bayern/laender)
+  GET /eu-index               all in-force EU directives + basic regulations
   GET /search?q=              search acts by jurabk/title (from wiki.json)
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
@@ -148,6 +149,33 @@ def hierarchy():
     return _cached(_load("hierarchy"))
 
 
+@app.get("/eu-index")
+def eu_index(q: str | None = Query(None, min_length=1),
+             kind: str | None = Query(None, pattern="^(DIR|REG)$"),
+             limit: int = Query(100, ge=1, le=500),
+             offset: int = Query(0, ge=0)):
+    """All in-force directives (incl. delegated/implementing) and all basic
+    regulations as metadata — CELEX, type, date, title. Search plus offset/
+    limit pagination keeps responses small while leaving the full ~8k-row
+    index enumerable. 404 until the index has been fetched once.
+    """
+    path = DATA_DIR / "eu_index.json"
+    if not path.exists():
+        raise HTTPException(404, "eu index not built yet")
+    data = _load("eu_index")
+    rows = data["instruments"]
+    if kind:
+        rows = [r for r in rows if r["type"].startswith(kind)]
+    if q:
+        needle = q.strip().casefold()
+        rows = [r for r in rows
+                if needle in r["celex"].casefold()
+                or needle in r["title"].casefold()]
+    return {"built_at": data["built_at"], "total": data["total"],
+            "matched": len(rows), "offset": offset, "limit": limit,
+            "instruments": rows[offset:offset + limit]}
+
+
 @app.get("/search")
 def search(q: str = Query(..., min_length=1),
            limit: int = Query(25, ge=1, le=200)):
@@ -196,7 +224,7 @@ def decisions(q: str | None = Query(None, min_length=1),
 
 @app.get("/decisions/{decision_id}")
 def decision_detail(decision_id: str):
-    """One decision by id (a decisions.json row, incl. anonymized full text)."""
+    """One exported decision row by id; 404 if unknown."""
     for d in _load("decisions"):
         if d.get("id") == decision_id:
             return _cached(d)

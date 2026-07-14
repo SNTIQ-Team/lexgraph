@@ -9,7 +9,7 @@ Reads (all produced by tools/build_web_data.py):
     web/data/summary.json      patch counts by status
     web/data/feed.json         merged event stream (past + scheduled)
     web/data/wiki.json         act index (last_change / next_change)
-    web/data/decisions.json    curated court decisions
+    web/data/decisions.json    merged manual/RII decisions
 
 Writes:
     web/data/digest.json       {generated_at, model, llm, periods:

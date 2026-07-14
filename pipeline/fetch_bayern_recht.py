@@ -321,9 +321,10 @@ def main() -> int:
               f"{len(entry['chain']):2} ffn / {len(xv):2} xml versions  "
               f"{len(refs):2} EU refs  build {act['builddate']}")
 
-    if not acts:
-        print("[err] zero acts fetched — refusing to overwrite snapshot",
-              file=sys.stderr)
+    if not acts or unresolved or failed:
+        print("[err] incomplete Bavarian corpus — refusing to overwrite "
+              f"snapshot (unresolved={unresolved or '-'}, "
+              f"failed={failed or '-'})", file=sys.stderr)
         return 1
     out = snapshot_dir("bayern_recht")
     n_a = write_jsonl(out / "acts.jsonl", acts)
@@ -333,7 +334,7 @@ def main() -> int:
     print(f"\nfetched {len(fetched)}/{len(wanted)} acts"
           f" | unresolved {unresolved or '-'} | failed {failed or '-'}")
     print(f"{n_a} acts, {n_n} norms, {n_v} versions, {n_e} EU refs -> {out}")
-    return 0 if fetched and not (unresolved or failed) else 1
+    return 0
 
 
 if __name__ == "__main__":

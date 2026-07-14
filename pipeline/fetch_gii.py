@@ -36,6 +36,10 @@ CORPUS = {
     "sgb_8", "sgb_9_2018", "sgb_10", "sgb_11", "sgb_12", "sgb_14",
     "sgg", "rbeg_2021", "baf_g", "asylblg",
     "wogg", "bkgg_1996", "uhvorschg",          # housing/child/maintenance
+    "beeg",                                    # Elterngeld/Elternzeit
+    "bvfg",                                    # Spätaussiedler/Vertriebene
+    # work & protection (practical core for migrant workers)
+    "agg", "milog", "kschg", "entgfg", "arbzg", "gewschg",
     # migration & asylum
     "asylvfg_1992", "aufenthg_2004", "freiz_gg_eu_2004", "azrg",
     "stag",                                    # citizenship (StAG)

@@ -8,7 +8,8 @@ Outputs:
     web/data/feed.json         merged event stream, newest first (~500)
     web/data/wiki.json         act index (federal + Bavaria)
     web/data/acts/<id>.json    per-act article: head, patches, versions, norms
-    web/data/decisions.json    curated court decisions, newest first
+    web/data/decisions.json    merged manual/RII decisions, newest first
+    web/data/eu_index.json     in-force EU breadth metadata
     web/data/hierarchy.json    jurisdiction tree (no graphs)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
 """
@@ -34,10 +35,10 @@ HUBS = {"WIRD_GESETZ", "BGBl (verkündet)", "Gesetzgebungsverfahren",
         "Amtsblatt der EU (OJ L)", "Asyl/Migration (Länder-Monitor)"}
 
 
-# Cumulative word-diff ledger for BAVARIAN law: no official version archive
-# exists (BAYERN.RECHT serves only the current consolidation), so each build
-# compares the two most recent daily norm snapshots and appends every changed
-# norm here. History cannot be backfilled — coverage starts July 2026.
+# Cumulative word-diff ledger for Bavarian law.  BAYERN.RECHT serves only the
+# current consolidation, so current changes come from adjacent daily snapshots;
+# a conservative Wayback pass supplies sparse historical transitions where two
+# archived states can be tied unambiguously to one official FFN event.
 BY_DIFF_LEDGER = ROOT / "data" / "by_diffs.jsonl"
 
 
@@ -62,14 +63,22 @@ def _update_by_diff_ledger() -> None:
     if BY_DIFF_LEDGER.is_file():
         existing = {(r["jurabk"], r["date"], r["para"])
                     for r in read_jsonl(BY_DIFF_LEDGER)}
+    # A newly curated act is not a newly enacted act.  Compare norms only for
+    # acts present in both snapshots, while still retaining genuine norm-level
+    # introductions and repeals inside those shared acts.
+    shared_acts = {jurabk for jurabk, _ in old} & \
+        {jurabk for jurabk, _ in new}
     added = []
-    for key in sorted(set(old) | set(new)):
+    for key in sorted((set(old) | set(new))):
         jb, enbez = key
+        if jb not in shared_acts:
+            continue
         o, n = old.get(key, ""), new.get(key, "")
         if o == n or (jb, days[-1], enbez) in existing:
             continue
         added.append({"jurabk": jb, "date": days[-1], "para": enbez,
-                      "old": o[:1200], "new": n[:1200]})
+                      "old": o, "new": n,
+                      "source": "daily_snapshot"})
     if added:
         with BY_DIFF_LEDGER.open("a", encoding="utf-8") as f:
             for r in added:
@@ -89,6 +98,16 @@ def load_by_diffs() -> dict[str, dict[str, list[dict]]]:
     return out
 
 
+def build_eu_index() -> dict | None:
+    """Breadth layer: every in-force EU directive + basic regulation as
+    metadata rows (fetch_eu_index.py snapshot). None when never fetched."""
+    snap = latest_snapshot("eu_index")
+    if not snap or not (snap / "instruments.jsonl").is_file():
+        return None
+    rows = list(read_jsonl(snap / "instruments.jsonl"))
+    return {"built_at": snap.name, "total": len(rows), "instruments": rows}
+
+
 def load(source: str, name: str) -> list[dict]:
     snap = latest_snapshot(source)
     if not snap or not (snap / name).is_file():
@@ -97,13 +116,32 @@ def load(source: str, name: str) -> list[dict]:
 
 
 def load_decisions() -> list[dict]:
-    """Curated court decisions (data/decisions.json, maintained by hand,
-    next to the snapshots). Optional input: a missing file must not kill
-    the build. Returned newest first."""
+    """Manual high-value cases plus the cumulative official RII snapshot.
+
+    Manual rows win when both sources describe the same court/date/docket,
+    because they carry reviewed multilingual summaries and richer relations.
+    Both inputs are optional; output is newest first.
+    """
     f = ROOT / "data" / "decisions.json"
-    if not f.is_file():
-        return []
-    rows = json.loads(f.read_text(encoding="utf-8")).get("decisions") or []
+    manual = (json.loads(f.read_text(encoding="utf-8")).get("decisions") or []) \
+        if f.is_file() else []
+    automated = load("rii", "decisions.jsonl")
+
+    def case_key(row: dict) -> tuple[str, str, str]:
+        return (str(row.get("court_short") or "").casefold(),
+                re.sub(r"\s+", "", str(row.get("az") or "")).casefold(),
+                str(row.get("date") or ""))
+
+    rows = list(manual)
+    seen_ids = {str(row.get("id")) for row in manual if row.get("id")}
+    seen_cases = {case_key(row) for row in manual}
+    for row in automated:
+        if str(row.get("id")) in seen_ids or case_key(row) in seen_cases:
+            continue
+        rows.append(row)
+        if row.get("id"):
+            seen_ids.add(str(row["id"]))
+        seen_cases.add(case_key(row))
     rows.sort(key=lambda d: d.get("date") or "", reverse=True)
     return rows
 
@@ -191,7 +229,7 @@ def build_feed() -> list[dict]:
             (d.get("az") or "") + " — " + (d.get("title") or ""),
             d.get("url"))
     rows.sort(key=lambda r: r["time"], reverse=True)
-    # court decisions are rare and high-value — never let the 600-row cap
+    # court decisions are high-value — never let the 600-row cap
     # crowd them out: seat decisions first, fill the rest with the newest
     # other events, keep the merged window newest-first (the API caps
     # /feed at 600, so rescued rows must live INSIDE the window)
@@ -230,7 +268,7 @@ def temporal(versions: list[dict], upcoming: list[dict],
 
 # ------------------------------------------------------------------ wiki
 def _act_decisions(decisions: list[dict], aid: str) -> list[dict]:
-    """Minimal per-act projection of the curated decisions: only rows whose
+    """Minimal per-act projection of merged decisions: only rows whose
     effects touch this act, and only those effects (input is newest first)."""
     rows = []
     for d in decisions:
@@ -647,6 +685,7 @@ def main() -> int:
     graph = build_graph()
     git = build_git()
     decisions = load_decisions()
+    eu_index = build_eu_index()
 
     patches = load("patches", "patches.jsonl")
     sts: dict[str, int] = {}
@@ -664,6 +703,7 @@ def main() -> int:
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),
         "eu_instruments": len(load("eu_layer", "instruments.jsonl")),
+        "eu_index_total": eu_index["total"] if eu_index else 0,
         "transpositions": len(load("eu_layer", "transpositions.jsonl")),
         "feed_events": len(feed),
         "decisions": len(decisions),
@@ -686,6 +726,10 @@ def main() -> int:
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),
     }
+    if eu_index:
+        sizes["eu_index.json"] = dump("eu_index.json", eu_index)
+    else:
+        (WEB / "eu_index.json").unlink(missing_ok=True)
     for aid, d in details.items():
         dump(f"acts/{aid}.json", d)
     print(f"web data -> {WEB}")

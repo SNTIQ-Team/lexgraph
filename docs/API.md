@@ -13,8 +13,9 @@ Lexgraph's "API" is four things:
 - **B) The pipeline** (`refresh.sh` + `pipeline/fetch_*.py`) that produces the
   snapshots and the QFS arena from which everything else is built.
 - **C) A REST API** (`api/`, FastAPI) that serves those static JSON files as
-  live HTTP endpoints — same shapes, with CORS — so a browser frontend can call
-  it directly. Mirrors the sibling Amtsgraph project's `api/`.
+  live HTTP endpoints — verbatim or in small filter/pagination envelopes, with
+  CORS — so a browser frontend can call it directly. Mirrors the sibling
+  Amtsgraph project's `api/`.
 - **D) CLI tools** (`tools/lex_log.py`, `tools/lex_blame.py`) that read the
   snapshot archive directly.
 
@@ -47,7 +48,8 @@ Files written:
 | `feed.json` | Merged realtime event stream, newest first (≤600). |
 | `wiki.json` | Act index (federal + Bavaria). |
 | `acts/<id>.json` | One full act (head, patches/bills, versions, norms). |
-| `decisions.json` | Curated court decisions (Rechtsprechung), newest first. |
+| `decisions.json` | Manual + official cumulative RII decisions, newest first. |
+| `eu_index.json` | In-force EU directives + basic regulations, metadata only. |
 | `hierarchy.json` | Jurisdiction tree (EU / Bund / Bayern / Länder). |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
 | `git.json` | The commit-graph of lawmaking. |
@@ -61,18 +63,19 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 
 ```json
 {
-  "built_at": "2026-07-06T17:43:26+00:00",
-  "acts_fed": 35,
-  "acts_by": 10,
-  "patches": { "proposed": 564, "adopted": 44, "rejected": 22, "published": 833, "not_merged": 4 },
-  "vorgaenge": 358,
+  "built_at": "2026-07-14T18:34:37+00:00",
+  "acts_fed": 51,
+  "acts_by": 11,
+  "patches": { "proposed": 607, "adopted": 9, "rejected": 23, "published": 841, "not_merged": 4 },
+  "vorgaenge": 362,
   "bay_bills": 123,
   "bay_verkuendet": 60,
   "eu_instruments": 47,
+  "eu_index_total": 7934,
   "transpositions": 136,
   "feed_events": 600,
-  "decisions": 3,
-  "graph": { "nodes": 720, "edges": 1451, "beliefs": 2558, "ticks": 262, "worlds": 3 }
+  "decisions": 82,
+  "graph": { "nodes": 727, "edges": 1471, "beliefs": 2574, "ticks": 262, "worlds": 3 }
 }
 ```
 
@@ -83,10 +86,34 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `patches` | Federal patch-command counts by status ladder. |
 | `vorgaenge` | DIP legislative procedures. |
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
-| `eu_instruments` / `transpositions` | EU instruments / DEU transposition mentions. |
+| `eu_instruments` / `transpositions` | Curated EU instruments / DEU transposition mentions in the deep layer. |
+| `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
 | `feed_events` | Rows in `feed.json`. |
-| `decisions` | Curated court decisions in `decisions.json`. |
+| `decisions` | Merged manual + official RII decisions in `decisions.json`. |
 | `graph` | Element counts of the arena export (`nodes`, `edges`, `beliefs`, `ticks`, `worlds`). |
+
+---
+
+## `eu_index.json`
+
+Breadth metadata for all in-force directives (`DIR`, `DIR_DEL`, `DIR_IMPL`)
+and basic regulations (`REG`) returned by CELLAR. Delegated and implementing
+regulations are deliberately excluded. This file contains no legal text or
+diffs; each `celex` is the stable key for linking to EUR-Lex.
+
+```json
+{
+  "built_at": "2026-07-14",
+  "total": 7934,
+  "instruments": [
+    { "celex": "32026R1547", "type": "REG", "date": "2026-07-01",
+      "title": "Verordnung (EU) 2026/1547 …" }
+  ]
+}
+```
+
+Titles are German where available, with English fallback. The current count is
+about 7,934 and will move as CELLAR's in-force status changes.
 
 ---
 
@@ -153,7 +180,7 @@ The act index — the left-hand list in the *Wiki* view. Array of:
 | `last_change` | Most recent past amendment date. |
 | `next_change` | Nearest **future** amendment/version date, or `null`. |
 | `pending` | Count of pending patches (`proposed` + `adopted`). |
-| `decisions` | Count of curated court decisions touching this act (`0` if none). |
+| `decisions` | Count of merged manual/RII decisions touching this act (`0` if none). |
 
 ---
 
@@ -162,8 +189,8 @@ The act index — the left-hand list in the *Wiki* view. Array of:
 The full per-act record. **The shape differs between federal and Bavarian
 acts** (they draw from different pipelines) — the common keys are `id`,
 `jurabk`, `juris`, `title`, `build`, `norm_count`, `versions`, `temporal`,
-`norms`. Both shapes gain an optional `decisions` key (see below) when a
-curated court decision touches the act.
+`norms`. Both shapes gain an optional `decisions` key (see below) when a court
+decision from the merged manual/RII layer touches the act.
 
 ### Federal act (e.g. `acts/fed_asylblg.json`)
 
@@ -261,12 +288,15 @@ Keys: `id`, `jurabk`, `juris`, `title`, `bayrs`, `build`, `norm_count`,
 - `gvbl_events[]` — GVBl/BayMBl promulgations joined via the BayRS number:
   `{date, gazette, title, url}`.
 - `versions[]` — amendment history (`{date, text}`; federal rows also carry a
-  synopsis `url`).
+  synopsis `url`). Bavarian rows may carry `changes[]` with exact
+  `{para, old, new}` text. Historical `changes` are sparse, conservative
+  Wayback matches from 2016+; daily snapshot diffs are complete only from July
+  2026 onward. Absence of `changes` does not mean the amendment changed no text.
 - `norms[]` — `{enbez, titel, text, glied}`.
 
 ### `decisions[]` (both shapes, optional)
 
-Curated court decisions touching this act, embedded from `decisions.json` as a
+Court decisions touching this act, embedded from `decisions.json` as a
 **minimal projection**, newest first; the key is **omitted** when there are
 none (the `wiki.json` row's `decisions` count is `0` then).
 
@@ -288,18 +318,31 @@ none (the `wiki.json` row's `decisions` count is `0` then).
 ]
 ```
 
-Only the effects whose `act_id` equals this act are embedded. The full record
-(multilingual summaries, related decisions, anonymized full text) lives in
-`decisions.json` / `GET /decisions/{id}`.
+Only the effects whose `act_id` equals this act are embedded. The complete
+exported row lives in `decisions.json` / `GET /decisions/{id}`; reviewed manual
+rows can include multilingual summaries, relations, and anonymized text, while
+automatic RII rows are metadata-only.
 
 ---
 
 ## `decisions.json`
 
-Curated court decisions (Rechtsprechung) affecting acts in the corpus —
-maintained by hand in `data/decisions.json`, exported as a **plain array**
-sorted by date, newest first. Personal data is anonymized per German
-court-publication practice. Array of:
+Court decisions (Rechtsprechung) affecting acts in the corpus, exported as a
+**plain array** sorted by date, newest first. The build merges reviewed manual
+rows from `data/decisions.json` with the latest forward-cumulative official RII
+snapshot. Manual rows win duplicate ids or court/date/docket cases because they
+carry richer reviewed summaries and relations.
+
+RII intake covers the rolling feeds of BVerfG, BGH, BVerwG, BFH, BAG, BSG, and
+BPatG, filtered by official `<norm>` metadata to acts in the GII corpus. It
+accumulates from the first successful snapshot forward; it is neither a full
+historical archive nor all German courts. Lower-court and EU cases remain
+manual. Automated RII rows normally have a German summary and no embedded full
+text; manual rows may add multilingual summaries, relations, quotes, and text.
+Their official norm links use the neutral effect kind `cited`: `<norm>`
+proves that the decision cites a provision, but does not by itself prove that
+the court interpreted or applied it.
+Array of:
 
 ```json
 [
@@ -342,9 +385,9 @@ court-publication practice. Array of:
 | `proc` | Procedure type. |
 | `juris` | `EU`, `DE`, `DE-BY`. |
 | `title` | German headline. |
-| `summary` | One summary per UI language: `{de, en, ru, ua}`. |
+| `summary` | Language-keyed summaries; manual rows may have `{de, en, ru, ua}`, RII rows normally only `de`. |
 | `outcome` | Outcome in a few words. |
-| `effects[]` | What the decision does to which norms: `act_id` (corpus act id, when the act is in the index), `eu_celex` (for EU instruments), `jurabk`, `paras`, `kind` (`disapplied` / `incompatible` / `referred` / `interpreted` / `applied`), `note`. |
+| `effects[]` | How the decision links to norms: `act_id` (corpus act id, when the act is in the index), `eu_celex` (for EU instruments), `jurabk`, `paras`, `kind` (`cited` / `disapplied` / `incompatible` / `referred` / `interpreted` / `applied`), `note`. Automated RII rows use `cited`; stronger kinds are reviewed manual assertions. |
 | `related[]` | Links between decisions: `rel` (`follows` / `answers` / `cites`), `ref` (decision id), `label`. |
 | `quote` | Key quote from the decision, or `null`. |
 | `url` | Source link, or `null`. |
@@ -458,41 +501,43 @@ Länder add `url`.
 [`refresh.sh`](../refresh.sh) is the cron entrypoint. It pulls the live
 legislative state across Bund / Bayern / EU / Länder, rebuilds the QFS arena,
 then exports the web JSON. **Fetch steps degrade gracefully** (a flaky source
-must not kill the arena rebuild); only the final build is fatal, and fetchers
-refuse to overwrite a good same-day snapshot with empty output.
+must not kill the arena rebuild); the arena and web-data builds are fatal, and
+fetchers refuse to overwrite a good same-day snapshot with empty output.
 
 ```bash
 ./refresh.sh
 ```
 
-The 16 steps (note: the script's early step labels read `n/14`, the later ones
-`n/16` — a cosmetic inconsistency; there are 16 steps):
+The 19 steps are:
 
 | # | Step | Fetcher |
 |---|------|---------|
 | 1 | DIP legislative pipeline (Bund, intraday) | `fetch_dip.py` |
 | 2 | BGBl promulgation events | `fetch_bgbl_events.py` |
 | 3 | GII corpus HEAD | `fetch_gii.py` |
-| 4 | NeuRIS changelog (append-only) | `fetch_neuris_changelog.py` |
-| 5 | buzer back-history (max once/day; skipped if today's snapshot exists) | `fetch_buzer.py` |
-| 6 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
-| 7 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
-| 8 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
-| 9 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
-| 10 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
-| 11 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
-| 12 | EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
-| 13 | Länder monitor (Parlamentsspiegel, Asyl/Sozial) | `fetch_parlamentsspiegel.py` |
-| 14 | Länder-Gesetzentwürfe (all 16 Landtage) | `fetch_laender_bills.py` |
-| 15 | Build the QFS arena | `tools/build_qfs.py` |
-| 16 | Export web data | `tools/build_web_data.py` |
+| 4 | Federal case law from seven official RII feeds | `fetch_rii.py` |
+| 5 | NeuRIS changelog (append-only) | `fetch_neuris_changelog.py` |
+| 6 | buzer back-history (max once/day; skipped if today's snapshot exists) | `fetch_buzer.py` |
+| 7 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
+| 8 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
+| 9 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
+| 10 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
+| 11 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
+| 12 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
+| 13 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
+| 14 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
+| 15 | Länder monitor (Parlamentsspiegel, Asyl/Sozial) | `fetch_parlamentsspiegel.py` |
+| 16 | Länder-Gesetzentwürfe (all 16 Landtage) | `fetch_laender_bills.py` |
+| 17 | Build the QFS arena | `tools/build_qfs.py` |
+| 18 | Export web data | `tools/build_web_data.py` |
+| 19 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
 
 Snapshots land in `data/snapshots/<source>/<date>/*.jsonl`; each build reads the
 newest snapshot per source. **Each fetcher documents its own source, cadence,
 and quirks in its module docstring** — read the top of any
 `pipeline/fetch_*.py` for the authoritative behavior of that step.
 
-Step 15 also deploys the arena to a local `qfs_visualizer` checkout if present.
+Step 17 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
 ---
 
@@ -500,9 +545,9 @@ Step 15 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
 A small, read-only HTTP wrapper around the section-A data plane. It does **not**
 recompute anything: `tools/build_web_data.py` is the build step, `web/data/*.json`
-*are* the data, and each endpoint just projects one of those files. **Response
-shapes equal the JSON files' shapes** documented in section A, so the frontend
-and these docs share one contract. This mirrors the sibling
+*are* the data, and each endpoint just projects one of those files. Some return
+the file verbatim; filtered endpoints add the small envelopes documented below.
+This mirrors the sibling
 [Amtsgraph](https://github.com/SNTIQ-Team/amtsgraph) project's `api/`
 (`api/main.py` = the app, `api/server.py` = the ASGI composition root).
 
@@ -534,10 +579,11 @@ no database.
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
 | `GET /decisions?q=&act=` | `decisions.json` | court decisions, newest first; `limit` 1–200 (default 50) |
-| `GET /decisions/{id}` | one `decisions.json` row | full decision; **404** if unknown |
+| `GET /decisions/{id}` | one `decisions.json` row | full exported row; **404** if unknown |
 | `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
 | `GET /graph` | `graph.json` | the QFS arena export |
 | `GET /hierarchy` | `hierarchy.json` | the jurisdiction tree |
+| `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
 | `GET /search?q=` | `wiki.json` rows | substring match on `jurabk`/`title` |
 | `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |
 
@@ -610,6 +656,35 @@ curl 'http://127.0.0.1:8010/git?lane=0&limit=3'
   "celex": "…" } ] }
 ```
 
+## `GET /eu-index?q=&kind=&limit=&offset=`
+
+Filters the metadata-only EU breadth index. `q` is an optional
+case-insensitive substring search over `celex` and `title`; `kind` is `DIR` or
+`REG`. `DIR` includes `DIR`, `DIR_DEL`, and `DIR_IMPL`, while `REG` contains
+basic regulations only. `limit` ∈ [1, 500] (default 100), and `offset` is a
+non-negative row offset (default 0).
+
+```bash
+curl 'http://127.0.0.1:8010/eu-index?q=internationalen%20Schutz&kind=DIR&limit=20&offset=0'
+```
+
+```json
+{
+  "built_at": "2026-07-14",
+  "total": 7934,
+  "matched": 3,
+  "offset": 0,
+  "limit": 20,
+  "instruments": [
+    { "celex": "32024L1346", "type": "DIR", "date": "2024-05-14",
+      "title": "Richtlinie (EU) 2024/1346 …" }
+  ]
+}
+```
+
+`total` is the unfiltered file total; `matched` is the count after `q` and
+`kind`, before pagination. Returns **404** until `eu_index.json` has been built.
+
 ## `GET /search?q=`
 
 Case-insensitive substring match on `jurabk` and `title` across `wiki.json`;
@@ -631,7 +706,7 @@ Court decisions from `decisions.json` (full rows — see section A), newest
 first. `q` matches case-insensitively in `az`, `court`, `court_short`,
 `title`, all `summary` languages, and `effects[].jurabk`; `act` filters by
 `effects[].act_id` (an act index id); `limit` ∈ [1, 200], default 50.
-`/decisions/{id}` returns one full decision and **404** for an unknown id.
+`/decisions/{id}` returns one full exported row and **404** for an unknown id.
 
 ```bash
 curl 'http://127.0.0.1:8010/decisions?act=fed_asylblg&limit=1'
@@ -649,7 +724,7 @@ curl 'http://127.0.0.1:8010/decisions?act=fed_asylblg&limit=1'
 ## `GET /digest`
 
 **Experimental.** A short multilingual digest of legislative activity —
-`web/data/digest.json`, written by `tools/build_digest.py` (refresh step 17)
+`web/data/digest.json`, written by `tools/build_digest.py` (refresh step 19)
 when `OPENROUTER_API_KEY` is set. The facts are computed deterministically
 from the section-A data; the phrasing is **LLM-generated** (the winning
 model id is in `model`). Informational only, not legal advice.
