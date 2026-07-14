@@ -35,12 +35,16 @@ CORPUS = {
     "sgb_1", "sgb_2", "sgb_3", "sgb_4", "sgb_5", "sgb_6", "sgb_7",
     "sgb_8", "sgb_9_2018", "sgb_10", "sgb_11", "sgb_12", "sgb_14",
     "sgg", "rbeg_2021", "baf_g", "asylblg",
+    "wogg", "bkgg_1996", "uhvorschg",          # housing/child/maintenance
     # migration & asylum
     "asylvfg_1992", "aufenthg_2004", "freiz_gg_eu_2004", "azrg",
     "stag",                                    # citizenship (StAG)
     "ukraineaufenthfgv", "ukraineaufenth_v",
+    "aufenthv", "beschv_2013", "intv",         # residence/work/integration regs
     # procedure
     "vwgo", "vwvfg", "ozg",
+    "zpo",                                     # PKH lives in §§ 114-127 ZPO
+    "berathig",                                # Beratungshilfe (out-of-court aid)
     # misc from practice
     "waffg_2002", "beg", "idnrg",
 }
