@@ -22,7 +22,7 @@ from, when it may pass, when it was last amended, and what changed.**
 | Curated EU instruments + German transpositions | **47 / 136** |
 | EU in-force metadata index | **7,934** directives and basic regulations |
 | Court decisions | **82** (3 reviewed + 79 official federal RII) |
-| Länder bills (all 16 Landtage) | **439** |
+| Länder bills (all 16 Landtage) | **451** |
 | QFS arena | 745 nodes · 2,588 beliefs · 3 jurisdiction worlds |
 
 The EU breadth index covers every in-force directive (including delegated and
