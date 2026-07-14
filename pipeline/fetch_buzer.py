@@ -137,7 +137,7 @@ def versions_of(http: Http, jurabk: str, act_id: int) -> list[dict]:
         # the row text around the link names the amending act
         row = a.find_parent(["tr", "li", "p"])
         title = " ".join((row.get_text(" ", strip=True) if row
-                          else a.get_text(" ", strip=True)).split())[:180]
+                          else a.get_text(" ", strip=True)).split())[:400]
         out.append({"jurabk": jurabk, "act_id": act_id,
                     "date": m.group(2), "title": title,
                     "synopsis_url": f"{BASE}/gesetz/{act_id}/"
@@ -171,7 +171,7 @@ def upcoming(http: Http) -> list[dict]:
         td = a.find_parent("td")
         ltg = td.find("a", class_="ltg") if td else None
         title = " ".join(((ltg or a).get_text(" ", strip=True)).split())
-        out.append({"date": date, "act_id": aid, "title": title[:180],
+        out.append({"date": date, "act_id": aid, "title": title[:400],
                     "url": f"{BASE}/gesetz/{aid}/l.htm"})
     return out
 

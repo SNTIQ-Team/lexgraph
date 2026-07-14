@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import time
 from http.cookiejar import DefaultCookiePolicy
 
 from bs4 import BeautifulSoup
@@ -82,12 +83,20 @@ def parse_synopse(html: str) -> list[dict]:
     return changes
 
 
+# Bump when parse_synopse changes semantics: --resume only trusts rows
+# written by the same parser, so a fixed parser re-fetches everything once.
+PARSER_VERSION = 2
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default="2023-01-01",
                     help="only versions on/after this date")
     ap.add_argument("--per-act", type=int, default=12,
                     help="cap synopse pages per act (newest first)")
+    ap.add_argument("--delay", type=float, default=2.0,
+                    help="politeness delay between requests (seconds)")
+    ap.add_argument("--no-resume", action="store_true",
+                    help="ignore rows already fetched by this parser version")
     args = ap.parse_args()
 
     bz = latest_snapshot("buzer")
@@ -100,23 +109,56 @@ def main() -> int:
     for v in sorted(versions, key=lambda x: x["date"], reverse=True):
         by_act.setdefault(v["jurabk"], []).append(v)
 
-    http = Http(delay=0.9)
+    # Resume: keep rows the CURRENT parser already produced (synopse pages
+    # are immutable), so an interrupted crawl continues instead of starting
+    # over — buzer throttles hard and a 1400-page session rarely survives
+    # in one piece.
+    done: dict[str, dict] = {}
+    prev = latest_snapshot("buzer_synopse")
+    if prev and not args.no_resume:
+        for row in read_jsonl(prev / "synopse.jsonl"):
+            if row.get("pv") == PARSER_VERSION:
+                done[row["url"]] = row
+        if done:
+            print(f"resuming: {len(done)} synopses already fetched")
+
+    http = Http(delay=args.delay)
     http.s.cookies.set_policy(DefaultCookiePolicy(allowed_domains=[]))
     http.s.headers["User-Agent"] = \
         "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)"
 
-    rows, n_pages = [], 0
+    rows, n_pages, failures = list(done.values()), 0, 0
+    aborted = False
     for jurabk, vs in by_act.items():
+        if aborted:
+            break
         for v in vs[:args.per_act]:
-            r = http.get(v["synopsis_url"], timeout=45)
+            if v["synopsis_url"] in done:
+                continue
+            try:
+                r = http.get(v["synopsis_url"], timeout=45)
+            except Exception as exc:  # noqa: BLE001 — a page must not kill the run
+                failures += 1
+                print(f"  [warn] {v['synopsis_url']}: {type(exc).__name__} "
+                      f"({failures} consecutive)")
+                if failures >= 4:
+                    # the server is refusing us — save what we have and leave
+                    print("  [abort] repeated failures — partial snapshot saved; "
+                          "re-run later to resume")
+                    aborted = True
+                    break
+                time.sleep(90)  # cool down before trying the next page
+                continue
+            failures = 0
             n_pages += 1
             if r.status_code != 200:
                 continue
             changes = parse_synopse(r.text)
             rows.append({"jurabk": jurabk, "act_id": v["act_id"],
                          "date": v["date"], "url": v["synopsis_url"],
-                         "changes": changes})
-        print(f"  {jurabk:>16}  {min(len(vs), args.per_act):2} pages, "
+                         "pv": PARSER_VERSION, "changes": changes})
+        print(f"  {jurabk:>16}  "
+              f"{sum(1 for r in rows if r['jurabk'] == jurabk):3} synopses, "
               f"{sum(len(r['changes']) for r in rows if r['jurabk']==jurabk):4} "
               f"§-diffs")
 
