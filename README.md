@@ -47,6 +47,7 @@ archived official pages yield an unambiguous state transition (sparse from
   [`docs/SOURCES.md`](docs/SOURCES.md) and [`docs/source-audit.json`](docs/source-audit.json).
 - **`tools/build_qfs.py`** — fuses the snapshots into a QFS arena (the
   time-scrubbable graph), `build_web_data.py` exports the web JSON,
+  `export_hf.py` builds the versioned Hugging Face dataset,
   `lex_log.py` / `lex_blame.py` are `git log` / `git blame` for a single act.
 - **`web/`** — a self-contained visualizer: Wiki & Realtime feed, a `git log`
   of lawmaking, the jurisdiction hierarchy, and the force-directed arena. DE/EN.
