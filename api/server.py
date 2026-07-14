@@ -27,14 +27,15 @@ SERVICE_INDEX = {
     "docs": "/docs",
     "endpoints": [
         "/health", "/version", "/stats", "/feed",
-        "/acts", "/acts/{id}", "/decisions", "/decisions/{id}",
+        "/acts", "/acts/{id}", "/acts/{id}/archive",
+        "/acts/{id}/markdown", "/decisions", "/decisions/{id}",
         "/git", "/graph", "/hierarchy", "/eu-index", "/search", "/digest",
     ],
 }
 
 server = FastAPI(
     title="Lexgraph API",
-    version="1.0",
+    version="1.1",
     docs_url="/docs",
     redoc_url=None,
 )
@@ -48,6 +49,16 @@ server.add_middleware(
     allow_origins=["*"],
     allow_methods=["GET"],
     allow_headers=["*"],
+    expose_headers=[
+        "Content-Disposition",
+        "X-Lexgraph-Requested-Date",
+        "X-Lexgraph-Resolved-Date",
+        "X-Lexgraph-Head-Date",
+        "X-Lexgraph-Exact",
+        "X-Lexgraph-Archive-Status",
+        "X-Lexgraph-Archive-Gaps",
+        "X-Lexgraph-Missing-Transitions",
+    ],
     max_age=86400,
 )
 
@@ -102,6 +113,8 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="feed">/feed</a></td><td class="what">realtime event stream, newest first</td></tr>
     <tr><td class="ep"><a href="acts">/acts</a></td><td class="what">the act index (federal + Bavaria)</td></tr>
     <tr><td class="ep">/acts/{id}</td><td class="what">one full act — head, patches, versions, norms</td></tr>
+    <tr><td class="ep">/acts/{id}/archive</td><td class="what">dated states + explicit archive coverage gaps</td></tr>
+    <tr><td class="ep">/acts/{id}/markdown</td><td class="what">full act or one §/Art. as Markdown; optional download</td></tr>
     <tr><td class="ep"><a href="decisions">/decisions</a></td><td class="what">court decisions (Rechtsprechung)</td></tr>
     <tr><td class="ep">/decisions/{id}</td><td class="what">one complete exported decision row</td></tr>
     <tr><td class="ep"><a href="git">/git</a></td><td class="what">the commit-graph of lawmaking</td></tr>

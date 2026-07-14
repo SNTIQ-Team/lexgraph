@@ -99,6 +99,8 @@ def test_shared_act_norm_transitions_append_complete_daily_diffs(
     assert set(appended) == {"Art. 1", "Art. 2", "Art. 3"}
     assert all(row["jurabk"] == "SharedAct" for row in appended.values())
     assert all(row["date"] == "2026-07-14" for row in appended.values())
+    assert all(row["effective_date"] == "2026-07-14"
+               for row in appended.values())
     assert all(row["source"] == "daily_snapshot"
                for row in appended.values())
     assert appended["Art. 1"]["old"] == old_text
@@ -107,3 +109,38 @@ def test_shared_act_norm_transitions_append_complete_daily_diffs(
     assert appended["Art. 2"]["new"] == ""
     assert appended["Art. 3"]["old"] == ""
     assert appended["Art. 3"]["new"] == introduced_text
+
+
+def test_load_by_diffs_preserves_effective_date_and_provenance(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    snapshots, ledger = _redirect_storage(tmp_path, monkeypatch)
+    # Prevent the loader's forward-diff update from needing real snapshots.
+    snapshots.mkdir(parents=True)
+    _write_jsonl(ledger, [{
+        "jurabk": "PAG",
+        "date": "2024-07-23",
+        "effective_date": "2024-08-01",
+        "para": "Art. 44",
+        "old": "alt",
+        "new": "neu",
+        "source": "wayback",
+        "transition_id": "transition-44",
+        "confidence": "exact",
+    }, {
+        "jurabk": "PAG",
+        "date": "2026-07-14",
+        "para": "Art. 45",
+        "old": "vorher",
+        "new": "nachher",
+        "source": "daily_snapshot",
+    }])
+
+    changes = web_data.load_by_diffs()["PAG"]
+
+    first = changes["2024-07-23"][0]
+    assert first["effective_date"] == "2024-08-01"
+    assert first["source"] == "wayback"
+    assert first["transition_id"] == "transition-44"
+    assert first["confidence"] == "exact"
+    # Legacy daily rows have no better legal date than the snapshot itself.
+    assert changes["2026-07-14"][0]["effective_date"] == "2026-07-14"

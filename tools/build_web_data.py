@@ -79,7 +79,8 @@ def _update_by_diff_ledger() -> None:
         o, n = old.get(key, ""), new.get(key, "")
         if o == n or (jb, days[-1], enbez) in existing:
             continue
-        added.append({"jurabk": jb, "date": days[-1], "para": enbez,
+        added.append({"jurabk": jb, "date": days[-1],
+                      "effective_date": days[-1], "para": enbez,
                       "old": o, "new": n,
                       "source": "daily_snapshot"})
     if added:
@@ -91,13 +92,33 @@ def _update_by_diff_ledger() -> None:
 
 
 def load_by_diffs() -> dict[str, dict[str, list[dict]]]:
-    """{jurabk: {date: [{para, old, new}, …]}} from the ledger."""
+    """Load Bavarian word diffs without losing their validity date.
+
+    ``date`` is the promulgation/event date used to attach a diff to the
+    visible version timeline.  The legal state changes on ``effective_date``;
+    archive reconstruction must never silently substitute the former for the
+    latter.  Older daily-snapshot rows predate that field, so their snapshot
+    date is the only honest fallback and their provenance remains visible.
+    """
     _update_by_diff_ledger()
     out: dict[str, dict[str, list[dict]]] = {}
     if BY_DIFF_LEDGER.is_file():
         for r in read_jsonl(BY_DIFF_LEDGER):
+            change = {
+                "para": r["para"],
+                "old": r["old"],
+                "new": r["new"],
+                "effective_date": r.get("effective_date") or r["date"],
+                "source": r.get("source") or "unknown",
+            }
+            for key in ("transition_id", "confidence", "operation",
+                        "event_source", "event_id", "event_seq",
+                        "event_description", "old_valid", "new_valid",
+                        "old_capture", "new_capture"):
+                if r.get(key) is not None:
+                    change[key] = r[key]
             out.setdefault(r["jurabk"], {}).setdefault(r["date"], []).append(
-                {"para": r["para"], "old": r["old"], "new": r["new"]})
+                change)
     return out
 
 

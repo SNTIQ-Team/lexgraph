@@ -51,8 +51,10 @@ archived official pages yield an unambiguous state transition (sparse from
   `export_hf.py` builds the versioned Hugging Face dataset,
   `lex_log.py` / `lex_blame.py` are `git log` / `git blame` for a single act.
 - **`web/`** — a self-contained visualizer: Wiki & Realtime feed, a `git log`
-  of lawmaking, competence-aware legal layers, and the force-directed arena.
-  DE/EN/RU/UA.
+  of lawmaking, competence-aware legal layers, a dated full-text Markdown
+  reader/download (whole act or one §/Art.), and the force-directed arena.
+  DE/EN/RU/UA. Only the current consolidated snapshot is labelled exact;
+  incomplete historical source chains remain visibly partial.
 - **`docs/`** — [`VISION.md`](docs/VISION.md) (the data model & acceptance
   test), [`API.md`](docs/API.md) (the static-JSON + CLI interface),
   [`SOURCES.md`](docs/SOURCES.md).
@@ -63,6 +65,7 @@ archived official pages yield an unambiguous state transition (sparse from
 ./refresh.sh                       # pull the live legislative state, rebuild
 python3 -m http.server -d web 8777 # then open http://localhost:8777
 uvicorn api.server:server --port 8010   # REST API over web/data (see docs/API.md)
+curl 'localhost:8010/acts/fed_aufenthg_2004/markdown?norm=%C2%A7%2024'
 python3 tools/lex_log.py AsylbLG   # git log for one act (federal or Bavarian)
 ```
 

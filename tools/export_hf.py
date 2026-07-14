@@ -177,7 +177,16 @@ catalogue of all German case law.
 For Bavaria, official version rows are amendment metadata. Word-level history
 is exported only when archived official pages yield an unambiguous state
 transition, plus complete forward diffs between daily snapshots. Missing
-history is kept missing instead of reconstructed.
+history is kept missing instead of reconstructed. In
+`bayern_word_diffs.jsonl`, `date` is the promulgation/event date while
+`effective_date` is the date on which the consolidated wording changes; data
+consumers doing time travel must prefer `effective_date`.
+
+The public API can serialize the current complete act or one provision as
+Markdown. Historical output is explicitly labelled partial whenever the
+available source only supplies amendment excerpts rather than a lossless
+consolidated snapshot; the dataset does not imply exact historical text where
+the source archive cannot prove it.
 
 Every source is documented in the repository's `docs/SOURCES.md`; reproduce
 the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts

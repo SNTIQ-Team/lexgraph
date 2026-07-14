@@ -576,8 +576,10 @@ The data directory defaults to `<repo>/web/data`; override it with the
 `LEXGRAPH_DATA` environment variable (e.g. a deployment path). The dataset is
 static per deploy, so responses are cached in-process and sent with
 `Cache-Control: public, max-age=3600`. **CORS is open (`*`)** so any browser
-frontend can call the API. The data plane is loaded lazily and cached; there is
-no database.
+frontend can call the API. Archive/download metadata (`Content-Disposition`
+and the `X-Lexgraph-*` headers documented below) is exposed to browser
+JavaScript as well. The data plane is loaded lazily and cached; there is no
+database.
 
 ## Endpoint summary
 
@@ -590,6 +592,8 @@ no database.
 | `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
+| `GET /acts/{id}/archive` | one act's `norms` + `versions` | selectable HEAD/event/effective dates and honest coverage gaps |
+| `GET /acts/{id}/markdown?at=&norm=&download=` | one act's `norms` + `versions` | raw Markdown for the whole act or one norm; omit `at` for HEAD |
 | `GET /decisions?q=&act=` | `decisions.json` | court decisions, newest first; `limit` 1–200 (default 50) |
 | `GET /decisions/{id}` | one `decisions.json` row | full exported row; **404** if unknown |
 | `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
@@ -696,6 +700,80 @@ curl 'http://127.0.0.1:8010/eu-index?q=internationalen%20Schutz&kind=DIR&limit=2
 
 `total` is the unfiltered file total; `matched` is the count after `q` and
 `kind`, before pagination. Returns **404** until `eu_index.json` has been built.
+
+## Dated act archive and Markdown
+
+`GET /acts/{id}/archive` lists the deployment's exact consolidated `HEAD`,
+known amendment event dates, distinct `effective_date` values, current and
+historical norm designators, and corpus-level gaps. Publication/event date and
+effective date are intentionally both retained: a Bavarian act can be
+promulgated on one day and enter into force on another.
+
+```bash
+curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/archive'
+```
+
+```json
+{
+  "act_id": "fed_aufenthg_2004",
+  "head_date": "2026-07-15",
+  "entries": [
+    {"date":"2024-03-01","label":"…","has_changes":true,
+     "exact":false,"partial":true},
+    {"date":"2026-07-15","label":"HEAD · consolidated source snapshot",
+     "has_changes":false,"exact":true,"partial":false}
+  ],
+  "norms": [{"enbez":"§ 24","title":"Aufenthaltsgewährung zum vorübergehenden Schutz"}],
+  "gaps": [{"reason":"metadata_only_versions","label":"…"}],
+  "complete": false
+}
+```
+
+`GET /acts/{id}/markdown` returns raw `text/markdown`, not a JSON wrapper.
+Both filters are optional:
+
+- omit `at` for the exact current HEAD; `at=YYYY-MM-DD` requests the state on
+  an earlier date;
+- omit `norm` for the **entire act**; use `norm=§24`, `norm=24`, or
+  `norm=Art.59` for one norm;
+- `download=true` adds an attachment filename so browsers save a `.md` file.
+
+```bash
+# Complete current act as Markdown
+curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/markdown'
+
+# One norm at a date (URL-encode § in production clients)
+curl --get 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/markdown' \
+  --data-urlencode 'at=2024-03-02' --data-urlencode 'norm=§ 24'
+
+# Download the complete historical act
+curl -OJ 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/markdown?at=2024-03-02&download=true'
+```
+
+The response exposes:
+
+```text
+Content-Type: text/markdown; charset=utf-8
+X-Lexgraph-Requested-Date: 2024-03-02
+X-Lexgraph-Resolved-Date: 2024-03-02
+X-Lexgraph-Head-Date: 2026-07-15
+X-Lexgraph-Exact: false
+X-Lexgraph-Archive-Status: partial
+X-Lexgraph-Missing-Transitions: 3
+X-Lexgraph-Archive-Gaps: [{"reason":"…","label":"…"}]
+Content-Disposition: attachment; filename="…md"   # download=true only
+```
+
+The truth boundary is strict: only HEAD is a complete consolidated source
+snapshot. Historical output uses dated complete norm states from verified
+Bavarian Wayback/daily snapshots where available, then conservatively reverses
+only reconcilable recorded `old/new` bodies; it is labelled `partial`.
+Metadata-only changes, the historic
+1,200-character federal capture cap, empty change sides, ambiguous ordering,
+and state mismatches are reported and never guessed. In particular, an empty
+side can be a paragraph-level edit; the API never treats it as proof that a
+whole §/Art. was created or repealed. Norm headings in reconstructed output
+remain HEAD metadata and are disclosed as such.
 
 ## `GET /search?q=&limit=&norm_limit=`
 

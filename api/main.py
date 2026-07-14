@@ -14,6 +14,8 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /feed?limit=            realtime event stream, newest first
   GET /acts                   the act index (wiki.json)
   GET /acts/{id}              one full act (acts/<id>.json); 404 if unknown
+  GET /acts/{id}/archive      selectable HEAD + historical transition dates
+  GET /acts/{id}/markdown     full act or one norm as dated Markdown
   GET /git?lane=&limit=       the commit-graph, optionally filtered by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
@@ -34,8 +36,15 @@ import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
+from api.act_archive import (
+    ArchiveRequestError,
+    UnknownNormError,
+    build_archive_index,
+    markdown_filename,
+    render_markdown_snapshot,
+)
 from api.search_engine import SearchEngine, normalize_search_text
 
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
@@ -43,7 +52,7 @@ DATA_DIR = Path(os.environ.get(
     "LEXGRAPH_DATA",
     Path(__file__).resolve().parent.parent / "web" / "data"))
 
-app = FastAPI(title="Lexgraph", version="1.0")
+app = FastAPI(title="Lexgraph", version="1.1")
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)
 LANES = ["EU", "Bund", "Bayern", "Länder"]
@@ -116,6 +125,11 @@ def acts():
 @app.get("/acts/{act_id}")
 def act_detail(act_id: str):
     """One full act (acts/<id>.json): temporal, patches, versions, norms, …."""
+    return _cached(_load_act(act_id))
+
+
+def _load_act(act_id: str) -> dict:
+    """Read one act safely; act files stay uncached to keep helpers simple."""
     # guard against path traversal — ids are flat slugs like fed_asylblg
     if "/" in act_id or "\\" in act_id or act_id.startswith("."):
         raise HTTPException(404, f"unknown act '{act_id}'")
@@ -123,7 +137,78 @@ def act_detail(act_id: str):
     if not path.exists():
         raise HTTPException(404, f"unknown act '{act_id}'")
     with path.open(encoding="utf-8") as fh:
-        return _cached(json.load(fh))
+        return json.load(fh)
+
+
+def _archive_head_fallback() -> object:
+    """Deployment-wide source snapshot boundary from summary.json."""
+    return _load("summary").get("built_at")
+
+
+@app.get("/acts/{act_id}/archive")
+def act_archive(act_id: str):
+    """Selectable state dates, norm designators, and known coverage gaps.
+
+    HEAD is the exact consolidated snapshot.  Earlier entries are conservative
+    reconstructions and remain explicitly partial where old/new evidence is
+    absent, truncated, empty-sided, or internally inconsistent.
+    """
+    try:
+        payload = build_archive_index(
+            _load_act(act_id), fallback_head=_archive_head_fallback())
+    except ArchiveRequestError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return _cached(payload)
+
+
+@app.get("/acts/{act_id}/markdown", response_class=Response)
+def act_markdown(
+        act_id: str,
+        at: str | None = Query(None, description="YYYY-MM-DD; omit for HEAD"),
+        norm: str | None = Query(
+            None, description="§/Art. designator; omit for the entire act"),
+        download: bool = Query(False, description="send as a .md attachment"),
+):
+    """Full act or one §/Art. as raw ``text/markdown``.
+
+    Response headers expose the resolved date and whether it is the exact HEAD
+    snapshot.  Historical gaps are also embedded at the top of the Markdown.
+    """
+    try:
+        result = render_markdown_snapshot(
+            _load_act(act_id), requested_at=at, norm=norm,
+            fallback_head=_archive_head_fallback())
+    except UnknownNormError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ArchiveRequestError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    headers = {
+        "Cache-Control": "public, max-age=3600",
+        "X-Lexgraph-Requested-Date": result["requested_at"],
+        "X-Lexgraph-Resolved-Date": result["resolved_at"],
+        "X-Lexgraph-Head-Date": result["head_date"],
+        "X-Lexgraph-Exact": str(result["exact"]).lower(),
+        "X-Lexgraph-Archive-Status": (
+            "exact" if result["exact"] else "partial"),
+        "X-Lexgraph-Missing-Transitions": str(len(result["gaps"])),
+    }
+    # Keep the raw Markdown response self-describing for browser clients.  Cap
+    # this header to a compact summary; the Markdown body still lists every
+    # selected-snapshot gap in full.
+    header_gaps = list(result["gaps"][:8])
+    if len(result["gaps"]) > len(header_gaps):
+        header_gaps.append({
+            "reason": "additional_gaps",
+            "label": f"{len(result['gaps']) - len(header_gaps)} more gaps",
+        })
+    headers["X-Lexgraph-Archive-Gaps"] = json.dumps(
+        header_gaps, ensure_ascii=True, separators=(",", ":"))
+    if download:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="{markdown_filename(result)}"')
+    return Response(result["markdown"], media_type="text/markdown",
+                    headers=headers)
 
 
 @app.get("/git")
