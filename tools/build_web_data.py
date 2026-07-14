@@ -216,7 +216,7 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             t = re.sub(r"^\d{2}\.\d{2}\.\d{4}\s*", "", t)
             t = t.replace("Synopse gesamt oder einzeln für", "§§") \
                  .replace("Synopse gesamt", "").strip()
-            row = {"date": v["date"], "text": t[:130],
+            row = {"date": v["date"], "text": t[:300],
                    "url": v.get("synopsis_url")}
             ch = syn_by_key.get((v["act_id"], v["date"]))
             if ch:
@@ -522,7 +522,7 @@ def build_git() -> dict:
                        key=lambda v: (len(v), v))[:8]
         commits.append({
             "hash": _hash("proc:" + pr), "date": date, "lane": 1,
-            "type": typ, "actor": "Bundestag", "msg": (g["title"] or "")[:120],
+            "type": typ, "actor": "Bundestag", "msg": (g["title"] or "")[:280],
             "acts": list(g["acts"].keys())[:6], "paras": paras,
             "refs": [st] + ([g["stand"]] if g["stand"] else []),
             "merge_ref": merge_ref, "doc": g["doc"]})
@@ -537,7 +537,7 @@ def build_git() -> dict:
         commits.append({
             "hash": _hash("by:" + str(b.get("gegenstandid"))), "date": date,
             "lane": 2, "type": "commit" if st == "verkuendet" else "open",
-            "actor": "Landtag Bayern", "msg": (b.get("titel") or "")[:120],
+            "actor": "Landtag Bayern", "msg": (b.get("titel") or "")[:280],
             "acts": [], "paras": [], "refs": [st], "merge_ref": None,
             "doc": b.get("drs_nr"), "url": b.get("pdf_url"),
             "gvbl": b.get("gvbl_citation")})
@@ -550,7 +550,7 @@ def build_git() -> dict:
         commits.append({
             "hash": _hash("eu:" + ins["celex"]), "date": d, "lane": 0,
             "type": "commit", "actor": "EU",
-            "msg": (ins.get("title") or "")[:120], "acts": [], "paras": [],
+            "msg": (ins.get("title") or "")[:280], "acts": [], "paras": [],
             "refs": [ins["celex"]] + (["GEAS"] if ins.get("in_geas_core")
                                       else []) +
                     (["außer Kraft"] if ins.get("in_force") is False else []),
@@ -564,7 +564,7 @@ def build_git() -> dict:
             "hash": _hash("lb:" + b["event_id"]), "date": b["datum"],
             "lane": 3, "type": "open",
             "actor": "Landtag " + b["jurisdiction"].replace("DE-", ""),
-            "msg": (b.get("titel") or "")[:120], "acts": [], "paras": [],
+            "msg": (b.get("titel") or "")[:280], "acts": [], "paras": [],
             "refs": ["Entwurf"] + (["Asyl/Sozial"] if b.get("relevant")
                                    else []),
             "merge_ref": None, "url": (b.get("doc_urls") or [None])[0]})

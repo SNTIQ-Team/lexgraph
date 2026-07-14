@@ -31,7 +31,16 @@ from common import Http, latest_snapshot, read_jsonl, snapshot_dir, \
 BASE = "https://www.buzer.de"
 # ignore the table-of-contents / meta rows and the column headers
 META = re.compile(r"^\(Text (alte|neue) Fassung\)|Inhaltsübersicht", re.I)
-PARA = re.compile(r"§\s*(\d+[a-z]?)|Art(?:ikel)?\.?\s*(\d+[a-z]?)")
+# The norm a change belongs to comes from the ROW STRUCTURE, not the change
+# text: buzer inserts noprint navigation rows ("… Fassung von § 1a …",
+# "aktuelle Fassung § 1a zeigen") and a heading row ("§ 1a Anspruchs-
+# einschränkung") before each norm's rows. The old approach — regexing the
+# change text itself — misattributed anything whose text merely CITES another
+# norm first (e.g. the new § 1a Abs. 7 starts with "… nach § 1 Absatz 1 …"
+# and was filed under § 1).
+NAV_PARA = re.compile(
+    r"(?:Fassung\s+von|aktuelle\s+Fassung)\s+(?:§|Art(?:ikel)?\.?)\s*(\d+\w*)", re.I)
+HEAD_PARA = re.compile(r"^(?:§|Art(?:ikel)?\.?)\s*(\d+\w*)\b")
 
 
 def cell_text(cell) -> str:
@@ -41,9 +50,21 @@ def cell_text(cell) -> str:
 def parse_synopse(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     changes = []
+    current: str | None = None
     for tr in soup.find_all("tr"):
+        row_text = re.sub(r"\s+", " ", tr.get_text(" ")).strip()
         halt, hneu = tr.find(class_="halt"), tr.find(class_="hneu")
         if not (halt and hneu):
+            # navigation / heading rows update which norm we are inside
+            m = NAV_PARA.search(row_text)
+            if m:
+                current = m.group(1)
+            else:
+                h = HEAD_PARA.match(row_text)
+                # short row starting with '§ N <title>' = a norm heading;
+                # body rows start with '(1) …', so they never match here
+                if h and len(row_text) < 120:
+                    current = h.group(1)
             continue
         old, new = cell_text(halt), cell_text(hneu)
         if old == new or not (old or new):
@@ -53,9 +74,11 @@ def parse_synopse(html: str) -> list[dict]:
             new = META.sub("", new).strip()
             if old == new or not (old or new):
                 continue
-        m = PARA.search(new) or PARA.search(old)
-        para = (m.group(1) or m.group(2)) if m else None
-        changes.append({"para": para, "old": old[:1200], "new": new[:1200]})
+        if current is None and HEAD_PARA.match(new or old):
+            # table-of-contents diff rows precede the first norm marker; the
+            # norm's own heading row repeats this information further down
+            continue
+        changes.append({"para": current, "old": old[:1200], "new": new[:1200]})
     return changes
 
 
