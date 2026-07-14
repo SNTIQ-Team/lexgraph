@@ -56,6 +56,7 @@ ZIP_URL = BASE + "/Content/Zip/{key}"
 CORPUS = {
     "AufnG": ("AufnG",),
     "DVAsyl": ("DVAsyl",),
+    "ZustVAuslR": ("ZustVAuslR",),
     "BayIntG": ("BayIntG",),
     "AGSG": ("AGSG",),
     "BayVwVfG": ("BayVwVfG",),
