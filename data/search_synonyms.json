@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "groups": [
     {
       "id": "ukraine-temporary-protection",
@@ -41,6 +41,114 @@
           {"act_id": "fed_ukraineaufenth_v", "enbez": "§ 2", "weight": 2},
           {"act_id": "fed_ukraineaufenthfgv", "enbez": "§ 1", "weight": 2},
           {"act_id": "fed_ukraineaufenthfgv", "enbez": "§ 2", "weight": 2}
+        ]
+      }
+    },
+    {
+      "id": "fiktionsbescheinigung-benefits",
+      "terms": [
+        "Fiktionsbescheinigung",
+        "Fiktionswirkung",
+        "Aufenthaltsfiktion",
+        "Erlaubnisfiktion",
+        "Fortgeltungsfiktion",
+        "Fiktion des Aufenthaltstitels"
+      ],
+      "prefixes": [
+        "fiktionsbescheinig",
+        "fiktionswirk",
+        "aufenthaltsfikt",
+        "erlaubnisfikt",
+        "fortgeltungsfikt"
+      ],
+      "targets": {
+        "norms": [
+          {
+            "act_id": "fed_aufenthg_2004",
+            "enbez": "§ 81",
+            "weight": 5
+          },
+          {
+            "act_id": "fed_sgb_2",
+            "enbez": "§ 74",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_sgb_12",
+            "enbez": "§ 146",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_sgb_9_2018",
+            "enbez": "§ 150a",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_sgb_5",
+            "enbez": "§ 417",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_asylblg",
+            "enbez": "§ 18",
+            "weight": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "ukraine-rechtskreiswechsel",
+      "terms": [
+        "Rechtskreiswechsel",
+        "Rechtskreiswechsel Ukraine",
+        "Leistungssystemwechsel Ukraine",
+        "Leistungsrechtsanpassungsgesetz",
+        "Wechsel vom SGB II zum AsylbLG",
+        "Wechsel vom SGB XII zum AsylbLG",
+        "Wechsel vom AsylbLG zum SGB II",
+        "Wechsel vom AsylbLG zum SGB XII"
+      ],
+      "prefixes": [
+        "rechtskreiswechsel",
+        "leistungssystemwechsel"
+      ],
+      "targets": {
+        "norms": [
+          {
+            "act_id": "fed_sgb_2",
+            "enbez": "§ 74",
+            "weight": 5
+          },
+          {
+            "act_id": "fed_sgb_12",
+            "enbez": "§ 146",
+            "weight": 5
+          },
+          {
+            "act_id": "fed_sgb_9_2018",
+            "enbez": "§ 150a",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_sgb_5",
+            "enbez": "§ 417",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_asylblg",
+            "enbez": "§ 18",
+            "weight": 4
+          },
+          {
+            "act_id": "fed_aufenthg_2004",
+            "enbez": "§ 24",
+            "weight": 3
+          },
+          {
+            "act_id": "fed_aufenthg_2004",
+            "enbez": "§ 81",
+            "weight": 2
+          }
         ]
       }
     },

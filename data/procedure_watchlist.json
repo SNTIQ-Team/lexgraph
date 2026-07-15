@@ -1,0 +1,33 @@
+{
+  "procedures": {
+    "329468": {
+      "id": "ukraine-rechtskreiswechsel",
+      "queries": [
+        "Ukraine",
+        "ukrainisch",
+        "Rechtskreiswechsel",
+        "Leistungsrechtsanpassungsgesetz",
+        "Fiktionsbescheinigung",
+        "Fiktionswirkung",
+        "Aufenthaltsfiktion",
+        "§ 24 AufenthG",
+        "AsylbLG",
+        "SGB II § 74",
+        "SGB XII § 146"
+      ],
+      "cutoff": "2025-03-31",
+      "scope": "Entwurfsstand: maßgeblich ist nicht das Einreisedatum, sondern die früheste relevante Statusdokumentation. Erfasst werden eine erstmals nach dem 31. März 2025 erteilte Aufenthaltserlaubnis nach § 24 Absatz 1 AufenthG oder eine erstmals nach diesem Stichtag ausgestellte entsprechende Fiktionsbescheinigung nach § 81 Absatz 5 in Verbindung mit Absatz 3. Eine bis einschließlich 31. März 2025 ausgestellte entsprechende Fiktionsbescheinigung ist eine ausdrückliche Ausnahme; der Entwurf enthält außerdem eine Ausnahme für einen erstmals vom 4. März 2022 bis 31. März 2025 erteilten anderweitigen Aufenthaltstitel.",
+      "entry_date_is_criterion": false,
+      "draft_only": true,
+      "scope_source": "https://dserver.bundestag.de/btd/21/035/2103539.pdf",
+      "relevant_norms": [
+        "AufenthG § 24",
+        "AufenthG § 81",
+        "AsylbLG",
+        "SGB II § 74, §§ 66b, 75",
+        "SGB XII § 146, § 147",
+        "SGB V §§ 5, 411"
+      ]
+    }
+  }
+}

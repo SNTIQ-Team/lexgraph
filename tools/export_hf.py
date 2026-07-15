@@ -55,6 +55,9 @@ SNAPSHOT_FILES: dict[str, tuple[str, str, str]] = {
         "bay_landtag", "bills.jsonl", "Bavarian Landtag bills and lifecycle"),
     "laender_bills.jsonl": (
         "laender_bills", "bills.jsonl", "bills from all 16 Landtage"),
+    "bundestag_procedures.jsonl": (
+        "dip", "vorgaenge.jsonl",
+        "official DIP legislative procedures and current stages"),
     "bgbl_events.jsonl": (
         "bgbl_events", "events.jsonl", "federal promulgation events"),
     "gvbl_events.jsonl": (

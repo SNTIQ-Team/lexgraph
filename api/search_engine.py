@@ -28,10 +28,14 @@ NORM_REF_RE = re.compile(
     r"(?P<number>\d+[a-z]?)",
     flags=re.IGNORECASE,
 )
-# Repeated concept tokens encode the curated 1..5 target priority.  A step
-# deliberately outweighs a coincidental literal body match, so a Ukraine
-# query surfaces the controlling/benefit norms before raw mentions.
-CONCEPT_PRIORITY_STEP = 60
+# Repeated concept tokens encode the curated 1..5 target priority.  Semantic
+# targets form an explicit ranking phase ahead of literal matches; one
+# priority step is also wider than every possible lexical field/direct-match
+# boost.  This keeps lower-priority but title-heavy rows from jumping over a
+# controlling/benefit norm (for example an Ukraine regulation over SGB II
+# § 74 merely because "Ukraine" occurs in all of its display fields).
+CONCEPT_MATCH_BASE = 10_000
+CONCEPT_PRIORITY_STEP = 1_000
 
 
 def normalize_search_text(value: object) -> str:
@@ -410,7 +414,11 @@ class SearchEngine:
         whole = normalize_search_text(query)
         whole_concepts = self._concepts_for(whole, whole=True)
         if expression and whole_concepts:
-            matched_concepts.update(whole_concepts)
+            # An exact multi-word concept is more specific than a generic
+            # concept matched by one token inside it.  Rank by the whole
+            # phrase ("Rechtskreiswechsel Ukraine"), while retaining the
+            # token clauses in the candidate expression for lexical recall.
+            matched_concepts = set(whole_concepts)
             concept_clause = " OR ".join(
                 "concepts_n:" + _quote_fts(concept)
                 for concept in sorted(whole_concepts))
@@ -456,8 +464,10 @@ class SearchEngine:
         score = sum(weights.get(field, 0) for field in fields)
         if "concept" in fields and concepts:
             tagged = str(row["concepts_n"] or "").split()
-            repeats = sum(tagged.count(concept) for concept in concepts)
-            score += max(0, repeats - 1) * CONCEPT_PRIORITY_STEP
+            priority = max((tagged.count(concept) for concept in concepts),
+                           default=1)
+            score += CONCEPT_MATCH_BASE
+            score += max(0, priority - 1) * CONCEPT_PRIORITY_STEP
         direct = normalize_search_text(query)
         if direct:
             values = {

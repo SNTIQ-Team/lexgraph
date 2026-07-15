@@ -69,6 +69,9 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "acts_by": 12,
   "patches": { "proposed": 607, "adopted": 9, "rejected": 23, "published": 841, "not_merged": 4 },
   "vorgaenge": 362,
+  "watched_procedures": [
+    { "id": "329468", "status": "Überwiesen", "gesta": "G013", "updated": "2026-02-12T10:57:00+01:00", "url": "https://dip.bundestag.de/vorgang/_/329468", "…": "…" }
+  ],
   "bay_bills": 123,
   "bay_verkuendet": 60,
   "eu_instruments": 47,
@@ -87,6 +90,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `acts_fed` / `acts_by` | Federal / Bavarian acts in the index. |
 | `patches` | Federal patch-command counts by status ladder. |
 | `vorgaenge` | DIP legislative procedures. |
+| `watched_procedures` | Data-driven watchlist rows with the latest official DIP stage; an entry can still be a non-enacted bill. |
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
 | `eu_instruments` / `transpositions` | Curated EU instruments / DEU transposition mentions in the deep layer. |
 | `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
@@ -600,7 +604,7 @@ database.
 | `GET /graph` | `graph.json` | the QFS arena export |
 | `GET /hierarchy` | `hierarchy.json` | competence-aware legal layers |
 | `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
-| `GET /search?q=&limit=&norm_limit=` | `search.sqlite` + `wiki.json` | ranked Unicode full-text search over acts and current norms |
+| `GET /search?q=&limit=&norm_limit=&procedure_limit=` | `search.sqlite` + `wiki.json` + `hierarchy.json` | ranked search over acts, current norms and official DIP procedures |
 | `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |
 
 `/stats`, `/acts`, `/acts/{id}`, `/decisions/{id}`, `/graph`, `/hierarchy`
@@ -775,7 +779,7 @@ side can be a paragraph-level edit; the API never treats it as proof that a
 whole §/Art. was created or repealed. Norm headings in reconstructed output
 remain HEAD metadata and are disclosed as such.
 
-## `GET /search?q=&limit=&norm_limit=`
+## `GET /search?q=&limit=&norm_limit=&procedure_limit=`
 
 Ranked SQLite FTS5 search across act id/abbreviation/title and every current
 norm's §/Art. identifier, heading, and complete text. Matching is Unicode- and
@@ -784,20 +788,29 @@ versioned, data-driven synonym file (`data/search_synonyms.json`) supplies
 multilingual/domain aliases, so e.g. `Ukraine`, `ukrainisch`, `Украина`, and
 `Україна` find the same corpus area, including temporary-protection norms.
 Explicit target priorities in that file put the controlling and benefit norms
-(for example AufenthG § 24, SGB II § 74 and SGB XII § 146) before incidental
-text mentions. These are transparent retrieval hints, not an embedding or an
-assertion that two legal terms are equivalent. An explicit `§ 24` or `Art. 24`
-is constrained to the norm identifier; a plain numeric word remains an
-ordinary full-text token.
+(for example AufenthG § 24, its § 81 residence-title fiction, SGB II § 74 and
+SGB XII § 146) before incidental text mentions. These are transparent
+retrieval hints, not an embedding or an assertion that two legal terms are
+equivalent. An explicit `§ 24` or `Art. 24` is constrained to the norm
+identifier; a plain numeric word remains an ordinary full-text token.
 
-`limit` caps act results and `norm_limit` caps norm results; each is in
-[1, 200] (defaults 25 and 50). For compatibility, `total` and `matches` retain
-the original act-only contract and every `matches` row keeps the `/acts` index
-shape. `act_matches` adds ranking metadata; `norm_matches` contains
+The same query also searches current official Bundestag/DIP procedure
+metadata: full title, descriptors, policy areas, initiator and DIP abstract.
+Rows configured in `data/procedure_watchlist.json` additionally carry explicit
+search aliases and watch metadata. This exposes the current official stage; it
+does not present a bill as enacted law or infer that its text is in force.
+
+`limit` caps act results, `norm_limit` caps norm results, and
+`procedure_limit` caps DIP procedure results (defaults 25, 50 and 20).
+For compatibility, `total` and `matches` retain the original act-only contract
+and every `matches` row keeps the `/acts` index shape. `act_matches` adds
+ranking metadata; `norm_matches` contains
 `{act_id,jurabk,juris,act_title,enbez,norm_title,snippet,score,matched_fields,
 source,url}`. Snippets are plain text, `source` is `gii` or `bayern_recht`, and
-`url` is the API-relative act detail path. `result_total` is
-`act_total + norm_total` before result limits.
+`url` is the API-relative act detail path. `procedure_matches` contains the
+official DIP id, title, stage, dates, GESTA id, topics, initiators, descriptors,
+abstract, source link and optional watch metadata. `result_total` is
+`act_total + norm_total + procedure_total` before the three result limits.
 
 ```bash
 curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
@@ -810,9 +823,10 @@ curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
   "matches": [
     {"id":"fed_ukraineaufenthfgv","jurabk":"UkraineAufenthFGV", …}
   ],
-  "result_total": 24,
+  "result_total": 25,
   "act_total": 2,
   "norm_total": 22,
+  "procedure_total": 1,
   "act_matches": [
     {"id":"fed_ukraineaufenthfgv","score":156,
      "source":"gii","url":"/acts/fed_ukraineaufenthfgv", …}
@@ -822,6 +836,11 @@ curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
      "enbez":"§ 24","norm_title":"Aufenthaltsgewährung zum vorübergehenden Schutz",
      "snippet":"Einem Ausländer kann zum vorübergehenden Schutz …",
      "source":"gii","url":"/acts/fed_aufenthg_2004", …}
+  ],
+  "procedure_matches": [
+    {"id":"329468","gesta":"G013","status":"Überwiesen",
+     "watched":true,"source":"DIP",
+     "url":"https://dip.bundestag.de/vorgang/_/329468", …}
   ]
 }
 ```

@@ -46,6 +46,7 @@ from api.act_archive import (
     render_markdown_snapshot,
 )
 from api.search_engine import SearchEngine, normalize_search_text
+from api.procedure_search import search_procedures
 
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
@@ -269,7 +270,8 @@ def eu_index(q: str | None = Query(None, min_length=1),
 @app.get("/search")
 def search(q: str = Query(..., min_length=1),
            limit: int = Query(25, ge=1, le=200),
-           norm_limit: int = Query(50, ge=1, le=200)):
+           norm_limit: int = Query(50, ge=1, le=200),
+           procedure_limit: int = Query(20, ge=1, le=100)):
     """Ranked Unicode full-text search over acts and current norms.
 
     ``matches`` and ``total`` retain the original act-search contract.
@@ -282,6 +284,13 @@ def search(q: str = Query(..., min_length=1),
     previous title/abbreviation substring search instead of failing.
     """
     rows = _load("wiki")
+    # DIP has only a few hundred current procedures.  Count the full match set
+    # first so ``procedure_total`` follows the act/norm total contract, then
+    # expose only the requested page.
+    all_procedure_matches = search_procedures(
+        _load("hierarchy"), q, 10_000)
+    procedure_total = len(all_procedure_matches)
+    procedure_matches = all_procedure_matches[:procedure_limit]
     index_path = DATA_DIR / "search.sqlite"
     if not index_path.is_file():
         needle = normalize_search_text(q)
@@ -291,10 +300,12 @@ def search(q: str = Query(..., min_length=1),
                        or needle in normalize_search_text(r.get("title"))]
         matches = all_matches[:limit]
         return {"query": q, "total": len(all_matches), "matches": matches,
-                "result_total": len(all_matches),
+                "result_total": len(all_matches) + procedure_total,
                 "act_total": len(all_matches),
                 "norm_total": 0, "act_matches": matches,
-                "norm_matches": []}
+                "norm_matches": [],
+                "procedure_total": procedure_total,
+                "procedure_matches": procedure_matches}
 
     global _SEARCH_ENGINE
     with _SEARCH_LOCK:
@@ -340,7 +351,10 @@ def search(q: str = Query(..., min_length=1),
         for row in result["act_matches"]]
     result["act_total"] = len(seen)
     result["total"] = len(seen)
-    result["result_total"] = result["act_total"] + result["norm_total"]
+    result["procedure_total"] = procedure_total
+    result["procedure_matches"] = procedure_matches
+    result["result_total"] = (result["act_total"] + result["norm_total"]
+                              + result["procedure_total"])
     return result
 
 

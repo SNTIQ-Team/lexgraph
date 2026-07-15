@@ -78,3 +78,37 @@ def test_hierarchy_v2_keeps_flat_lists_and_adds_legal_layers(
     assert hierarchy["bund"]["layers"]["constitution"] == [wiki[0]]
     assert hierarchy["bund"]["layers"]["ordinances"] == [wiki[1]]
     assert hierarchy["bayern"]["layers"]["constitution"] == [wiki[2]]
+
+
+def test_hierarchy_keeps_full_searchable_dip_procedure_and_watch_metadata(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    long_title = ("Gesetz zur Änderung der Gewährung von Leistungen für "
+                  "Personen, die vorübergehenden Schutz beantragt haben "
+                  "(Leistungsrechtsanpassungsgesetz)")
+    procedure = {
+        "id": "329468", "titel": long_title, "datum": "2026-02-11",
+        "aktualisiert": "2026-02-12T10:57:00+01:00",
+        "beratungsstand": "Überwiesen", "gesta": "G013",
+        "sachgebiet": ["Soziale Sicherung"],
+        "initiative": ["Bundesregierung"],
+        "deskriptor": [{"name": "Ukraine"}],
+        "abstract": "Rechtskreiswechsel<br />SGB II &amp; AsylbLG",
+    }
+
+    def fake_load(source: str, name: str) -> list[dict]:
+        return [procedure] if (source, name) == ("dip", "vorgaenge.jsonl") else []
+
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"procedures":{"329468":{"queries":["Fiktion"]}}}',
+                     encoding="utf-8")
+    monkeypatch.setattr(web_data, "load", fake_load)
+    monkeypatch.setattr(web_data, "PROCEDURE_WATCHLIST", watch)
+
+    hierarchy = web_data.build_hierarchy([])
+    row = hierarchy["bund"]["pipeline"]["Überwiesen"][0]
+    assert row["title"] == long_title
+    assert row["summary"] == "Rechtskreiswechsel SGB II & AsylbLG"
+    assert row["descriptors"] == ["Ukraine"]
+    assert row["watched"] is True
+    assert row["watch"]["queries"] == ["Fiktion"]
+    assert row["url"].endswith("/329468")

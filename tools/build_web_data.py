@@ -16,6 +16,7 @@ Outputs:
 """
 from __future__ import annotations
 
+import html
 import json
 import re
 import sys
@@ -43,6 +44,7 @@ HUBS = {"WIRD_GESETZ", "BGBl (verkündet)", "Gesetzgebungsverfahren",
 # a conservative Wayback pass supplies sparse historical transitions where two
 # archived states can be tied unambiguously to one official FFN event.
 BY_DIFF_LEDGER = ROOT / "data" / "by_diffs.jsonl"
+PROCEDURE_WATCHLIST = ROOT / "data" / "procedure_watchlist.json"
 
 
 def _update_by_diff_ledger() -> None:
@@ -551,13 +553,58 @@ def _legal_layers(acts: list[dict]) -> dict[str, list[dict]]:
     return layers
 
 
+def _plain_dip_text(value: object) -> str:
+    """Turn the small HTML fragments returned by DIP into searchable text."""
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<\s*br\s*/?\s*>", "\n", text,
+                  flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return " ".join(text.split())
+
+
+def _procedure_watchlist() -> dict[str, dict]:
+    if not PROCEDURE_WATCHLIST.is_file():
+        return {}
+    payload = json.loads(PROCEDURE_WATCHLIST.read_text(encoding="utf-8"))
+    procedures = payload.get("procedures") or {}
+    return {str(key): value for key, value in procedures.items()
+            if isinstance(value, dict)}
+
+
+def _procedure_row(vg: dict, watchlist: dict[str, dict]) -> dict:
+    procedure_id = str(vg.get("id") or "")
+    watch = watchlist.get(procedure_id)
+    descriptors = sorted({str(item.get("name"))
+                          for item in vg.get("deskriptor") or []
+                          if isinstance(item, dict) and item.get("name")})
+    row = {
+        "id": procedure_id,
+        "title": str(vg.get("titel") or ""),
+        "date": vg.get("datum"),
+        "updated": vg.get("aktualisiert"),
+        "status": vg.get("beratungsstand") or "?",
+        "gesta": vg.get("gesta"),
+        "topics": list(vg.get("sachgebiet") or []),
+        "initiators": list(vg.get("initiative") or []),
+        "descriptors": descriptors,
+        "summary": _plain_dip_text(vg.get("abstract")),
+        "url": (f"https://dip.bundestag.de/vorgang/_/{procedure_id}"
+                if procedure_id else None),
+        "watched": watch is not None,
+    }
+    if watch is not None:
+        row["watch"] = watch
+    return row
+
+
 def build_hierarchy(wiki_idx: list[dict]) -> dict:
     vorgaenge = load("dip", "vorgaenge.jsonl")
+    watchlist = _procedure_watchlist()
     by_stand: dict[str, list] = {}
     for vg in vorgaenge:
-        by_stand.setdefault(vg.get("beratungsstand") or "?", []).append(
-            {"title": (vg.get("titel") or "")[:120],
-             "date": vg.get("datum")})
+        status = vg.get("beratungsstand") or "?"
+        by_stand.setdefault(status, []).append(
+            _procedure_row(vg, watchlist))
     bills = load("bay_landtag", "bills.jsonl")
     by_status: dict[str, list] = {}
     for b in bills:
@@ -821,6 +868,12 @@ def main() -> int:
     for p_ in patches:
         sts[p_["status"]] = sts.get(p_["status"], 0) + 1
     bills = load("bay_landtag", "bills.jsonl")
+    watched_procedures = [
+        {key: row.get(key) for key in
+         ("id", "title", "status", "date", "updated", "gesta", "url")}
+        for group in hierarchy["bund"]["pipeline"].values()
+        for row in group if row.get("watched")
+    ]
     summary = {
         "built_at": datetime.now(timezone.utc).isoformat(
             timespec="seconds"),
@@ -828,6 +881,7 @@ def main() -> int:
         "acts_by": sum(1 for a in wiki_idx if a["juris"] == "DE-BY"),
         "patches": sts,
         "vorgaenge": len(load("dip", "vorgaenge.jsonl")),
+        "watched_procedures": watched_procedures,
         "bay_bills": len(bills),
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),

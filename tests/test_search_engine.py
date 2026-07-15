@@ -77,8 +77,12 @@ def engine(tmp_path: Path) -> SearchEngine:
         "fed_sgb_3": {
             "id": "fed_sgb_3", "jurabk": "SGB 3", "juris": "DE",
             "title": "Sozialgesetzbuch Drittes Buch (III)",
-            "norms": [{"enbez": "§ 74", "titel": "Assistierte Ausbildung",
-                       "text": "Ausbildungsbegleitende Unterstützung."}],
+            "norms": [
+                {"enbez": "§ 74", "titel": "Assistierte Ausbildung",
+                 "text": "Ausbildungsbegleitende Unterstützung."},
+                {"enbez": "§ 99", "titel": "Nur ein Texttreffer",
+                 "text": "Ukraine steht hier ohne fachlichen Bezug."},
+            ],
         },
         "fed_sgb_12": {
             "id": "fed_sgb_12", "jurabk": "SGB 12", "juris": "DE",
@@ -121,7 +125,7 @@ def engine(tmp_path: Path) -> SearchEngine:
             for act in details.values()]
     path = tmp_path / "search.sqlite"
     counts = build_search_database(details, path, SYNONYMS)
-    assert counts == {"acts": 10, "norms": 16}
+    assert counts == {"acts": 10, "norms": 17}
     search = SearchEngine(path, wiki)
     yield search
     search.close()
@@ -157,6 +161,105 @@ def test_multilingual_ukraine_aliases_find_acts_and_relevant_norm(
     assert result["result_total"] == \
         result["act_total"] + result["norm_total"]
     assert all("<" not in row["snippet"] for row in result["norm_matches"])
+
+
+def test_ukraine_concept_priority_precedes_title_and_body_matches(
+        engine: SearchEngine) -> None:
+    result = engine.search("Ukraine", act_limit=10, norm_limit=50)
+    rows = result["norm_matches"]
+    positions = {(row["jurabk"], row["enbez"]): position
+                 for position, row in enumerate(rows)}
+    transition_norms = {
+        ("SGB 2", "§ 74"),
+        ("SGB 12", "§ 146"),
+        ("SGB 9 2018", "§ 150a"),
+        ("SGB 5", "§ 417"),
+        ("AsylbLG", "§ 18"),
+        ("AufenthG 2004", "§ 81"),
+    }
+    ukraine_regulations = {
+        ("UkraineAufenthÜV", "§ 1"),
+        ("UkraineAufenthÜV", "§ 2"),
+        ("UkraineAufenthFGV", "§ 1"),
+        ("UkraineAufenthFGV", "§ 2"),
+    }
+
+    assert positions[("AufenthG 2004", "§ 24")] == 0
+    assert transition_norms <= positions.keys()
+    assert ukraine_regulations <= positions.keys()
+    # Curated priority 3 transition norms cannot be displaced by the many
+    # literal Ukraine fields on priority 2 regulation norms.
+    assert max(positions[key] for key in transition_norms) < \
+        min(positions[key] for key in ukraine_regulations)
+    first_plain_text = next(
+        position for position, row in enumerate(rows)
+        if "concept" not in row["matched_fields"])
+    assert max(positions[key] for key in transition_norms |
+               ukraine_regulations) < first_plain_text
+
+
+@pytest.mark.parametrize("query", [
+    "Fiktionsbescheinigung",
+    "Fiktionswirkung",
+    "Aufenthaltsfiktion",
+])
+def test_fiktionsbescheinigung_concept_prioritizes_transition_norms(
+        engine: SearchEngine, query: str) -> None:
+    result = engine.search(query, act_limit=10, norm_limit=50)
+    rows = result["norm_matches"]
+    required = {
+        ("AufenthG 2004", "§ 81"),
+        ("SGB 2", "§ 74"),
+        ("SGB 12", "§ 146"),
+        ("SGB 9 2018", "§ 150a"),
+        ("SGB 5", "§ 417"),
+        ("AsylbLG", "§ 18"),
+    }
+    positions = {(row["jurabk"], row["enbez"]): position
+                 for position, row in enumerate(rows)}
+
+    assert required <= positions.keys()
+    assert positions[("AufenthG 2004", "§ 81")] == 0
+    assert all("concept" in rows[positions[key]]["matched_fields"]
+               for key in required)
+    # AsylbLG § 1 contains the word in its body but is not one of the
+    # curated transitional targets for this concept.
+    if ("AsylbLG", "§ 1") in positions:
+        assert max(positions[key] for key in required) < \
+            positions[("AsylbLG", "§ 1")]
+
+
+@pytest.mark.parametrize("query", [
+    "Rechtskreiswechsel",
+    "Rechtskreiswechsel Ukraine",
+    "Leistungssystemwechsel Ukraine",
+    "Wechsel vom SGB II zum AsylbLG",
+    "Leistungsrechtsanpassungsgesetz",
+])
+def test_rechtskreiswechsel_ranks_social_transition_before_residence_norms(
+        engine: SearchEngine, query: str) -> None:
+    result = engine.search(query, act_limit=10, norm_limit=50)
+    rows = result["norm_matches"]
+    positions = {(row["jurabk"], row["enbez"]): position
+                 for position, row in enumerate(rows)}
+    social = {
+        ("SGB 2", "§ 74"),
+        ("SGB 12", "§ 146"),
+        ("SGB 9 2018", "§ 150a"),
+        ("SGB 5", "§ 417"),
+        ("AsylbLG", "§ 18"),
+    }
+    residence = {
+        ("AufenthG 2004", "§ 24"),
+        ("AufenthG 2004", "§ 81"),
+    }
+
+    assert social | residence <= positions.keys()
+    assert {key for key, position in positions.items() if position < 2} == {
+        ("SGB 2", "§ 74"), ("SGB 12", "§ 146")}
+    assert max(positions[key] for key in social) < \
+        min(positions[key] for key in residence)
+    assert all("concept" in row["matched_fields"] for row in rows)
 
 
 @pytest.mark.parametrize(
