@@ -222,7 +222,11 @@ def fetch_council_development(http: Http, config: dict,
     if not url or not document:
         return None
     try:
-        response = http.get(url, timeout=45)
+        # Consilium sometimes leaves non-browser clients waiting for its
+        # browser-check response.  This is supplementary metadata with a
+        # checked-in, explicitly labelled seed, so do not let three long
+        # transport retries hold the twice-daily production refresh.
+        response = http.get(url, timeout=12, retries=1)
         response.raise_for_status()
         parsed = parse_council_register(response.text, config, fetched_at)
         seed = _council_seed(config, fetched_at)

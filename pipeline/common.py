@@ -71,8 +71,9 @@ class Http:
         if wait > 0:
             time.sleep(wait)
         timeout = kw.pop("timeout", 30)   # pop once — retries keep it
+        attempts = max(1, int(kw.pop("retries", self.retries)))
         last_exc: Exception | None = None
-        for attempt in range(self.retries):
+        for attempt in range(attempts):
             try:
                 self._last = time.time()
                 r = self.s.get(url, timeout=timeout, **kw)
