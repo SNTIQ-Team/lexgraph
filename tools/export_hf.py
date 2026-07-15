@@ -76,7 +76,7 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
         "QFS arena graph export"),
     "watched_procedures.json": (
         ROOT / "web" / "data" / "watched_procedures.json",
-        "persistent DIP/EUR-Lex watch state with embedded change history"),
+        "persistent DIP/EUR-Lex watch state with evidence checks, chronology and qualitative forecasts"),
     "amendment_fates.json": (
         ROOT / "web" / "data" / "amendment_fates.json",
         "reviewed parliamentary document chains and current-law checks"),
@@ -209,11 +209,14 @@ available source only supplies amendment excerpts rather than a lossless
 consolidated snapshot; the dataset does not imply exact historical text where
 the source archive cannot prove it.
 
-`watched_procedures.json` preserves the current DIP/EUR-Lex observations and
-their embedded status-change history. Terminal procedures remain archived but
-leave the active polling set. `amendment_fates.json` separates reviewed roles
-in a parliamentary document chain from the mechanical checks performed against
-the current consolidated corpus.
+`watched_procedures.json` preserves the current DIP/EUR-Lex observations,
+official document chronology and embedded status-change history. Its
+`analysis` object keeps verified facts, deterministic inferences and a
+qualitative forecast separate; likelihood is not presented as a statistically
+calibrated probability. Terminal procedures remain archived but leave the
+active polling set. `amendment_fates.json` separates reviewed roles in a
+parliamentary document chain from the mechanical checks performed against the
+current consolidated corpus.
 
 Every source is documented in the repository's `docs/SOURCES.md`; reproduce
 the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts
