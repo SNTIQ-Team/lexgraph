@@ -2,8 +2,10 @@
 
 Lexgraph models German and EU law as a temporal legal graph: consolidated text,
 dated amendments, official legislative stages, court decisions and explicit
-links between them. The optional `git.json` projection is one visualization of
-that history; it is not the product name or a claim about legal hierarchy.
+links between them. `git.json` is the stable **Laws as Git** projection: a
+navigation model for HEAD, commits, open/closed branches and evidence-bound
+merges.
+The metaphor never overrides the legal status stated by the official source.
 
 Lexgraph's "API" is four things:
 
@@ -55,7 +57,7 @@ Files written:
 | `watched_procedures.json` | Persistent DIP/EUR-Lex watch state and change history. |
 | `amendment_fates.json` | Reviewed document chains plus mechanical current-law checks. |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
-| `git.json` | Dated legislative chronology; legacy filename kept for API compatibility. |
+| `git.json` | Laws-as-Git event log: HEAD context, commits, open/closed branches and evidence-bound merges. |
 
 JSON is minified (`separators=(",",":")`, `ensure_ascii=False`). All dates are
 ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
@@ -577,11 +579,12 @@ the legislative process.
 
 ---
 
-## `git.json` (legacy filename)
+## `git.json` — Laws as Git
 
-The dated legislative chronology, laned by jurisdiction and newest first.
-The filename and `commits` field are compatibility names; consumers should
-interpret each row as a legal event, not as a software commit.
+The stable Laws-as-Git event log, laned by jurisdiction and newest first.
+`commit`, `open`, `closed` and `merge` are deliberate navigation concepts. Consumers
+must still use `refs`, status and source evidence to determine legal effect;
+an open branch is not geltendes Recht and a merge is not blanket supervision.
 
 ```json
 {
@@ -609,10 +612,10 @@ interpret each row as a legal event, not as a software commit.
 |-------|---------|
 | `lanes` | The four jurisdiction lanes, in index order. |
 | `total` | Event count. |
-| `commits[].hash` | Stable 8-hex CRC32 event identifier (legacy field name). |
+| `commits[].hash` | Stable 8-hex CRC32 commit/event identifier. |
 | `commits[].date` | Event date. |
 | `commits[].lane` | **Integer** index into `lanes` (`0`=EU, `1`=Bund, `2`=Bayern, `3`=Länder). |
-| `commits[].type` | Compatibility enum: `commit` = change in force, `open` = pending proposal, `merge` = a legally specific EU implementation/applicability link. |
+| `commits[].type` | Git-state enum: `commit` = documented promulgated event, `open` = pending proposal, `closed` = rejected/not-merged branch, `merge` = a legally specific EU implementation/applicability link. |
 | `commits[].actor` | `Bundestag`, `Landtag Bayern`, `EU`, `Landtag <Land>`. |
 | `commits[].msg` | Title (≤120 chars). |
 | `commits[].acts` | Affected acts (≤6). |
@@ -620,6 +623,7 @@ interpret each row as a legal event, not as a software commit.
 | `commits[].refs` | Status / stand tags. |
 | `commits[].merge_ref` | For `type=merge`: the related CELEX id (e.g. `32023L2225`), else `null`; this does not imply blanket EU supervision. |
 | `commits[].doc` | Source document (`bt-ds:…`, Drs.-Nr., …). |
+| `commits[].targets_verified` | For DIP-derived rows, `false`: displayed acts/paragraphs came from draft patch instructions and are not claimed as final-text attribution. |
 
 Per-lane extras: EU commits add `celex`; Bavarian add `url` and `gvbl`;
 Länder add `url`.
@@ -713,6 +717,7 @@ database.
 | `GET /version` | build id | `dataset`, `version`, `built_at` |
 | `GET /stats` | `summary.json` | the dashboard counts, verbatim |
 | `GET /data-policy` | `data_policy.json` | public-build mode and excluded source families |
+| `GET /federal-history?act=&tier=&limit=&offset=` | `verified_federal_events.json` | official-only state pairs and current-text-verified DIP patches |
 | `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
@@ -783,7 +788,7 @@ curl http://127.0.0.1:8010/acts/fed_asylblg
 
 ## `GET /git?lane=&limit=`
 
-Compatibility route for the dated chronology in `git.json`. Optional `lane` filters by the integer lane index
+Stable Laws-as-Git endpoint backed by `git.json`. Optional `lane` filters by the integer lane index
 (`0`=EU, `1`=Bund, `2`=Bayern, `3`=Länder); `limit` ∈ [1, 1000], default 100.
 
 ```bash
@@ -797,6 +802,29 @@ curl 'http://127.0.0.1:8010/git?lane=0&limit=3'
   "acts": [], "paras": [], "refs": [ … ], "merge_ref": null, "doc": "…",
   "celex": "…" } ] }
 ```
+
+## `GET /federal-history?act=&tier=&limit=&offset=`
+
+Returns the public federal-history ledger without reading the quarantined
+Buzer cache. `act` is an exact case-insensitive JurAbk filter; `tier` is
+`exact`, `current_text_correspondence`, or `metadata_only`. `exact` means Lexgraph captured
+two different official GII states and hashed both sides. Its `observed_at` is
+a retrieval date, **not** a silently inferred legal effective date.
+
+```bash
+curl 'http://127.0.0.1:8010/federal-history?act=AsylbLG&tier=current_text_correspondence'
+```
+
+Each event carries official `evidence[]`, derivation metadata and a
+verification tier. A `current_text_correspondence` row proves only a sufficiently
+distinctive correspondence with the current official norm; it leaves
+`effective_at` and `published_at` empty. A procedure-state date is exposed as
+`procedure_status_at`; a bill-level commencement date may be retained as
+`draft_bill_declared_effective_at`, but neither is asserted as a promulgation
+or individual patch effective date. The
+corresponding act detail embeds its rows in
+`verified_history[]`; `cross_checks[]` may additionally contain a secondary,
+non-authoritative Buzer deep link.
 
 ## `GET /eu-index?q=&kind=&limit=&offset=`
 

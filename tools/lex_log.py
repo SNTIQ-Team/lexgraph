@@ -5,8 +5,8 @@
     python3 tools/lex_log.py "SGB 2" --all
 
 Federal sections: HEAD (GII), pending patches in the Bundestag pipeline
-(DIP, status ladder), promulgated-not-yet-in-force (buzer /v.htm),
-amendment back-history (buzer, 2006+).
+(DIP, status ladder). Private Buzer candidates are shown only with the explicit
+``LEXGRAPH_INCLUDE_QUARANTINED=1`` research switch.
 Bavarian sections: HEAD (BAYERN.RECHT XML), Landtag WP19 bills touching
 the act, GVBl/BayMBl promulgations (BayRS-Gliederungsnummer join),
 back-history (ffn Fortführungsnachweis + XML aenderungsverlauf).
@@ -16,6 +16,7 @@ never as geltendes Recht — the VISION acceptance discipline.
 from __future__ import annotations
 
 import argparse
+import os
 import re as _re
 import sys
 from pathlib import Path
@@ -49,6 +50,10 @@ BY_NEEDLES = {
 def load(source: str, name: str) -> list[dict]:
     snap = latest_snapshot(source)
     return list(read_jsonl(snap / name)) if snap else []
+
+
+def include_private_candidates() -> bool:
+    return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
 
 
 def pick_act(query: str, acts: list[dict]) -> dict | None:
@@ -96,14 +101,15 @@ def federal_log(act: dict, show_all: bool) -> None:
                   f"{p['beratungsstand'] or ''}")
     if done:
         vg = {p["procedure"] for p in done}
-        print(f"\n-- merged this WP: {len(done)} patch cmd(s) from "
-              f"{len(vg)} verkündete Gesetze")
+        print(f"\n-- promulgated procedures: {len(done)} draft patch "
+              f"candidate(s) from {len(vg)} procedure(s); final-text "
+              "attribution not proven here")
     if dead:
         vg = {p["procedure"] for p in dead}
         print(f"-- killed: {len(dead)} patch cmd(s) from {len(vg)} "
               f"rejected/withdrawn bills (history, zero effect)")
 
-    bz = latest_snapshot("buzer")
+    bz = latest_snapshot("buzer") if include_private_candidates() else None
     if bz:
         up = load("buzer", "upcoming.jsonl")
         vs = [v for v in load("buzer", "versions.jsonl")

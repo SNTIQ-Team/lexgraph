@@ -8,11 +8,12 @@ Read-only over data/snapshots — NO network, NO snapshot writes.
 
 blame ACT REF     every known amendment/patch touching one §/Art.,
                   newest first, across three tiers:
-                    buzer     federal back-history 2006+ (affected-§
+                    buzer     private federal candidates 2006+ (affected-§
                               list parsed from the synopsis title:
                               "für § 1 , § 1a , § 11 Artikel 4 <act>";
                               GG rows use "Artikel 104b" tokens);
-                              non-authoritative
+                              non-authoritative; visible only with
+                              LEXGRAPH_INCLUDE_QUARANTINED=1
                     amtlich   Bavarian BayRS: ffn Fortführungsnachweis
                               merged with the XML aenderungsverlauf on
                               the GVBl page (same key as lex_log.py) —
@@ -27,12 +28,10 @@ blame ACT REF     every known amendment/patch touching one §/Art.,
                   they MAY touch REF; hiding them would be dishonest.
 
 checkout ACT --at YYYY-MM-DD
-                  which consolidated version was in force at a date:
-                  the latest version row dated <= AT (buzer for the
-                  federal corpus, amtlich ffn/XML for Bavaria), how
-                  many amendments came after AT, and the synopsis of
-                  the NEXT change — that diff is exactly what changed
-                  next.
+                  Bavaria uses its official ffn/XML chain. Public federal
+                  mode refuses to manufacture a lossless checkout and points
+                  to exact GII observations; private mode can inspect the
+                  latest Buzer candidate dated <= AT.
 
 Acts resolve case-insensitively via jurabk (federal gii acts.jsonl
 first, then Bavarian bayern_recht acts.jsonl); REF accepts "3a",
@@ -41,9 +40,9 @@ first, then Bavarian bayern_recht acts.jsonl); REF accepts "3a",
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
-from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -70,6 +69,10 @@ DATE_ARG_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 def load(source: str, name: str) -> list[dict]:
     snap = latest_snapshot(source)
     return list(read_jsonl(snap / name)) if snap else []
+
+
+def include_private_candidates() -> bool:
+    return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
 
 
 def pick_act(query: str, acts: list[dict]) -> dict | None:
@@ -205,7 +208,6 @@ def patch_events(jurabk: str, ref: str) -> list[dict]:
     groups: dict[tuple, list[dict]] = {}
     for p in mine:
         groups.setdefault((p["procedure"], p["status"]), []).append(p)
-    today = date.today().isoformat()
     events = []
     for (_, status), ps in groups.items():
         p = ps[0]
@@ -214,8 +216,8 @@ def patch_events(jurabk: str, ref: str) -> list[dict]:
         badge = f"{BADGE[status]:12} [pipeline]"
         if status in PENDING:
             badge += " — NOT geltendes Recht"
-        elif status == "published" and d and d > today:
-            badge += f" — in Kraft ab {d}"
+        elif status == "published":
+            badge += " — draft command; final attribution unverified"
         locs = sorted({subloc(x["ref"]) for x in ps} - {""})
         lines = [p["procedure_title"][:64]]
         loc = "; ".join(locs[:4]) + (" …" if len(locs) > 4 else "")
@@ -243,28 +245,29 @@ def cmd_blame(args: argparse.Namespace) -> int:
 
     if corpus == "federal":
         sym = "Artikel" if jb == "GG" else "§"
-        for v in load("buzer", "versions.jsonl"):
-            if v["jurabk"] != jb:
-                continue
-            toks, amending = parse_buzer_title(v["title"])
-            names = [t for t, _ in toks]
-            if names and ref not in names:
-                continue
-            if names:
-                badge = "● amended   [buzer — non-authoritative]"
-                if dict(toks)[ref]:
-                    badge += f"  ({sym} {ref} NEU eingefügt)"
-            else:
-                badge = "? unspezif. [buzer — no §-list in title]"
-            shown = [r + (" (neu)" if neu else "") for r, neu in toks]
-            lines = [amending[:64]]
-            if shown:
-                lines.append(f"touches {sym} " + ", ".join(shown[:12])
-                             + (" …" if len(shown) > 12 else ""))
-            lines.append(v["synopsis_url"])
-            events.append({"sort": v["date"], "label": v["date"],
-                           "badge": badge, "lines": lines,
-                           "kind": "amended" if names else "unspec"})
+        if include_private_candidates():
+            for v in load("buzer", "versions.jsonl"):
+                if v["jurabk"] != jb:
+                    continue
+                toks, amending = parse_buzer_title(v["title"])
+                names = [t for t, _ in toks]
+                if names and ref not in names:
+                    continue
+                if names:
+                    badge = "● amended   [buzer — non-authoritative]"
+                    if dict(toks)[ref]:
+                        badge += f"  ({sym} {ref} NEU eingefügt)"
+                else:
+                    badge = "? unspezif. [buzer — no §-list in title]"
+                shown = [r + (" (neu)" if neu else "") for r, neu in toks]
+                lines = [amending[:64]]
+                if shown:
+                    lines.append(f"touches {sym} " + ", ".join(shown[:12])
+                                 + (" …" if len(shown) > 12 else ""))
+                lines.append(v["synopsis_url"])
+                events.append({"sort": v["date"], "label": v["date"],
+                               "badge": badge, "lines": lines,
+                               "kind": "amended" if names else "unspec"})
         events += patch_events(jb, ref)
     else:
         bay = bavarian_events(jb)
@@ -318,6 +321,13 @@ def cmd_checkout(args: argparse.Namespace) -> int:
     title = act.get("long_title") or ""
     print(f"== checkout {jb} @ {at} — {title[:42]}".rstrip())
 
+    if corpus == "federal" and not include_private_candidates():
+        print("   federal corpus · official public history only")
+        print("\n  no lossless official consolidated checkout is available "
+              "for this date; use /federal-history for exact observed GII "
+              "state pairs. Private Buzer candidates require "
+              "LEXGRAPH_INCLUDE_QUARANTINED=1.")
+        return 0
     if corpus == "federal":
         vs = sorted((v for v in load("buzer", "versions.jsonl")
                      if v["jurabk"] == jb), key=lambda v: v["date"])

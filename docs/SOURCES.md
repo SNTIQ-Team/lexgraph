@@ -14,7 +14,7 @@ the CELLAR breadth index were added from their current fetcher contracts on
 | **Rechtsprechung im Internet (RII)** (BMJV/BfJ) | default-off / migration pending | **official — corpus-relevant federal decisions already retrieved** | seven rolling RSS feeds + official ZIP/XML records; retained snapshot is cumulative | no scheduled intake; moving to NeuRIS API |
 | **OLDP** (openlegaldata.io) | live | research — bulk case graph (not in the current export) | 423,944 dated decisions, 18.6M case→§ citation edges | ~1 week ingest lag |
 | **NeuRIS** (testphase.rechtsinformationen.bund.de) | live | **secondary today, primary-designate** | LegalDocML with native temporal ELIs (`{pointInTime}/{version}`), changelog endpoint, forward-accruing | continuous (Testphase) |
-| **buzer.de** | quarantined / permission pending | manual QA reference only | private version/synopsis database since 2006 | no scheduled crawl |
+| **buzer.de** | private candidates + public deep links | discovery/manual QA and one-click cross-check only | private version/synopsis database since 2006 is not republished | no scheduled crawl |
 | **GII** (gesetze-im-internet.de) | live | seed_only — current HEAD | none (current Fassung only) | continuous consolidation, days–weeks lag |
 | **gesetze-bayern.de** (BAYERN.RECHT) | live | **primary — Bavaria HEAD + back-history** (upgraded 2026-07-06) | ffn register carries per-act Fortführungsnachweis amendment chains; `/Content/Zip/<key>` = structured XML (satz.nr, typed verweis incl. EU) | few working days after GVBl |
 | **Internet Archive Wayback** (archived BAYERN.RECHT pages) | live/cache-first | secondary retrieval channel — sparse Bavarian old/new text | archived official per-norm pages from 2016+; only one-to-one state/event matches are exported | one-time backfill + cached reruns |
@@ -72,8 +72,10 @@ the CELLAR breadth index were added from their current fetcher contracts on
   a reuse licence. Although individual statutory passages are official works,
   the private consolidation, version segmentation and synopsis alignment may
   be protected as a database under §§ 87a ff. UrhG. Both fetchers are
-  default-off, existing snapshots are quarantined, and public web/HF builds
-  exclude them until the operator grants written database-reuse permission.
+  default-off and existing snapshots are quarantined. Public web/HF builds do
+  not load them. A small curated mapping supplies only direct per-act history
+  links; published history rows come from the official-only verification
+  pipeline in `tools/federal_history.py`.
 - **OLDP**: keyless REST + bulk dumps; laws under ODbL, citation graph
   CC-BY; alive again in 2026 after a dump hiatus.
 - **gesetze-bayern.de**: robots fully permissive; doc keys ≠ official
@@ -108,6 +110,8 @@ the CELLAR breadth index were added from their current fetcher contracts on
 HEAD (current law)     GII (federal) + gesetze-bayern XML (Land) + CELLAR (EU)
 Forward history        daily GII snapshots (builddate diff) + NeuRIS ELIs
                        + gesetze-bayern builddate
+Verified federal rows  exact adjacent GII state pairs + DIP patch wording
+                       that independently matches the current official norm
 Back history           NeuRIS temporal/changelog data + BundesGit checkpoints
                        (2013, 2022) + BGBl ELI archive (2023+)
                        + Bavaria ffn Fortführungsnachweis chains

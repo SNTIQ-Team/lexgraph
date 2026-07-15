@@ -65,9 +65,12 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
     "bayern_word_diffs.jsonl": (
         ROOT / "data" / "by_diffs.jsonl",
         "verified archived-state and forward daily Bavarian text changes"),
+    "git.json": (
+        ROOT / "web" / "data" / "git.json",
+        "Laws-as-Git event log with commits, open/closed branches and evidence-bound merges"),
     "chronology.json": (
         ROOT / "web" / "data" / "git.json",
-        "dated legislative-event chronology (legacy API filename: git.json)"),
+        "compatibility alias of git.json for existing dataset consumers"),
     "graph.json": (
         ROOT / "web" / "data" / "graph.json",
         "QFS arena graph export"),
@@ -77,6 +80,9 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
     "amendment_fates.json": (
         ROOT / "web" / "data" / "amendment_fates.json",
         "reviewed parliamentary document chains and current-law checks"),
+    "verified_federal_events.json": (
+        ROOT / "web" / "data" / "verified_federal_events.json",
+        "official GII state pairs plus explicitly non-historical DIP/current-text correspondences"),
     "data_policy.json": (
         ROOT / "web" / "data" / "data_policy.json",
         "machine-readable exclusions for third-party database rights"),
@@ -167,7 +173,7 @@ tags:
   - eu-law
   - court-decisions
   - temporal-data
-pretty_name: Lexgraph — German and EU legal chronology
+pretty_name: Lexgraph — Laws as Git for German and EU law
 configs:
 {configs}
 ---
@@ -175,9 +181,14 @@ configs:
 # Lexgraph dataset
 
 The data plane of **[Lexgraph](https://github.com/SNTIQ-Team/lexgraph)** —
-German legislation modelled as a temporal, multi-authority change history
+German legislation modelled as **Laws as Git**: a temporal, multi-authority
+event log with HEAD, commits, open/closed branches and evidence-bound merges
 (Bund / Bayern / EU; Länder records only after verification at the originating
 Landtag). Built **{today}**.
+
+Git is a navigation metaphor, not a substitute for legal status. Every row's
+official source and status controls whether it is current law, a pending branch
+or a documented implementation/applicability link.
 
 Lexgraph is deliberately two-layered. The German migration, asylum, social-law
 and related practice corpus has current full text and change history where the

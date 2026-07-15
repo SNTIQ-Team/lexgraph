@@ -42,10 +42,11 @@ archived official pages yield an unambiguous state transition (sparse from
 2026. Missing historical diffs are left missing rather than reconstructed.
 
 Third-party database rights are treated separately from copyright in the
-individual legal texts. Buzer and broad Parlamentsspiegel snapshots are kept
-out of the public API/Hugging Face export unless written reuse permission is
-obtained; see [`docs/RIGHTS.md`](docs/RIGHTS.md). Federal back-history is being
-rebuilt from official BGBl/NeuRIS data and Lexgraph's own daily snapshots.
+individual legal texts. Buzer's private snapshots remain an internal candidate
+and QA layer; public act pages may link to the corresponding Buzer history as a
+non-authoritative cross-check, but do not copy its database. Public federal
+history is rebuilt from official GII/DIP/BGBl/NeuRIS evidence and Lexgraph's
+own state-diff engine. See [`docs/RIGHTS.md`](docs/RIGHTS.md).
 
 ## What's here
 
@@ -59,8 +60,9 @@ rebuilt from official BGBl/NeuRIS data and Lexgraph's own daily snapshots.
   `build_web_data.py` exports web JSON and the SQLite FTS5 full-text index;
   `export_hf.py` builds the versioned Hugging Face dataset; `lex_log.py` and
   `lex_blame.py` inspect one act's chronology and provenance.
-- **`web/`** — a self-contained visualizer: Wiki & Realtime feed, a dated
-  legislative chronology, competence-aware legal layers, a full-text Markdown
+- **`web/`** — a self-contained visualizer: Wiki & Realtime feed, **Laws as
+  Git** (HEAD, commits, open/closed branches and evidence-bound merge links),
+  competence-aware legal layers, a full-text Markdown
   reader/download (whole act or one §/Art.), and the force-directed arena.
   DE/EN/RU/UA. Only the current consolidated snapshot is labelled exact;
   incomplete historical source chains remain visibly partial.
@@ -76,6 +78,7 @@ python3 -m http.server -d web 8777 # then open http://localhost:8777
 uvicorn api.server:server --port 8010   # REST API over web/data (see docs/API.md)
 curl 'localhost:8010/acts/fed_aufenthg_2004/markdown?norm=%C2%A7%2024'
 python3 tools/lex_log.py AsylbLG   # chronology for one act
+curl 'localhost:8010/federal-history?act=AsylbLG&tier=current_text_correspondence'
 ```
 
 Data ships via the Hugging Face dataset; the repository carries the pipeline

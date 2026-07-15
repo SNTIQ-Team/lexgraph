@@ -30,7 +30,8 @@ SERVICE_INDEX = {
         "/acts", "/acts/{id}", "/acts/{id}/archive",
         "/acts/{id}/markdown", "/decisions", "/decisions/{id}",
         "/git", "/graph", "/hierarchy", "/eu-index",
-        "/procedures/watched", "/amendment-fates", "/search", "/digest",
+        "/procedures/watched", "/amendment-fates", "/federal-history",
+        "/search", "/digest",
     ],
 }
 
@@ -119,12 +120,13 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep">/acts/{id}/markdown</td><td class="what">full act or one §/Art. as Markdown; optional download</td></tr>
     <tr><td class="ep"><a href="decisions">/decisions</a></td><td class="what">court decisions (Rechtsprechung)</td></tr>
     <tr><td class="ep">/decisions/{id}</td><td class="what">one complete exported decision row</td></tr>
-    <tr><td class="ep"><a href="git">/git</a></td><td class="what">dated legal chronology (legacy route name)</td></tr>
+    <tr><td class="ep"><a href="git">/git</a></td><td class="what">Laws as Git — commits, open/closed branches and evidence-bound merges</td></tr>
     <tr><td class="ep"><a href="graph">/graph</a></td><td class="what">the QFS arena export</td></tr>
     <tr><td class="ep"><a href="hierarchy">/hierarchy</a></td><td class="what">jurisdiction tree (EU / Bund / Bayern / Länder)</td></tr>
     <tr><td class="ep"><a href="eu-index">/eu-index</a></td><td class="what">all in-force EU directives + basic regulations</td></tr>
     <tr><td class="ep"><a href="procedures/watched">/procedures/watched</a></td><td class="what">tracked DIP + EUR-Lex procedures and status history</td></tr>
     <tr><td class="ep"><a href="amendment-fates">/amendment-fates</a></td><td class="what">reviewed amendment chains + current-law checks</td></tr>
+    <tr><td class="ep"><a href="federal-history">/federal-history</a></td><td class="what">official-only verified federal state and patch events</td></tr>
     <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>
   </table>

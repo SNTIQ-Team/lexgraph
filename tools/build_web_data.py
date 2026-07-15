@@ -13,6 +13,7 @@ Outputs:
     web/data/gii_catalog.json  every official GII act as metadata only
     web/data/watched_procedures.json  persistent DIP/EUR-Lex watch state
     web/data/amendment_fates.json     reviewed document-chain validations
+    web/data/verified_federal_events.json  official-only federal history
     web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
@@ -36,6 +37,7 @@ from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
 from api.search_engine import build_search_database       # noqa: E402
 from procedure_analysis import analyse_procedure           # noqa: E402
+from federal_history import build_public_federal_history    # noqa: E402
 
 WEB = ROOT / "web" / "data"
 
@@ -63,6 +65,7 @@ PROCEDURE_WATCHLIST = ROOT / "data" / "procedure_watchlist.json"
 PROCEDURE_WATCH_STATE = ROOT / "data" / "procedure_watch_state.json"
 PROCEDURE_WATCH_HISTORY = ROOT / "data" / "procedure_watch_history.jsonl"
 AMENDMENT_FATES = ROOT / "data" / "amendment_fates.json"
+BUZER_CROSS_CHECKS = ROOT / "data" / "buzer_cross_checks.json"
 
 # These snapshots may be retained locally for research/verification, but they
 # are not part of the public data plane without separate database-reuse
@@ -76,6 +79,16 @@ QUARANTINED_SOURCES = frozenset({
 def include_quarantined_sources() -> bool:
     """Explicit private/research opt-in; public builds must leave this off."""
     return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+
+
+def load_buzer_cross_checks() -> dict[str, int]:
+    """Small, curated deep-link list; never loads Buzer's private snapshots."""
+    if not BUZER_CROSS_CHECKS.is_file():
+        return {}
+    payload = _read_json_object(BUZER_CROSS_CHECKS, {})
+    rows = payload.get("acts") or {}
+    return {str(jurabk): int(act_id) for jurabk, act_id in rows.items()
+            if str(act_id).isdigit() and int(act_id) > 0}
 
 
 def _update_by_diff_ledger() -> None:
@@ -340,19 +353,23 @@ def temporal(versions: list[dict], upcoming: list[dict],
     All dates ISO; the frontend formats to dd.mm.yyyy and localises.
     next_change counts only dates in the future (already-passed
     valid_from values would otherwise read as a fake upcoming change)."""
-    # Official published PatchInstructions provide a safe recent-history
-    # fallback when a private version database is excluded from the public
-    # build.  A proposal/adopted draft is never counted as a past change.
+    # A PatchInstruction comes from a draft and carries a bill-level date.
+    # Even after the procedure reaches Verkündet, that is not a verified
+    # per-command effective date. Only explicitly verified dates drive this
+    # act-level clock.
     past_dates = {v["date"] for v in versions if v.get("date")}
     past_dates.update(
         p["valid_from"] for p in patches
         if p.get("status") == "published" and p.get("valid_from")
+        and p.get("valid_from_verified") is True
         and p["valid_from"] <= TODAY)
     past = sorted(past_dates, reverse=True)
     fut = [u["date"] for u in upcoming
            if u.get("date") and u["date"] > TODAY]
     fut += [p["valid_from"] for p in patches
-            if p.get("valid_from") and p["valid_from"] > TODAY]
+            if p.get("valid_from")
+            and p.get("valid_from_verified") is True
+            and p["valid_from"] > TODAY]
     pending = sum(1 for p in patches
                   if p["status"] in ("proposed", "adopted"))
     return {
@@ -382,6 +399,7 @@ def _act_decisions(decisions: list[dict], aid: str) -> list[dict]:
 def build_wiki() -> tuple[list[dict], dict[str, dict]]:
     idx, details = [], {}
     decisions = load_decisions()
+    buzer_links = load_buzer_cross_checks()
     patches = load("patches", "patches.jsonl")
     buz_v = load("buzer", "versions.jsonl")
     buz_up = load("buzer", "upcoming.jsonl")
@@ -424,6 +442,8 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             "proc": p["procedure_title"][:120],
             "doc": p["source_doc"], "stand": p.get("beratungsstand"),
             "valid_from": p.get("valid_from"),
+            "valid_from_verified": False,
+            "valid_from_basis": "draft_bill_clause_unverified_for_patch",
             "old": (p.get("old_text_constraint") or "")[:400] or None,
             "new": (p.get("new_text") or "")[:400] or None,
         } for p in pats]
@@ -448,6 +468,15 @@ def build_wiki() -> tuple[list[dict], dict[str, dict]]:
             "temporal": temporal(versions, upcoming, patch_rows),
             "norms": [],
         }
+        if buzer_act_id := buzer_links.get(jb):
+            details[aid]["cross_checks"] = [{
+                "source": "buzer",
+                "label": "Buzer",
+                "coverage": "history_since_2006",
+                "authoritative": False,
+                "url": (f"https://www.buzer.de/gesetz/{buzer_act_id}/"
+                        "l.htm"),
+            }]
         if decs:
             details[aid]["decisions"] = decs
 
@@ -1148,8 +1177,9 @@ def _hash(key: str) -> str:
 def build_git() -> dict:
     """The normative history as a git commit graph: one commit per
     legislative change, laned by jurisdiction (EU/Bund/Bayern/Länder).
-    Enacted = solid commit, pending = open branch, EU-implementing bill =
-    merge (a directive merged into German law). newest first."""
+    Promulgated procedure = solid commit, pending = open branch,
+    rejected/not-merged = closed branch, and a legally specific EU relation =
+    merge. DIP target norms remain labelled as draft-derived. Newest first."""
     raw = load("patches", "patches.jsonl")
     vorg = {str(v["id"]): v for v in load("dip", "vorgaenge.jsonl")}
     commits: list[dict] = []
@@ -1171,7 +1201,8 @@ def build_git() -> dict:
         if not date:
             continue
         st = g["status"]
-        typ = "open" if st in ("proposed", "adopted") else "commit"
+        typ = ("open" if st in ("proposed", "adopted")
+               else "commit" if st == "published" else "closed")
         merge_ref = None
         m = EU_REF.search(g["title"] or "")
         if m:
@@ -1186,7 +1217,9 @@ def build_git() -> dict:
             "type": typ, "actor": "Bundestag", "msg": (g["title"] or "")[:280],
             "acts": list(g["acts"].keys())[:6], "paras": paras,
             "refs": [st] + ([g["stand"]] if g["stand"] else []),
-            "merge_ref": merge_ref, "doc": g["doc"]})
+            "merge_ref": merge_ref, "doc": g["doc"],
+            "targets_verified": False,
+            "target_basis": "draft_patch_instructions"})
 
     # Bayern: Landtag bills
     for b in load("bay_landtag", "bills.jsonl"):
@@ -1250,6 +1283,7 @@ def main() -> int:
             [] if include_quarantined_sources()
             else sorted(QUARANTINED_SOURCES)),
         "reason": "third-party database/reuse permission not established",
+        "buzer_role": "private_candidate_and_external_cross_check",
     }
     eu_index = build_eu_index()
     gii_catalog = build_gii_catalog(wiki_idx)
@@ -1260,6 +1294,24 @@ def main() -> int:
         details, WEB / "search.sqlite", ROOT / "data" / "search_synonyms.json")
 
     patches = load("patches", "patches.jsonl")
+    gii_snapshot = latest_snapshot("gii")
+    federal_history = build_public_federal_history(
+        patches,
+        (read_jsonl(gii_snapshot / "norms.jsonl")
+         if gii_snapshot and (gii_snapshot / "norms.jsonl").is_file()
+         else []),
+        ((SNAPSHOTS / "gii").iterdir()
+         if (SNAPSHOTS / "gii").is_dir() else []),
+        gii_snapshot.name if gii_snapshot else built_at[:10],
+    )
+    history_by_act: dict[str, list[dict]] = {}
+    for event in federal_history["events"]:
+        history_by_act.setdefault(str(event.get("act") or ""), []).append(
+            event)
+    for act in details.values():
+        if act.get("juris") == "DE":
+            act["verified_history"] = history_by_act.get(
+                str(act.get("jurabk") or ""), [])
     sts: dict[str, int] = {}
     for p_ in patches:
         sts[p_["status"]] = sts.get(p_["status"], 0) + 1
@@ -1284,6 +1336,8 @@ def main() -> int:
         "watched_terminal": watched["terminal_count"],
         "amendment_fates": amendment_fates["total"],
         "amendment_fates_validated": amendment_fates["validated"],
+        "verified_federal_events": federal_history["total"],
+        "verified_federal_event_tiers": federal_history["tiers"],
         "bay_bills": len(bills),
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),
@@ -1313,6 +1367,8 @@ def main() -> int:
         "decisions.json": dump("decisions.json", decisions),
         "watched_procedures.json": dump("watched_procedures.json", watched),
         "amendment_fates.json": dump("amendment_fates.json", amendment_fates),
+        "verified_federal_events.json": dump(
+            "verified_federal_events.json", federal_history),
         "hierarchy.json": dump("hierarchy.json", hierarchy),
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),

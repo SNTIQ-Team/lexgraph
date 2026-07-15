@@ -17,12 +17,13 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /acts/{id}              one full act (acts/<id>.json); 404 if unknown
   GET /acts/{id}/archive      selectable HEAD + historical transition dates
   GET /acts/{id}/markdown     full act or one norm as dated Markdown
-  GET /git?lane=&limit=       dated chronology (legacy route name), by lane
+  GET /git?lane=&limit=       Laws-as-Git event log, optionally by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
   GET /eu-index               all in-force EU directives + basic regulations
   GET /procedures/watched     persistent DIP/EUR-Lex watch state + history
   GET /amendment-fates        reviewed amendment document-chain validations
+  GET /federal-history        official-only verified federal state/patch events
   GET /search?q=              deep search + complete GII metadata discovery
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
@@ -166,6 +167,40 @@ def data_policy():
     return _cached(_load("data_policy"))
 
 
+@app.get("/federal-history")
+def federal_history(
+        act: str | None = Query(None, min_length=1),
+        tier: str | None = Query(
+            None, pattern="^(exact|current_text_correspondence|metadata_only)$"),
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0)):
+    """Evidence-bound federal history built only from official GII/DIP.
+
+    Buzer is not an input to this public file. ``exact`` means two captured
+    official GII states; it does not silently infer their legal effective day.
+    """
+    data = _load("verified_federal_events")
+    events = data.get("events") or []
+    if act:
+        needle = act.casefold().strip()
+        events = [row for row in events
+                  if str(row.get("act") or "").casefold() == needle]
+    if tier:
+        events = [row for row in events
+                  if row.get("verification") == tier]
+    return {
+        "schema_version": data.get("schema_version"),
+        "built_at": data.get("built_at"),
+        "source_policy": data.get("source_policy"),
+        "tiers": data.get("tiers"),
+        "total": data.get("total"),
+        "matched": len(events),
+        "offset": offset,
+        "limit": limit,
+        "events": events[offset:offset + limit],
+    }
+
+
 @app.get("/feed")
 def feed(limit: int = Query(100, ge=1, le=600)):
     """The realtime event feed (feed.json), newest first, capped at `limit`."""
@@ -271,10 +306,10 @@ def act_markdown(
 @app.get("/git")
 def git(lane: int | None = Query(None, ge=0, le=3),
         limit: int = Query(100, ge=1, le=1000)):
-    """Dated legal chronology, optionally filtered by lane, newest first.
+    """Laws-as-Git event log, optionally filtered by lane, newest first.
 
-    ``/git`` and the ``commits`` key are legacy compatibility names.  Lane:
-    0=EU, 1=Bund, 2=Bayern, 3=Länder.
+    Git is a navigation metaphor: legal effect is determined by each row's
+    official source and status. Lane: 0=EU, 1=Bund, 2=Bayern, 3=Länder.
     """
     data = _load("git")
     commits = data["commits"]
