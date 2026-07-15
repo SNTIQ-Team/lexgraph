@@ -17,6 +17,7 @@ from, when it may pass, when it was last amended, and what changed.**
 | Federal acts (GII) + norms | **51 / 10,939** |
 | Official federal state archive | **172 observations / 63 states / 7 transitions** |
 | Legally dated federal transitions | **1** final-text + commencement review |
+| Official retrospective BGBl inventory (2023+) | **144 documents / 484 amendment articles / 399 resolved effective dates** |
 | Bavarian acts (BAYERN.RECHT) + versions | **12 / 531** (since 1985) |
 | Curated EU instruments + German transpositions | **47 / 136** |
 | EU in-force metadata index | **7,934** directives and basic regulations |
@@ -51,6 +52,18 @@ matched to the integrity-checked final BGBl command and the exact DIP
 commencement clause. The observation date, publication date and effective date
 remain separate fields throughout Git, archive, Markdown, API and HF exports.
 
+The retrospective layer independently walks promulgated DIP procedures and
+the final BGBl archive from 2023 onward. It verifies 144 final PDFs by their
+advertised MD5 plus Lexgraph SHA-256, links 484 amendment articles to 44 acts
+in the deep corpus and resolves 399 article-wide commencement dates. The other
+85 remain explicitly unresolved because DIP assigns different dates below the
+article level or provides no article-wide clause. This is a bitemporal store:
+`effective_from/effective_to` describe legal validity, while
+`knowledge_from/knowledge_to` describe when Lexgraph asserted that result.
+Publication, effect and observation dates are never collapsed into one field.
+An amendment event is not presented as a reconstructed historical full text;
+exact date checkout is enabled only for a verified complete GII state pair.
+
 Third-party database rights are treated separately from copyright in the
 individual legal texts. Buzer's private snapshots remain an internal candidate
 and QA layer; public act pages may link to the corresponding Buzer history as a
@@ -72,6 +85,10 @@ state capture, matching and diff engine. See
   manifest and SHA-256 content-addressed full-state store. Rebuild it from
   complete dated GII snapshots with `tools/archive_gii_states.py`; final BGBl
   commands are captured independently by `pipeline/fetch_bgbl_documents.py`.
+- **`pipeline/backfill_bgbl_history.py`** — reproducible 2023+ official
+  retrospective inventory from GII identifiers, DIP procedure/dates and
+  integrity-checked final BGBl articles. It writes event evidence, command
+  addresses and unresolved-date gaps without inventing historical bodies.
 - **`tools/build_qfs.py`** — fuses snapshots into a time-scrubbable QFS arena;
   `build_web_data.py` exports web JSON and the SQLite FTS5 full-text index;
   `export_hf.py` builds the versioned Hugging Face dataset; `lex_log.py` and
@@ -96,6 +113,9 @@ uvicorn api.server:server --port 8010   # REST API over web/data (see docs/API.m
 curl 'localhost:8010/acts/fed_aufenthg_2004/markdown?norm=%C2%A7%2024'
 curl 'localhost:8010/acts/fed_asylvfg_1992/markdown?at=2026-07-06&norm=%C2%A7%2029a'
 curl 'localhost:8010/official-transition-reviews?act=fed_asylvfg_1992'
+curl 'localhost:8010/acts/fed_asylblg/history'
+curl 'localhost:8010/acts/fed_asylvfg_1992/markdown?at=2026-07-10'
+curl -OJ 'localhost:8010/retrospective-history.sqlite'
 python3 tools/lex_log.py AsylbLG   # chronology for one act
 curl 'localhost:8010/federal-history?act=AsylbLG&tier=current_text_correspondence'
 ```

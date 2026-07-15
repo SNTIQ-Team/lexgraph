@@ -287,3 +287,50 @@ def test_reviewed_legal_transition_exposes_provenance_without_claiming_exact() -
     assert rendered["partial"] is True
     assert "legal_effect_verified: true" in rendered["markdown"]
     assert "final BGBl command" in rendered["markdown"]
+
+
+def test_retrospective_state_renders_two_date_axes_and_exact_body() -> None:
+    act = _act(norms=[
+        {"enbez": "§ 24", "titel": "Schutz", "text": "HEAD"},
+    ])
+    digest = "b" * 64
+    interval = {
+        "requested_at": "2024-06-01",
+        "as_of": "2026-07-16T12:00:00Z",
+        "effective_from": "2024-01-01",
+        "effective_to": "2025-01-01",
+        "knowledge_from": "2026-07-16T10:00:00Z",
+        "knowledge_to": None,
+        "published_at": "2023-12-20",
+        "observed_at": "2025-01-02",
+        "verified_through_observed_at": "2025-01-02",
+        "state_sha256": digest,
+        "text_status": "official_exact",
+        "date_status": "official_verified",
+        "date_basis": "official_bgbl_commencement_clause",
+        "verification": "official_state_pair_and_final_bgbl",
+        "retroactive": False,
+        "gaps": [],
+        "evidence": [{"source": "BGBl", "url": "https://example.test/bgbl"}],
+    }
+    state = {
+        "act_id": "fed_testg", "jurabk": "TestG",
+        "norms": [{"enbez": "§ 24", "titel": "Schutz",
+                   "text": "Historisch exakt"}],
+    }
+
+    rendered = render_markdown_snapshot(
+        act, requested_at="2024-06-01", norm="§ 24",
+        fallback_head="2026-07-16", retrospective_state=state,
+        retrospective_interval=interval)
+
+    assert rendered["exact"] is True
+    assert rendered["as_of"] == "2026-07-16T12:00:00Z"
+    assert rendered["effective_from"] == "2024-01-01"
+    assert rendered["knowledge_from"] == "2026-07-16T10:00:00Z"
+    assert rendered["source_url"] == "https://example.test/bgbl"
+    assert "Historisch exakt" in rendered["markdown"]
+    assert "as_of: \"2026-07-16T12:00:00Z\"" in rendered["markdown"]
+    assert "effective_from: \"2024-01-01\"" in rendered["markdown"]
+    assert "knowledge_from: \"2026-07-16T10:00:00Z\"" in rendered["markdown"]
+    assert "legal-validity interval" in rendered["markdown"]

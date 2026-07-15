@@ -55,6 +55,8 @@ Files written:
 | `official_federal_states.json` | Cumulative public GII observation manifest: canonical state hashes, retrieval provenance and counts. |
 | `federal_states/manifest.json` + `federal_states/objects/sha256/…` | The same manifest beside its verified deterministic-gzip full-state CAS. |
 | `official_transition_reviews.json` | Federal state changes whose legal date passed final BGBl command + DIP commencement review. |
+| `retrospective_history.json` | Bitemporal federal history: separate legal-validity and Lexgraph-knowledge intervals, 2023+ BGBl events, GII observations and explicit gaps. |
+| `retrospective_history.sqlite` | Portable relational form of the same history (`acts`, `state_objects`, `state_observations`, `legal_intervals`, `amendment_events`). |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
 | `hierarchy.json` | Competence-aware legal layers (EU / Bund / Bayern / Länder). |
 | `watched_procedures.json` | Persistent DIP/EUR-Lex watch state and change history. |
@@ -62,8 +64,10 @@ Files written:
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
 | `git.json` | Laws-as-Git event log: HEAD context, commits, open/closed branches and evidence-bound merges. |
 
-JSON is minified (`separators=(",",":")`, `ensure_ascii=False`). All dates are
-ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
+JSON is minified (`separators=(",",":")`, `ensure_ascii=False`). Legal,
+publication and observation dates are ISO `YYYY-MM-DD`; bitemporal
+`knowledge_from`/`knowledge_to` values are RFC3339 UTC instants. The frontend
+formats calendar dates to `dd.mm.yyyy`.
 
 ---
 
@@ -88,6 +92,9 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "official_federal_states": 63,
   "official_federal_transitions": 7,
   "official_federal_legal_reviews": 1,
+  "retrospective_history": {"acts":51,"interval_assertions":1,
+    "current_intervals":1,"events":484,"events_with_effective_date":399,
+    "observations":172,"state_objects":63},
   "bay_bills": 123,
   "bay_verkuendet": 60,
   "eu_instruments": 47,
@@ -114,6 +121,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `official_federal_states` | Unique canonical full-act objects in the federal SHA-256 CAS. |
 | `official_federal_transitions` | Normative changes found by Lexgraph between adjacent complete states; their retrieval dates are not legal dates. |
 | `official_federal_legal_reviews` | State transitions that additionally passed the final BGBl command and exact DIP commencement gate. |
+| `retrospective_history` | Bitemporal store counts: act/state assertions, 2023+ official amendment events and resolved effective dates. |
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
 | `eu_instruments` / `transpositions` | Curated EU instruments / DEU transposition mentions in the deep layer. |
 | `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
@@ -653,7 +661,7 @@ fetchers refuse to overwrite a good same-day snapshot with empty output.
 ./refresh.sh
 ```
 
-The 23 steps are:
+The 24 steps are:
 
 | # | Step | Fetcher |
 |---|------|---------|
@@ -664,22 +672,23 @@ The 23 steps are:
 | 5 | GII corpus HEAD | `fetch_gii.py` |
 | 6 | Verify and append every complete GII act state to the cumulative canonical SHA-256 store | `tools/archive_gii_states.py` |
 | 7 | Capture final BGBl landing/PDF documents, verify integrity, split articles and join DIP commencement rows | `fetch_bgbl_documents.py` |
-| 8 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `LEXGRAPH_ENABLE_RII=1`) | `fetch_rii.py` |
-| 9 | NeuRIS changelog plus immediate content-addressed capture of selected expiring ZIP artifacts | `fetch_neuris_changelog.py` |
-| 10 | Private version-history QA (**default-off**, explicit opt-in `LEXGRAPH_ENABLE_BUZER=1`; not used by public builds) | `fetch_buzer.py` |
-| 11 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
-| 12 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
-| 13 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
-| 14 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
-| 15 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
-| 16 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
-| 17 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
-| 18 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
-| 19 | Länder discovery monitor (**default-off**, permission gate) | `fetch_parlamentsspiegel.py` |
-| 20 | Broad Länder discovery (**default-off**, separate bulk permission gate) | `fetch_laender_bills.py` |
-| 21 | Build the QFS arena | `tools/build_qfs.py` |
-| 22 | Verify official state/review inputs and export web data | `tools/build_web_data.py` |
-| 23 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
+| 8 | Rebuild the official 2023+ retrospective BGBl amendment/date inventory | `backfill_bgbl_history.py` |
+| 9 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `LEXGRAPH_ENABLE_RII=1`) | `fetch_rii.py` |
+| 10 | NeuRIS changelog plus immediate content-addressed capture of selected expiring ZIP artifacts | `fetch_neuris_changelog.py` |
+| 11 | Private version-history QA (**default-off**, explicit opt-in `LEXGRAPH_ENABLE_BUZER=1`; not used by public builds) | `fetch_buzer.py` |
+| 12 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
+| 13 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
+| 14 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
+| 15 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
+| 16 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
+| 17 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
+| 18 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
+| 19 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
+| 20 | Länder discovery monitor (**default-off**, permission gate) | `fetch_parlamentsspiegel.py` |
+| 21 | Broad Länder discovery (**default-off**, separate bulk permission gate) | `fetch_laender_bills.py` |
+| 22 | Build the QFS arena | `tools/build_qfs.py` |
+| 23 | Verify official state/review inputs and export web data | `tools/build_web_data.py` |
+| 24 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
 
 Snapshots land in `data/snapshots/<source>/<date>/*.jsonl`; each build reads the
 newest snapshot per source. **Each fetcher documents its own source, cadence,
@@ -689,7 +698,7 @@ Permission-gated snapshots are retained only as private research artifacts;
 the public web/HF builders exclude them unless an explicit private build mode
 is selected, and the HF exporter refuses that mode.
 
-Step 21 also deploys the arena to a local `qfs_visualizer` checkout if present.
+Step 22 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
 ---
 
@@ -737,7 +746,10 @@ database.
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
 | `GET /acts/{id}/archive` | one act's `norms` + `versions` | selectable HEAD/event/effective dates and honest coverage gaps |
-| `GET /acts/{id}/markdown?at=&norm=&download=` | one act's `norms` + `versions` | raw Markdown for the whole act or one norm; omit `at` for HEAD |
+| `GET /acts/{id}/history?as_of=` | `retrospective_history.json` | one act's events, observations and intervals at an RFC3339 knowledge-time slice |
+| `GET /acts/{id}/diff?from=&to=&as_of=&norm=` | retrospective manifest + state CAS | exact full-state or norm diff at two legal dates and one knowledge time |
+| `GET /acts/{id}/markdown?at=&as_of=&norm=&download=` | act data + retrospective state CAS | raw Markdown for the whole act or one norm; omit `at` for HEAD |
+| `GET /retrospective-history.sqlite` | `retrospective_history.sqlite` | downloadable portable bitemporal database |
 | `GET /decisions?q=&act=` | `decisions.json` | court decisions, newest first; `limit` 1–200 (default 50) |
 | `GET /decisions/{id}` | one `decisions.json` row | full exported row; **404** if unknown |
 | `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
@@ -895,6 +907,53 @@ full state or one norm through `/acts/{id}/markdown?at=...`. It never substitute
 the nearest observation. `/official-transition-reviews` may legitimately be
 small: a row exists only when every strict acceptance check passes.
 
+### Bitemporal retrospective store
+
+`retrospective_history.json` and `retrospective_history.sqlite` describe the
+same independently reproduced federal history. The two time axes are never
+collapsed:
+
+- `[effective_from, effective_to)` is the half-open interval in which a full
+  state is legally valid. It exists only after a final BGBl command, an exact
+  DIP commencement clause and a complete GII state pair pass review;
+- `[knowledge_from, knowledge_to)` is the half-open RFC3339 interval in which
+  Lexgraph asserted that legal interval. A later correction closes, rather
+  than rewrites, the old assertion;
+- `published_at` is the BGBl publication date and `observed_at` is a retrieval
+  or ingestion date. Neither is substituted for legal effect;
+- genuine official retroactivity (`effective_from < published_at`) is retained
+  with `retroactive:true`.
+
+The 2023+ event layer currently contains 484 amendment articles from 144
+checksum-verified final BGBl documents. Of those, 399 have one unambiguous
+article-wide effective date; 85 retain `effective_at:null` plus a structured
+gap. Event rows have `text_status:event_only` and
+`historical_text_reconstructed:false`: an amendment command is not a complete
+old consolidated state.
+
+```bash
+curl 'http://127.0.0.1:8010/acts/fed_asylblg/history'
+
+AS_OF=$(curl -s 'http://127.0.0.1:8010/acts/fed_asylblg/history' \
+  | jq -r .built_at)
+curl --get 'http://127.0.0.1:8010/acts/fed_asylblg/history' \
+  --data-urlencode "as_of=$AS_OF"
+
+# 404 means the strict full-state coverage is not available for both dates.
+curl --get 'http://127.0.0.1:8010/acts/fed_asylvfg_1992/diff' \
+  --data-urlencode 'from=2026-07-10' \
+  --data-urlencode 'to=2026-07-11' \
+  --data-urlencode "as_of=$AS_OF" \
+  --data-urlencode 'norm=§ 29a'
+
+curl -OJ 'http://127.0.0.1:8010/retrospective-history.sqlite'
+```
+
+The SQLite database contains `acts`, `state_objects`, `state_observations`,
+`legal_intervals`, `amendment_events` and `metadata`, with indexes for both
+time axes. Full act bodies remain in the SHA-256 CAS and are joined by
+`state_sha256`, so the database does not duplicate legal text.
+
 ## `GET /eu-index?q=&kind=&limit=&offset=`
 
 Filters the metadata-only EU breadth index. `q` is an optional
@@ -984,16 +1043,29 @@ curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/archive'
   ],
   "norms": [{"enbez":"§ 24","title":"Aufenthaltsgewährung zum vorübergehenden Schutz"}],
   "gaps": [{"reason":"metadata_only_versions","label":"…"}],
-  "complete": false
+  "complete": false,
+  "retrospective": {
+    "available": true,
+    "as_of": "2026-07-16T12:00:00Z",
+    "history_start": "2023-04-24",
+    "intervals": [],
+    "events": [{"date":"2023-04-24","published_at":"2023-04-24",
+      "effective_at":null,"text_status":"event_only"}],
+    "observations": [{"observed_at":"2026-07-13","state_sha256":"…"}],
+    "gaps": []
+  }
 }
 ```
 
 `GET /acts/{id}/markdown` returns raw `text/markdown`, not a JSON wrapper.
-Both filters are optional:
+All selectors are optional:
 
 - omit `at` for the exact current HEAD; `at=YYYY-MM-DD` requests the state on
   an earlier date. If that date is an official GII observation, its verified
   content-addressed full state is rendered directly;
+- `as_of=<RFC3339>` selects what the retrospective database knew at that
+  instant and requires `at`. Without it, the latest built knowledge slice is
+  used;
 - omit `norm` for the **entire act**; use `norm=§24`, `norm=24`, or
   `norm=Art.59` for one norm;
 - `download=true` adds an attachment filename so browsers save a `.md` file.
@@ -1003,8 +1075,12 @@ Both filters are optional:
 curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/markdown'
 
 # One norm at a date (URL-encode § in production clients)
-curl --get 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/markdown' \
-  --data-urlencode 'at=2024-03-02' --data-urlencode 'norm=§ 24'
+AS_OF=$(curl -s 'http://127.0.0.1:8010/acts/fed_asylvfg_1992/history' \
+  | jq -r .built_at)
+curl --get 'http://127.0.0.1:8010/acts/fed_asylvfg_1992/markdown' \
+  --data-urlencode 'at=2026-07-10' \
+  --data-urlencode "as_of=$AS_OF" \
+  --data-urlencode 'norm=§ 29a'
 
 # Download the complete historical act
 curl -OJ 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/markdown?at=2024-03-02&download=true'
@@ -1029,6 +1105,13 @@ X-Lexgraph-Published-Date: 2026-07-09
 X-Lexgraph-Effective-Date: 2026-07-10
 X-Lexgraph-Review-ID: fed-review:…
 X-Lexgraph-Procedure-ID: 327966
+X-Lexgraph-As-Of: 2026-07-16T12:00:00Z
+X-Lexgraph-Effective-From: 2026-07-10
+X-Lexgraph-Effective-To: 2027-01-01
+X-Lexgraph-Knowledge-From: 2026-07-16T12:00:00Z
+X-Lexgraph-Knowledge-To:
+X-Lexgraph-Text-Status: official_exact
+X-Lexgraph-Date-Status: official_verified
 Content-Disposition: attachment; filename="…md"   # download=true only
 ```
 

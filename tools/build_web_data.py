@@ -17,6 +17,8 @@ Outputs:
     web/data/official_federal_states.json  cumulative GII observation manifest
     web/data/official_transition_reviews.json  BGBl/DIP accepted legal dates
     web/data/federal_states/…   immutable complete GII state objects
+    web/data/retrospective_history.json  legal-time + knowledge-time history
+    web/data/retrospective_history.sqlite  portable relational history
     web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
@@ -52,6 +54,11 @@ from official_states import (                             # noqa: E402
     transitions as build_official_state_transitions,
 )
 from official_transition_review import review_transitions  # noqa: E402
+from retrospective_history import (                       # noqa: E402
+    build_public_manifest,
+    materialize_history,
+    write_sqlite as write_retrospective_sqlite,
+)
 
 WEB = ROOT / "web" / "data"
 
@@ -1189,7 +1196,8 @@ def _hash(key: str) -> str:
 
 
 def build_git(official_transitions: list[dict] | None = None,
-              transition_reviews: list[dict] | None = None) -> dict:
+              transition_reviews: list[dict] | None = None,
+              historical_events: list[dict] | None = None) -> dict:
     """The normative history as a git commit graph: one commit per
     legislative change, laned by jurisdiction (EU/Bund/Bayern/Länder).
     Promulgated procedure = solid commit, pending = open branch,
@@ -1287,6 +1295,69 @@ def build_git(official_transitions: list[dict] | None = None,
             "review_id": review.get("id"),
             "procedure_id": review.get("procedure_id"),
             "bgbl": bgbl,
+        })
+
+    # 2023+ final BGBl inventory.  These are verified promulgation/amendment
+    # events, not reconstructed historical bodies.  An article-wide DIP
+    # commencement date is used when it is explicit; otherwise the graph keeps
+    # the publication date and labels the legal-effect date unresolved.
+    reviewed_documents = {
+        (str(row.get("act_id") or ""),
+         str((row.get("bgbl") or {}).get("document_id") or ""))
+        for row in transition_reviews or []
+    }
+    for event in historical_events or []:
+        act_id = str(event.get("act_id") or "")
+        document_id = str(event.get("document_id") or "")
+        if not act_id or not document_id or \
+                (act_id, document_id) in reviewed_documents:
+            continue
+        effective = event.get("effective_at")
+        published = event.get("publication_date")
+        event_date = effective or published
+        if not event_date:
+            continue
+        jurabk = str(event.get("jurabk") or "")
+        article = str(event.get("amending_article") or "")
+        refs = [document_id]
+        if article:
+            refs.append(f"Artikel {article}")
+        if effective:
+            refs.append("effective_date_verified")
+        else:
+            refs.append("effective_date_unresolved")
+        commits.append({
+            "hash": _hash("bgbl-history:" + str(event.get("id") or "")),
+            "date": event_date,
+            "lane": 1,
+            "type": "commit",
+            "actor": "BGBl / Lexgraph",
+            "msg": (("Amtliche Änderung wirksam" if effective else
+                     "Amtliche Änderung veröffentlicht") +
+                    (f" · {jurabk}" if jurabk else "")),
+            "acts": [jurabk] if jurabk else [],
+            "paras": list(event.get("affected_norms") or [])[:20],
+            "refs": refs,
+            "merge_ref": None,
+            "url": event.get("official_pdf_url"),
+            "targets_verified": True,
+            "target_basis": event.get("match_basis"),
+            "date_basis": ("official_dip_article_commencement_clause"
+                           if effective else "official_bgbl_publication_date"),
+            "verification": event.get("match_basis"),
+            "legal_effect_verified": bool(effective),
+            "candidate_only": True,
+            "historical_text_reconstructed": False,
+            "published_at": published,
+            "effective_at": effective,
+            "event_id": event.get("id"),
+            "procedure_id": event.get("procedure_id"),
+            "bgbl": {
+                "document_id": document_id,
+                "pdf_url": event.get("official_pdf_url"),
+                "pdf_sha256": event.get("pdf_sha256"),
+                "integrity_verified": event.get("integrity_verified") is True,
+            },
         })
 
     # Bund: group patch commands by procedure (a commit touches N laws)
@@ -1464,17 +1535,47 @@ def _join_transition_reviews(transitions: list[dict],
 
 def main() -> int:
     (WEB / "acts").mkdir(parents=True, exist_ok=True)
+    built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     official_states, official_transitions = publish_official_federal_states()
     bgbl_documents = load("bgbl_documents", "documents.jsonl")
     transition_reviews = review_transitions(
         official_transitions, bgbl_documents)
     reviewed_transitions = _join_transition_reviews(
         official_transitions, transition_reviews)
+    official_state_objects = {
+        digest: load_official_state(FEDERAL_STATE_STORE, digest)
+        for digest in sorted(official_states.get("objects") or {})
+    }
+    internal_retrospective = materialize_history(
+        official_states.get("observations") or [],
+        official_state_objects,
+        transition_reviews,
+    )
+    retrospective_candidates = load(
+        "bgbl_history_backfill", "candidates.jsonl")
+    previous_retrospective = None
+    previous_path = WEB / "retrospective_history.json"
+    if previous_path.is_file():
+        try:
+            candidate = json.loads(previous_path.read_text(encoding="utf-8"))
+            if candidate.get("kind") == "lexgraph-retrospective-history":
+                previous_retrospective = candidate
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            previous_retrospective = None
+    retrospective = build_public_manifest(
+        internal_retrospective,
+        official_state_objects,
+        official_states.get("objects") or {},
+        retrospective_candidates,
+        built_at=built_at,
+        previous=previous_retrospective,
+    )
     feed = build_feed()
     wiki_idx, details = build_wiki()
     hierarchy = build_hierarchy(wiki_idx)
     graph = build_graph()
-    git = build_git(official_transitions, transition_reviews)
+    git = build_git(
+        official_transitions, transition_reviews, retrospective_candidates)
     decisions = load_decisions()
     data_policy = {
         "schema_version": 1,
@@ -1488,7 +1589,6 @@ def main() -> int:
     }
     eu_index = build_eu_index()
     gii_catalog = build_gii_catalog(wiki_idx)
-    built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     amendment_fates = build_amendment_fates(details, built_at)
     watched = build_watched_procedures(hierarchy, amendment_fates, built_at)
     search_counts = build_search_database(
@@ -1592,6 +1692,19 @@ def main() -> int:
             act["versions"].extend(observed_versions + legal_versions)
             act["versions"].sort(
                 key=lambda row: str(row.get("date") or ""), reverse=True)
+            retrospective_act = retrospective["acts"].get(act_id)
+            if retrospective_act:
+                act["retrospective"] = {
+                    "available": True,
+                    "history_start": retrospective_act.get("history_start"),
+                    "current_intervals": sum(
+                        row.get("knowledge_to") is None
+                        for row in retrospective_act.get("intervals") or []),
+                    "current_events": sum(
+                        row.get("knowledge_to") is None
+                        for row in retrospective_act.get("events") or []),
+                    "coverage": retrospective_act.get("coverage") or {},
+                }
     sts: dict[str, int] = {}
     for p_ in patches:
         sts[p_["status"]] = sts.get(p_["status"], 0) + 1
@@ -1624,6 +1737,7 @@ def main() -> int:
         "official_federal_transitions": official_states[
             "total_transitions"],
         "official_federal_legal_reviews": len(transition_reviews),
+        "retrospective_history": retrospective["counts"],
         "bay_bills": len(bills),
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),
@@ -1670,6 +1784,8 @@ def main() -> int:
                 "total": len(transition_reviews),
                 "reviews": transition_reviews,
             }),
+        "retrospective_history.json": dump(
+            "retrospective_history.json", retrospective),
         "hierarchy.json": dump("hierarchy.json", hierarchy),
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),
@@ -1684,6 +1800,10 @@ def main() -> int:
         (WEB / "gii_catalog.json").unlink(missing_ok=True)
     for aid, d in details.items():
         dump(f"acts/{aid}.json", d)
+    write_retrospective_sqlite(
+        WEB / "retrospective_history.sqlite", retrospective)
+    sizes["retrospective_history.sqlite"] = (
+        WEB / "retrospective_history.sqlite").stat().st_size
     print(f"web data -> {WEB}")
     for k, v in sizes.items():
         print(f"  {k:16} {v/1024:8.1f} KB")

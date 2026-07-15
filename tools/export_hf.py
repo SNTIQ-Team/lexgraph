@@ -21,6 +21,7 @@ from typing import Iterable
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 sys.path.insert(0, str(ROOT / "tools"))
 
@@ -31,6 +32,7 @@ from official_states import (  # noqa: E402
     load_state_verified as load_official_state,
     transitions as build_official_state_transitions,
 )
+from api.retrospective_store import validate_manifest  # noqa: E402
 
 
 # Output name -> (snapshot family, source filename, description)
@@ -94,6 +96,12 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
     "data_policy.json": (
         ROOT / "web" / "data" / "data_policy.json",
         "machine-readable exclusions for third-party database rights"),
+    "retrospective_history.json": (
+        ROOT / "web" / "data" / "retrospective_history.json",
+        "bitemporal federal history manifest with separate legal and knowledge time"),
+    "retrospective_history.sqlite": (
+        ROOT / "web" / "data" / "retrospective_history.sqlite",
+        "portable queryable SQLite form of the bitemporal federal history"),
 }
 
 # Raw lifecycle files do not exist before the first watch update.  Export them
@@ -125,6 +133,17 @@ OFFICIAL_HISTORY_FILES: dict[str, str] = {
     "official_transition_reviews.jsonl": (
         "state transitions accepted as legal events only after final BGBl "
         "command and commencement review"),
+}
+
+RETROSPECTIVE_FILES: dict[str, str] = {
+    "retrospective_legal_intervals.jsonl": (
+        "verified full-state intervals with effective and knowledge bounds"),
+    "retrospective_amendment_events.jsonl": (
+        "official 2023+ BGBl amendment events; unresolved dates remain null"),
+    "retrospective_observations.jsonl": (
+        "complete GII retrieval observations, never reused as legal dates"),
+    "retrospective_gaps.jsonl": (
+        "explicit missing-date, unreviewed-transition and event-only gaps"),
 }
 
 
@@ -325,10 +344,12 @@ def _official_history_rows(
             raise RuntimeError(
                 f"official review {review.get('id')} has an invalid date") \
                 from exc
-        if published > effective:
+        # An expressly retroactive commencement is a valid official fact.
+        # Preserve and label it rather than enforcing publication <= effect.
+        if bool(review.get("retroactive")) != (effective < published):
             raise RuntimeError(
-                f"official review {review.get('id')} has an effective date "
-                "before publication")
+                f"official review {review.get('id')} has an inconsistent "
+                "retroactive marker")
         evidence = review.get("evidence")
         if not isinstance(evidence, list) or not evidence:
             raise RuntimeError(
@@ -347,6 +368,41 @@ def _official_history_rows(
         "official_federal_state_transitions.jsonl": transition_rows,
         "official_federal_state_objects.jsonl": state_rows(),
         "official_transition_reviews.jsonl": reviews,
+    }
+
+
+def _retrospective_rows() -> dict[str, list[dict]]:
+    """Flatten the validated public bitemporal manifest for HF viewers."""
+    path = require_file(
+        ROOT / "web" / "data" / "retrospective_history.json",
+        "retrospective history")
+    manifest = validate_manifest(json.loads(path.read_text(encoding="utf-8")))
+    intervals: list[dict] = []
+    events: list[dict] = []
+    observations: list[dict] = []
+    gaps: list[dict] = []
+    for act_id, act in sorted(manifest["acts"].items()):
+        identity = {
+            "act_id": act_id,
+            "jurabk": act.get("jurabk"),
+            "act_title": act.get("title"),
+        }
+        intervals.extend({**identity, **row}
+                         for row in act.get("intervals") or [])
+        events.extend({**identity, **row}
+                      for row in act.get("events") or [])
+        observations.extend({**identity, **row}
+                            for row in act.get("observations") or [])
+        gaps.extend({**identity, **row}
+                    for row in act.get("gaps") or [])
+        for event in act.get("events") or []:
+            gaps.extend({**identity, "event_id": event.get("id"), **row}
+                        for row in event.get("gaps") or [])
+    return {
+        "retrospective_legal_intervals.jsonl": intervals,
+        "retrospective_amendment_events.jsonl": events,
+        "retrospective_observations.jsonl": observations,
+        "retrospective_gaps.jsonl": gaps,
     }
 
 
@@ -398,6 +454,15 @@ amending command and the exact DIP commencement clause. Full portable states,
 including every captured norm, are in
 `official_federal_state_objects.jsonl` and are identified by the SHA-256 of
 canonical uncompressed JSON.
+
+`retrospective_legal_intervals.jsonl` adds a true bitemporal projection:
+legal validity (`effective_from`/`effective_to`) is independent from Lexgraph
+knowledge time (`knowledge_from`/`knowledge_to`). The 2023+ final-BGBl
+inventory is exported separately as `retrospective_amendment_events.jsonl`.
+An event with a publication/effective date is not thereby a reconstructed
+historical consolidated text; unresolved sub-article dates and missing state
+pairs remain explicit in `retrospective_gaps.jsonl`. The complete manifest and
+a portable indexed SQLite representation are included as artifacts.
 
 Buzer is not an input to these four files and no private Buzer snapshot or
 synopsis is shipped. It may be used outside the export as a non-authoritative
@@ -496,6 +561,11 @@ def main() -> int:
         counts[name] = write_jsonl(out / name, official_rows[name])
         descriptions[name] = description
 
+    retrospective_rows = _retrospective_rows()
+    for name, description in RETROSPECTIVE_FILES.items():
+        counts[name] = write_jsonl(out / name, retrospective_rows[name])
+        descriptions[name] = description
+
     optional_exported: list[str] = []
     for name, (src, description) in OPTIONAL_DERIVED_FILES.items():
         if not src.is_file() or src.stat().st_size == 0:
@@ -512,6 +582,7 @@ def main() -> int:
         "reviewed and official federal decisions affecting the deep corpus")
 
     ordered = (list(SNAPSHOT_FILES) + list(OFFICIAL_HISTORY_FILES)
+               + list(RETROSPECTIVE_FILES)
                + list(DERIVED_FILES)
                + optional_exported + ["decisions.jsonl"])
     rows_table = "\n".join(

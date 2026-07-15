@@ -230,8 +230,7 @@ def review_transitions(transitions: Iterable[dict],
         document = next(iter(documents_used.values()))
         effective_at = next(iter(effective_dates))
         publication = str(document.get("publication_date") or "")
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", publication) or \
-                publication > effective_at:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", publication):
             continue
         articles = sorted({str(row["reference"].get("article") or "")
                            for _change, row in matched})
@@ -248,6 +247,7 @@ def review_transitions(transitions: Iterable[dict],
             "jurabk": transition["jurabk"],
             "published_at": publication,
             "effective_at": effective_at,
+            "retroactive": effective_at < publication,
             "observed_at": transition["observed_at"],
             "previous_observed_at": transition["previous_observed_at"],
             "date_basis": "official_bgbl_command_and_commencement_clause",

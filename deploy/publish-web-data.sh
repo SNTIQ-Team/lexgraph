@@ -45,7 +45,7 @@ import json
 import re
 import sqlite3
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -55,6 +55,7 @@ required = (
     "git.json", "watched_procedures.json", "amendment_fates.json",
     "verified_federal_events.json", "gii_catalog.json", "data_policy.json",
     "official_federal_states.json", "official_transition_reviews.json",
+    "retrospective_history.json", "retrospective_history.sqlite",
     "federal_states/manifest.json", "search.sqlite",
 )
 for name in required:
@@ -251,7 +252,8 @@ for review in reviews:
             str(review.get("previous_observed_at")))
     except ValueError:
         raise SystemExit("publish validation: review has an invalid date")
-    if published > effective or previous_observed > observed:
+    if bool(review.get("retroactive")) != (effective < published) or \
+            previous_observed > observed:
         raise SystemExit("publish validation: review date order is impossible")
     bgbl = review.get("bgbl") or {}
     if bgbl.get("integrity_verified") is not True or \
@@ -270,6 +272,128 @@ for review in reviews:
                 "publish validation: review contains non-official evidence")
 if int(summary.get("official_federal_legal_reviews") or 0) != len(reviews):
     raise SystemExit("publish validation: transition review count mismatch")
+
+# The public retrospective manifest adds legal-valid time and Lexgraph
+# knowledge time without copying state bodies.  Every body reference must be
+# one of the canonical GII objects verified above.  Event-only BGBl rows are
+# allowed, but may never claim that a historical consolidated body exists.
+with (root / "retrospective_history.json").open(encoding="utf-8") as handle:
+    retrospective = json.load(handle)
+if retrospective.get("schema_version") != 1 or retrospective.get("kind") != \
+        "lexgraph-retrospective-history":
+    raise SystemExit("publish validation: unsupported retrospective history")
+retro_policy = retrospective.get("source_policy") or {}
+if retro_policy.get("official_only") is not True or \
+        retro_policy.get("effective_dates_inferred") is not False or \
+        retro_policy.get("buzer_input") is not False:
+    raise SystemExit("publish validation: invalid retrospective source policy")
+if set(retrospective.get("objects") or {}) != set(objects):
+    raise SystemExit("publish validation: retrospective state catalogue drift")
+try:
+    retrospective_built = datetime.fromisoformat(
+        str(retrospective.get("built_at")).replace("Z", "+00:00"))
+except ValueError:
+    raise SystemExit("publish validation: invalid retrospective built_at")
+if retrospective_built.tzinfo is None:
+    raise SystemExit("publish validation: retrospective built_at lacks timezone")
+retro_acts = retrospective.get("acts")
+if not isinstance(retro_acts, dict) or not retro_acts:
+    raise SystemExit("publish validation: retrospective acts are empty")
+retro_interval_count = retro_event_count = retro_observation_count = 0
+for act_id, act in retro_acts.items():
+    if not isinstance(act, dict) or act.get("act_id") != act_id:
+        raise SystemExit("publish validation: malformed retrospective act")
+    intervals = act.get("intervals")
+    events = act.get("events")
+    observations_for_act = act.get("observations")
+    if not isinstance(intervals, list) or not isinstance(events, list) or \
+            not isinstance(observations_for_act, list):
+        raise SystemExit("publish validation: malformed retrospective rows")
+    retro_interval_count += len(intervals)
+    retro_event_count += len(events)
+    retro_observation_count += len(observations_for_act)
+    for row in intervals:
+        digest = str(row.get("state_sha256") or "")
+        if digest not in loaded_states or loaded_states[digest][0] != act_id:
+            raise SystemExit(
+                "publish validation: retrospective interval state mismatch")
+        try:
+            effective_from = date.fromisoformat(str(row.get("effective_from")))
+            effective_to = (date.fromisoformat(str(row["effective_to"]))
+                            if row.get("effective_to") else None)
+            knowledge_from = datetime.fromisoformat(
+                str(row.get("knowledge_from")).replace("Z", "+00:00"))
+            knowledge_to = (datetime.fromisoformat(
+                str(row["knowledge_to"]).replace("Z", "+00:00"))
+                if row.get("knowledge_to") else None)
+        except ValueError:
+            raise SystemExit(
+                "publish validation: invalid retrospective interval date")
+        if knowledge_from.tzinfo is None or (knowledge_to and
+                knowledge_to.tzinfo is None) or (effective_to and
+                effective_to <= effective_from) or (knowledge_to and
+                knowledge_to <= knowledge_from):
+            raise SystemExit(
+                "publish validation: impossible retrospective interval")
+        published = (date.fromisoformat(str(row["published_at"]))
+                     if row.get("published_at") else None)
+        if bool(row.get("retroactive")) != bool(
+                published and effective_from < published):
+            raise SystemExit(
+                "publish validation: interval retroactive marker mismatch")
+    for row in events:
+        try:
+            published = date.fromisoformat(str(row.get("published_at")))
+            effective = (date.fromisoformat(str(row["effective_at"]))
+                         if row.get("effective_at") else None)
+        except ValueError:
+            raise SystemExit(
+                "publish validation: invalid retrospective event date")
+        if row.get("historical_text_reconstructed") is not False or \
+                row.get("text_status") != "event_only" or \
+                not digest_re.fullmatch(str(row.get("pdf_sha256") or "")) or \
+                bool(row.get("retroactive")) != bool(
+                    effective and effective < published):
+            raise SystemExit(
+                "publish validation: unsupported retrospective event claim")
+    for row in observations_for_act:
+        digest = str(row.get("state_sha256") or "")
+        if digest not in loaded_states or loaded_states[digest][0] != act_id or \
+                row.get("date_basis") != \
+                "retrieval_observation_not_effective_date":
+            raise SystemExit(
+                "publish validation: retrospective observation mismatch")
+retro_counts = retrospective.get("counts") or {}
+if int(retro_counts.get("acts") or -1) != len(retro_acts) or \
+        int(retro_counts.get("interval_assertions") or -1) != \
+        retro_interval_count or int(retro_counts.get("events") or -1) != \
+        retro_event_count or int(retro_counts.get("observations") or -1) != \
+        retro_observation_count or summary.get("retrospective_history") != \
+        retro_counts:
+    raise SystemExit("publish validation: retrospective count mismatch")
+
+with sqlite3.connect(
+        f"file:{root / 'retrospective_history.sqlite'}?mode=ro", uri=True) as db:
+    result = db.execute("PRAGMA quick_check").fetchone()
+    tables = {row[0] for row in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    sqlite_counts = {
+        "legal_intervals": db.execute(
+            "SELECT COUNT(*) FROM legal_intervals").fetchone()[0],
+        "amendment_events": db.execute(
+            "SELECT COUNT(*) FROM amendment_events").fetchone()[0],
+        "state_observations": db.execute(
+            "SELECT COUNT(*) FROM state_observations").fetchone()[0],
+    }
+if not result or result[0] != "ok" or not {
+        "metadata", "acts", "legal_intervals", "amendment_events",
+        "state_observations"} <= tables or sqlite_counts != {
+            "legal_intervals": retro_interval_count,
+            "amendment_events": retro_event_count,
+            "state_observations": retro_observation_count,
+        }:
+    raise SystemExit(
+        "publish validation: retrospective sqlite integrity/count mismatch")
 
 for path in root.rglob("*"):
     if "buzer" in path.name.casefold():

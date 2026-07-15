@@ -28,7 +28,9 @@ SERVICE_INDEX = {
     "endpoints": [
         "/health", "/version", "/stats", "/data-policy", "/feed",
         "/acts", "/acts/{id}", "/acts/{id}/archive",
-        "/acts/{id}/markdown", "/decisions", "/decisions/{id}",
+        "/acts/{id}/history", "/acts/{id}/diff",
+        "/acts/{id}/markdown", "/retrospective-history.sqlite",
+        "/decisions", "/decisions/{id}",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",
         "/official-states", "/official-transition-reviews",
@@ -38,7 +40,7 @@ SERVICE_INDEX = {
 
 server = FastAPI(
     title="Lexgraph API",
-    version="1.2",
+    version="1.3",
     docs_url="/docs",
     redoc_url=None,
 )
@@ -69,6 +71,14 @@ server.add_middleware(
         "X-Lexgraph-Effective-Date",
         "X-Lexgraph-Review-ID",
         "X-Lexgraph-Procedure-ID",
+        "X-Lexgraph-As-Of",
+        "X-Lexgraph-Effective-From",
+        "X-Lexgraph-Effective-To",
+        "X-Lexgraph-Knowledge-From",
+        "X-Lexgraph-Knowledge-To",
+        "X-Lexgraph-Observed-Date",
+        "X-Lexgraph-Text-Status",
+        "X-Lexgraph-Date-Status",
     ],
     max_age=86400,
 )
@@ -126,7 +136,10 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="acts">/acts</a></td><td class="what">the act index (federal + Bavaria)</td></tr>
     <tr><td class="ep">/acts/{id}</td><td class="what">one full act — head, patches, versions, norms</td></tr>
     <tr><td class="ep">/acts/{id}/archive</td><td class="what">dated states + explicit archive coverage gaps</td></tr>
-    <tr><td class="ep">/acts/{id}/markdown</td><td class="what">full act or one §/Art. as Markdown; optional download</td></tr>
+    <tr><td class="ep">/acts/{id}/history</td><td class="what">bitemporal legal-validity and knowledge-time assertions</td></tr>
+    <tr><td class="ep">/acts/{id}/diff</td><td class="what">exact CAS state diff by legal date and knowledge time</td></tr>
+    <tr><td class="ep">/acts/{id}/markdown</td><td class="what">full act or one §/Art. at a legal date as Markdown</td></tr>
+    <tr><td class="ep"><a href="retrospective-history.sqlite">/retrospective-history.sqlite</a></td><td class="what">portable bitemporal SQLite database</td></tr>
     <tr><td class="ep"><a href="decisions">/decisions</a></td><td class="what">court decisions (Rechtsprechung)</td></tr>
     <tr><td class="ep">/decisions/{id}</td><td class="what">one complete exported decision row</td></tr>
     <tr><td class="ep"><a href="git">/git</a></td><td class="what">Laws as Git — commits, open/closed branches and evidence-bound merges</td></tr>

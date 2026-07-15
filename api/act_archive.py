@@ -613,7 +613,8 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
               target: str, head_date: str, norm_ref: _NormRef | None,
               exact: bool, gaps: list[dict[str, Any]],
               state_meta: dict[str, Any] | None = None,
-              legal_meta: dict[str, Any] | None = None) -> str:
+              legal_meta: dict[str, Any] | None = None,
+              retrospective_meta: dict[str, Any] | None = None) -> str:
     status = "exact" if exact else "partial"
     scope = norm_ref.label if norm_ref is not None else "entire act"
     lines = [
@@ -628,7 +629,24 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         f"scope: {_yaml_string(scope)}",
         f"coverage_gaps: {len(gaps)}",
     ]
-    if state_meta:
+    if retrospective_meta:
+        lines.extend([
+            f"as_of: {_yaml_string(retrospective_meta.get('as_of'))}",
+            f"effective_from: {_yaml_string(retrospective_meta.get('effective_from'))}",
+            f"effective_to: {_yaml_string(retrospective_meta.get('effective_to'))}",
+            f"knowledge_from: {_yaml_string(retrospective_meta.get('knowledge_from'))}",
+            f"knowledge_to: {_yaml_string(retrospective_meta.get('knowledge_to'))}",
+            f"published_at: {_yaml_string(retrospective_meta.get('published_at'))}",
+            f"observed_at: {_yaml_string(retrospective_meta.get('observed_at'))}",
+            f"verified_through_observed_at: {_yaml_string(retrospective_meta.get('verified_through_observed_at'))}",
+            f"text_status: {_yaml_string(retrospective_meta.get('text_status'))}",
+            f"date_status: {_yaml_string(retrospective_meta.get('date_status'))}",
+            f"date_basis: {_yaml_string(retrospective_meta.get('date_basis'))}",
+            f"verification: {_yaml_string(retrospective_meta.get('verification'))}",
+            f"retroactive: {str(bool(retrospective_meta.get('retroactive'))).lower()}",
+            f"state_sha256: {_yaml_string(retrospective_meta.get('state_sha256'))}",
+        ])
+    elif state_meta:
         lines.extend([
             f"date_basis: {_yaml_string(state_meta.get('date_basis'))}",
             f"source: {_yaml_string(state_meta.get('source') or 'GII')}",
@@ -656,7 +674,23 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         "",
         f"> Archive status: **{status}** · requested/resolved {target} · HEAD {head_date}.",
     ])
-    if state_meta:
+    if retrospective_meta:
+        lines.append(
+            "> The body is an integrity-checked complete GII state selected "
+            "by a verified legal-validity interval. Legal validity and the "
+            "time at which Lexgraph knew the assertion are separate axes.")
+        if retrospective_meta.get("retroactive"):
+            lines.append(
+                "> This official commencement date precedes publication; the "
+                "retroactive effect is preserved explicitly.")
+        if gaps:
+            lines.append(
+                "> Known evidence limits for this selected state:")
+            for gap in gaps:
+                label = (gap.get("label") or gap.get("reason")
+                         if isinstance(gap, dict) else str(gap))
+                lines.append(f"> - {label}")
+    elif state_meta:
         lines.append(
             "> This complete parsed state was observed in the official GII "
             f"source on **{target}**. The date is a retrieval observation, "
@@ -710,7 +744,9 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
 def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
                              norm: str | None = None,
                              fallback_head: Any = None,
-                             observed_state: dict[str, Any] | None = None
+                             observed_state: dict[str, Any] | None = None,
+                             retrospective_state: dict[str, Any] | None = None,
+                             retrospective_interval: dict[str, Any] | None = None,
                              ) -> dict[str, Any]:
     """Resolve an arbitrary date and render the full act or one norm."""
     head_date = head_date_for(act, fallback_head)
@@ -723,8 +759,31 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         raise InvalidArchiveDateError(
             f"requested date {target} is newer than HEAD {head_date}")
 
+    if ((retrospective_state is None) !=
+            (retrospective_interval is None)):
+        raise ArchiveRequestError(
+            "retrospective state and interval must be supplied together")
+    if retrospective_state is not None and observed_state is not None:
+        raise ArchiveRequestError(
+            "official observation and retrospective interval are mutually exclusive")
+
     state_meta: dict[str, Any] | None = None
-    if observed_state is not None:
+    retrospective_meta: dict[str, Any] | None = None
+    if retrospective_state is not None:
+        assert retrospective_interval is not None
+        interval_target = _parse_date(retrospective_interval.get("requested_at"))
+        digest = str(retrospective_interval.get("state_sha256") or "")
+        if interval_target != target:
+            raise ArchiveRequestError(
+                "retrospective interval does not match requested date")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ArchiveRequestError("retrospective interval has no digest")
+        retrospective_norms = retrospective_state.get("norms")
+        if not isinstance(retrospective_norms, list):
+            raise ArchiveRequestError("retrospective state has no norms")
+        current_norms = list(retrospective_norms)
+        retrospective_meta = dict(retrospective_interval)
+    elif observed_state is not None:
         observed_at = _parse_date(observed_state.get("observed_at"))
         digest = str(observed_state.get("state_sha256") or "")
         if observed_at != target:
@@ -750,7 +809,15 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
     norm_ref = (_resolve_norm(current_norms, norm,
                               _historical_designators(act))
                 if norm is not None else None)
-    if state_meta is not None:
+    if retrospective_meta is not None:
+        norms = copy.deepcopy(current_norms)
+        gaps = _dedupe_gaps(list(retrospective_meta.get("gaps") or []))
+        exact = (
+            retrospective_meta.get("text_status") == "official_exact"
+            and retrospective_meta.get("date_status") == "official_verified"
+            and not gaps
+        )
+    elif state_meta is not None:
         norms = copy.deepcopy(current_norms)
         gaps = []
         exact = True
@@ -770,7 +837,8 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         exact = not gaps
     markdown = _markdown(
         act, norms, target=target, head_date=head_date, norm_ref=norm_ref,
-        exact=exact, gaps=gaps, state_meta=state_meta, legal_meta=legal_meta)
+        exact=exact, gaps=gaps, state_meta=state_meta, legal_meta=legal_meta,
+        retrospective_meta=retrospective_meta)
     result = {
         "act_id": act.get("id"),
         "requested_at": target,
@@ -782,7 +850,17 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         "markdown": markdown,
         "gaps": gaps,
     }
-    if state_meta:
+    if retrospective_meta:
+        result.update({key: retrospective_meta.get(key) for key in (
+            "as_of", "effective_from", "effective_to", "knowledge_from",
+            "knowledge_to", "published_at", "observed_at",
+            "verified_through_observed_at", "text_status", "date_status",
+            "date_basis", "verification", "retroactive", "state_sha256",
+        )})
+        result["source_url"] = next((
+            str(row.get("url")) for row in retrospective_meta.get("evidence") or []
+            if isinstance(row, dict) and row.get("url")), None)
+    elif state_meta:
         result.update({
             "observed_at": target,
             "date_basis": state_meta.get("date_basis")

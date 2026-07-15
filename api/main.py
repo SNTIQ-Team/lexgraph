@@ -16,7 +16,10 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /acts                   the act index (wiki.json)
   GET /acts/{id}              one full act (acts/<id>.json); 404 if unknown
   GET /acts/{id}/archive      selectable HEAD + historical transition dates
+  GET /acts/{id}/history      bitemporal legal/knowledge-time assertions
+  GET /acts/{id}/diff         exact state diff at one knowledge-time slice
   GET /acts/{id}/markdown     full act or one norm as dated Markdown
+  GET /retrospective-history.sqlite  portable retrospective database
   GET /git?lane=&limit=       Laws-as-Git event log, optionally by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
@@ -39,10 +42,11 @@ from __future__ import annotations
 import json
 import os
 import threading
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from api.act_archive import (
     ArchiveRequestError,
@@ -55,13 +59,23 @@ from api.gii_catalog import GiiCatalogIndex
 from api.search_engine import SearchEngine, normalize_search_text
 from api.procedure_search import ProcedureSearchIndex
 from api.official_state_store import OfficialStateError, load_observed_state
+from api.retrospective_store import (
+    RetrospectiveAmbiguity,
+    RetrospectiveIntegrityError,
+    RetrospectiveNotFound,
+    act_history as resolve_act_history,
+    diff_intervals,
+    load_interval_state,
+    resolve_interval,
+    validate_manifest as validate_retrospective_manifest,
+)
 
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
     "LEXGRAPH_DATA",
     Path(__file__).resolve().parent.parent / "web" / "data"))
 
-app = FastAPI(title="Lexgraph", version="1.2")
+app = FastAPI(title="Lexgraph", version="1.3")
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)
 LANES = ["EU", "Bund", "Bayern", "Länder"]
@@ -74,6 +88,9 @@ _GII_CATALOG_INDEX: GiiCatalogIndex | None = None
 _GII_CATALOG_LOCK = threading.RLock()
 _PROCEDURE_SEARCH_INDEX: ProcedureSearchIndex | None = None
 _PROCEDURE_SEARCH_LOCK = threading.RLock()
+_RETROSPECTIVE_MANIFEST: dict[str, object] | None = None
+_RETROSPECTIVE_SOURCE: object | None = None
+_RETROSPECTIVE_LOCK = threading.RLock()
 
 
 def _load(name: str) -> object:
@@ -92,6 +109,50 @@ def _load(name: str) -> object:
 def _cached(payload: object) -> JSONResponse:
     """The data plane is static per deploy, so let clients cache it too."""
     return JSONResponse(payload, headers={"Cache-Control": "public, max-age=3600"})
+
+
+def _retrospective_manifest(*, optional: bool = False) -> dict | None:
+    """Return the validated, immutable retrospective data-plane manifest."""
+    path = DATA_DIR / "retrospective_history.json"
+    if not path.is_file():
+        if optional:
+            return None
+        raise HTTPException(
+            503, "retrospective history is not built — run "
+                 "tools/build_web_data.py")
+    raw = _load("retrospective_history")
+    global _RETROSPECTIVE_MANIFEST, _RETROSPECTIVE_SOURCE
+    with _RETROSPECTIVE_LOCK:
+        if _RETROSPECTIVE_MANIFEST is None or _RETROSPECTIVE_SOURCE is not raw:
+            try:
+                _RETROSPECTIVE_MANIFEST = validate_retrospective_manifest(raw)
+            except RetrospectiveIntegrityError as exc:
+                raise HTTPException(
+                    503, f"retrospective history integrity failure: {exc}") \
+                    from exc
+            _RETROSPECTIVE_SOURCE = raw
+        return _RETROSPECTIVE_MANIFEST
+
+
+def _knowledge_value(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        raise HTTPException(422, "as_of must include a timezone")
+    return value.isoformat()
+
+
+def _history_envelope(manifest: dict, history: dict) -> dict:
+    """Attach manifest-level semantics without duplicating the state catalog."""
+    return {
+        "schema_version": manifest.get("schema_version"),
+        "kind": manifest.get("kind"),
+        "built_at": manifest.get("built_at"),
+        "state_identity": manifest.get("state_identity"),
+        "date_semantics": manifest.get("date_semantics"),
+        "source_policy": manifest.get("source_policy"),
+        **history,
+    }
 
 
 def _gii_catalog_index(rows: list[dict]) -> GiiCatalogIndex:
@@ -140,13 +201,25 @@ warm_search_indexes()
 
 @app.get("/health")
 def health():
-    """Liveness + data-plane check (used by uptime monitors)."""
+    """Liveness + validated data-plane check (used by deploys/monitors).
+
+    The atomic publisher treats this endpoint as its commit gate.  Validate
+    the retrospective manifest here as well as ``summary.json`` so a release
+    with internally inconsistent bitemporal assertions is rolled back before
+    it becomes visible, rather than failing on the first history request.
+    """
     try:
         summary = _load("summary")
     except HTTPException as exc:
         raise HTTPException(503, exc.detail)
+    retrospective = _retrospective_manifest(optional=True)
     return {"status": "ok", "built_at": summary.get("built_at"),
-            "data_dir": str(DATA_DIR)}
+            "data_dir": str(DATA_DIR),
+            "retrospective": ({
+                "status": "ok",
+                "built_at": retrospective.get("built_at"),
+                "counts": retrospective.get("counts", {}),
+            } if retrospective is not None else {"status": "not_built"})}
 
 
 @app.get("/version")
@@ -311,7 +384,10 @@ def _archive_head_fallback() -> object:
 
 
 @app.get("/acts/{act_id}/archive")
-def act_archive(act_id: str):
+def act_archive(
+        act_id: str,
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge-time slice")):
     """Selectable state dates, norm designators, and known coverage gaps.
 
     HEAD is the exact consolidated snapshot.  Earlier entries are conservative
@@ -323,13 +399,99 @@ def act_archive(act_id: str):
             _load_act(act_id), fallback_head=_archive_head_fallback())
     except ArchiveRequestError as exc:
         raise HTTPException(422, str(exc)) from exc
+    manifest = _retrospective_manifest(optional=True)
+    knowledge = _knowledge_value(as_of)
+    if manifest is None:
+        payload["retrospective"] = {
+            "available": False,
+            "as_of": knowledge,
+            "reason": "retrospective history is not built",
+        }
+    else:
+        try:
+            history = resolve_act_history(
+                manifest, act_id, as_of=knowledge)
+        except RetrospectiveNotFound as exc:
+            if act_id in (manifest.get("acts") or {}):
+                raise HTTPException(404, str(exc)) from exc
+            payload["retrospective"] = {
+                "available": False,
+                "as_of": knowledge or manifest.get("built_at"),
+                "reason": "no verified retrospective intervals for this act",
+            }
+        except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
+            raise HTTPException(
+                503, f"retrospective history integrity failure: {exc}") from exc
+        else:
+            payload["retrospective"] = {
+                "available": True,
+                "schema_version": manifest.get("schema_version"),
+                "built_at": manifest.get("built_at"),
+                "as_of": history.get("as_of"),
+                "history_start": history.get("history_start"),
+                "intervals": history.get("intervals") or [],
+                "events": history.get("events") or [],
+                "observations": history.get("observations") or [],
+                "gaps": history.get("gaps") or [],
+                "coverage": history.get("coverage") or {},
+                "date_semantics": manifest.get("date_semantics") or {},
+            }
+    return _cached(payload)
+
+
+@app.get("/acts/{act_id}/history")
+def retrospective_history(
+        act_id: str,
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge-time slice")):
+    """Bitemporal state/event history for one act."""
+    manifest = _retrospective_manifest()
+    assert manifest is not None
+    try:
+        history = resolve_act_history(
+            manifest, act_id, as_of=_knowledge_value(as_of))
+    except RetrospectiveNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
+        raise HTTPException(
+            503, f"retrospective history integrity failure: {exc}") from exc
+    return _cached(_history_envelope(manifest, history))
+
+
+@app.get("/acts/{act_id}/diff")
+def retrospective_diff(
+        act_id: str,
+        from_date: date = Query(..., alias="from",
+                                description="first legal date (YYYY-MM-DD)"),
+        to_date: date = Query(..., alias="to",
+                              description="second legal date (YYYY-MM-DD)"),
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge-time slice"),
+        norm: str | None = Query(
+            None, description="optional §/Art. designator")):
+    """Diff two complete CAS states at one knowledge-time slice."""
+    manifest = _retrospective_manifest()
+    assert manifest is not None
+    try:
+        payload = diff_intervals(
+            manifest, act_id, from_date.isoformat(), to_date.isoformat(),
+            DATA_DIR / "federal_states",
+            as_of=_knowledge_value(as_of), norm=norm)
+    except RetrospectiveNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
+        raise HTTPException(
+            503, f"retrospective history integrity failure: {exc}") from exc
     return _cached(payload)
 
 
 @app.get("/acts/{act_id}/markdown", response_class=Response)
 def act_markdown(
         act_id: str,
-        at: str | None = Query(None, description="YYYY-MM-DD; omit for HEAD"),
+        at: date | None = Query(
+            None, description="legal date (YYYY-MM-DD); omit for HEAD"),
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge time; requires at"),
         norm: str | None = Query(
             None, description="§/Art. designator; omit for the entire act"),
         download: bool = Query(False, description="send as a .md attachment"),
@@ -339,14 +501,42 @@ def act_markdown(
     Response headers expose the resolved date and whether it is the exact HEAD
     snapshot.  Historical gaps are also embedded at the top of the Markdown.
     """
+    if as_of is not None and at is None:
+        raise HTTPException(422, "as_of requires an explicit legal date in at")
+    requested_at = at.isoformat() if at is not None else None
+    knowledge = _knowledge_value(as_of)
     try:
         act = _load_act(act_id)
-        observed_state = load_observed_state(DATA_DIR, act, at)
+        retrospective_interval = None
+        retrospective_state = None
+        manifest = _retrospective_manifest(optional=True)
+        if requested_at is not None and manifest is not None:
+            try:
+                retrospective_interval = resolve_interval(
+                    manifest, act_id, requested_at, as_of=knowledge)
+                retrospective_state = load_interval_state(
+                    retrospective_interval, DATA_DIR / "federal_states")
+            except RetrospectiveNotFound:
+                if knowledge is not None:
+                    raise
+            except (RetrospectiveIntegrityError,
+                    RetrospectiveAmbiguity) as exc:
+                raise HTTPException(
+                    503, f"retrospective history integrity failure: {exc}") \
+                    from exc
+        elif knowledge is not None:
+            raise HTTPException(503, "retrospective history is not built")
+        observed_state = (None if retrospective_state is not None else
+                          load_observed_state(DATA_DIR, act, requested_at))
         result = render_markdown_snapshot(
-            act, requested_at=at, norm=norm,
+            act, requested_at=requested_at, norm=norm,
             fallback_head=_archive_head_fallback(),
-            observed_state=observed_state)
+            observed_state=observed_state,
+            retrospective_state=retrospective_state,
+            retrospective_interval=retrospective_interval)
     except UnknownNormError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RetrospectiveNotFound as exc:
         raise HTTPException(404, str(exc)) from exc
     except OfficialStateError as exc:
         # Integrity failure is a broken immutable data generation, not a bad
@@ -381,6 +571,19 @@ def act_markdown(
         headers["X-Lexgraph-Review-ID"] = str(result["review_id"])
     if result.get("procedure_id"):
         headers["X-Lexgraph-Procedure-ID"] = str(result["procedure_id"])
+    retrospective_headers = {
+        "X-Lexgraph-As-Of": "as_of",
+        "X-Lexgraph-Effective-From": "effective_from",
+        "X-Lexgraph-Effective-To": "effective_to",
+        "X-Lexgraph-Knowledge-From": "knowledge_from",
+        "X-Lexgraph-Knowledge-To": "knowledge_to",
+        "X-Lexgraph-Observed-Date": "observed_at",
+        "X-Lexgraph-Text-Status": "text_status",
+        "X-Lexgraph-Date-Status": "date_status",
+    }
+    for header, field in retrospective_headers.items():
+        if result.get(field) is not None:
+            headers[header] = str(result[field])
     # Keep the raw Markdown response self-describing for browser clients.  Cap
     # this header to a compact summary; the Markdown body still lists every
     # selected-snapshot gap in full.
@@ -397,6 +600,18 @@ def act_markdown(
             f'attachment; filename="{markdown_filename(result)}"')
     return Response(result["markdown"], media_type="text/markdown",
                     headers=headers)
+
+
+@app.get("/retrospective-history.sqlite", response_class=FileResponse)
+def retrospective_sqlite():
+    """Download the portable bitemporal SQLite database built with the API."""
+    path = DATA_DIR / "retrospective_history.sqlite"
+    if not path.is_file():
+        raise HTTPException(404, "retrospective SQLite database is not built")
+    return FileResponse(
+        path, media_type="application/vnd.sqlite3",
+        filename="lexgraph-retrospective-history.sqlite",
+        headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/git")

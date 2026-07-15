@@ -51,6 +51,15 @@ were verified on 2026-07-15. Baseline audit snippets:
   its own SHA-256, extracts text/articles and joins referenced corpus acts and
   DIP commencement rows. A GII state transition receives a legal effective
   date only when every changed norm passes this final-command gate.
+- **Official retrospective inventory (2023+)**:
+  `pipeline/backfill_bgbl_history.py` starts from promulgated DIP procedures,
+  joins only exact `Rechtsmaterialien` names from the curated GII corpus, and
+  then requires that the bounded exact act name occur in the target/preamble
+  of a final, checksum-verified BGBl amendment article. Names found only in
+  replacement text are rejected. DIP dates are assigned only when the whole
+  article has one unambiguous commencement clause; sub-article splits remain
+  unresolved. The event inventory is not treated as a historical consolidated
+  text.
 - **EUR-Lex**: use the **CELLAR machine channel only** — the website (and
   even its robots.txt) sits behind a WAF JS-challenge. Formex XML carries
   `ARTICLE/PARAG IDENTIFIER`s; consolidated versions per date

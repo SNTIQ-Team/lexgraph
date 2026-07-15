@@ -103,6 +103,36 @@ def load_observed_state(data_dir: Path, act: dict[str, Any],
     }
 
 
+def load_state_digest(state_root: Path, digest: str, *,
+                      act_id: str | None = None,
+                      jurabk: str | None = None) -> dict[str, Any]:
+    """Load one immutable state by digest for bitemporal history queries.
+
+    ``state_root`` is the directory containing ``objects/sha256``.  Unlike
+    :func:`load_observed_state`, this lookup is anchored by a separately
+    validated legal interval rather than by a retrieval-day observation.
+    Optional act identities prevent a valid object from being attached to the
+    wrong retrospective interval.
+    """
+    if not _DIGEST.fullmatch(str(digest or "")):
+        raise OfficialStateError("official state digest is invalid")
+    path = (Path(state_root) / "objects" / "sha256" / digest[:2]
+            / f"{digest}.json.gz")
+    if not path.is_file():
+        raise OfficialStateError(
+            f"official state object is missing for digest {digest}")
+    state = _read_object(str(path), digest)
+    object_act_id = str(state.get("act_id") or state.get("id") or "")
+    object_jurabk = str(state.get("jurabk") or "")
+    if act_id is not None and object_act_id != act_id:
+        raise OfficialStateError(
+            f"official state object {digest} belongs to another act")
+    if jurabk is not None and object_jurabk != jurabk:
+        raise OfficialStateError(
+            f"official state object {digest} has another jurabk")
+    return state
+
+
 def clear_cache() -> None:
     """Test/deployment hook; generations are otherwise immutable."""
     _read_object.cache_clear()
