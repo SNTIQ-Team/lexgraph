@@ -109,7 +109,11 @@ def warm_search_indexes() -> None:
         _gii_catalog_index(rows)
 
 
-app.add_event_handler("startup", warm_search_indexes)
+# Uvicorn imports this module once per worker.  Warming here is compatible
+# with both old and current FastAPI versions (the latter removed the former
+# ``add_event_handler`` convenience method) and keeps the first user query
+# fast without adding a framework-specific lifecycle dependency.
+warm_search_indexes()
 
 
 # --------------------------------------------------------------- service
