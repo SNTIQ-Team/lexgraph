@@ -44,9 +44,11 @@ archived official pages yield an unambiguous state transition (sparse from
 Third-party database rights are treated separately from copyright in the
 individual legal texts. Buzer's private snapshots remain an internal candidate
 and QA layer; public act pages may link to the corresponding Buzer history as a
-non-authoritative cross-check, but do not copy its database. Public federal
-history is rebuilt from official GII/DIP/BGBl/NeuRIS evidence and Lexgraph's
-own state-diff engine. See [`docs/RIGHTS.md`](docs/RIGHTS.md).
+non-authoritative cross-check, but do not copy its database. Lexgraph does not
+need a Buzer licence for its own workflow: public federal history is rebuilt
+independently from official GII/DIP/BGBl/NeuRIS evidence and Lexgraph's own
+state capture, matching and diff engine. See
+[`docs/RIGHTS.md`](docs/RIGHTS.md).
 
 ## What's here
 

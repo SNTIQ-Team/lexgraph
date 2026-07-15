@@ -74,8 +74,10 @@ the CELLAR breadth index were added from their current fetcher contracts on
   be protected as a database under §§ 87a ff. UrhG. Both fetchers are
   default-off and existing snapshots are quarantined. Public web/HF builds do
   not load them. A small curated mapping supplies only direct per-act history
-  links; published history rows come from the official-only verification
-  pipeline in `tools/federal_history.py`.
+  links. Lexgraph does not request permission to reproduce Buzer's database;
+  it independently recreates the useful workflow from official sources.
+  Published history rows come from the official-only verification pipeline in
+  `tools/federal_history.py`.
 - **OLDP**: keyless REST + bulk dumps; laws under ODbL, citation graph
   CC-BY; alive again in 2026 after a dump hiatus.
 - **gesetze-bayern.de**: robots fully permissive; doc keys ≠ official

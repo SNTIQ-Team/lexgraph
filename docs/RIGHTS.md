@@ -33,8 +33,11 @@ procedure back to DIP and does not redistribute altered parliamentary PDFs.
 The following snapshot families may exist in a private research cache but are
 excluded from public web data and Hugging Face exports by default:
 
-- `buzer`, `buzer_synopse`: written permission is required before systematic
-  extraction or redistribution of the private version/synopsis database.
+- `buzer`, `buzer_synopse`: the retained research cache is excluded because
+  Lexgraph does not redistribute or systematically extract Buzer's private
+  version/synopsis database. Permission would matter only for reusing that
+  database itself. It is not needed for independently producing equivalent or
+  better facts and diffs from official sources with Lexgraph's own workflow.
   A curated per-act external link is not a republication: public act records
   may expose it as `cross_checks[]`, explicitly non-authoritative.
 - `laender_bills`, `laender_monitor`: Parlamentsspiegel is used only as an
