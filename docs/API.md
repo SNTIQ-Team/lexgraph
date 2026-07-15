@@ -770,6 +770,13 @@ curl 'http://127.0.0.1:8010/eu-index?q=internationalen%20Schutz&kind=DIR&limit=2
 stable endpoint for a persistent “tracked projects” panel; clients do not have
 to discover watched rows by searching the full hierarchy.
 
+EU rows can additionally contain `council_development`: a separately sourced
+Council public-register record (`document`, `url`, document and meeting dates,
+addressee, access status). Its date/stage can be newer than EUR-Lex while the
+top-level `status` remains `Ongoing`. A register title saying `Political
+agreement` is explicitly non-terminal; only the final-act/OJ review gate can
+end polling.
+
 `/amendment-fates` returns all validation records. `procedure_id` filters by
 official DIP id and `validation_id` by the Lexgraph record id; filters can be
 combined. Each record keeps reviewed document roles separate from mechanical

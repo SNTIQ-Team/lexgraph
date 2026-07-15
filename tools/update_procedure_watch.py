@@ -81,6 +81,7 @@ def _eu_row(watch_key: str, config: dict, row: dict) -> dict:
         "adopted_celexes": row.get("adopted_celexes") or [],
         "official_journal": row.get("official_journal") or [],
         "events": row.get("events") or [],
+        "council_development": row.get("council_development"),
         "publication_detected": bool(row.get("publication_detected")),
         "awaiting_final_review": bool(row.get("awaiting_final_review")),
         "final_text_review": row.get("final_text_review"),
@@ -95,8 +96,18 @@ def _fingerprint(row: dict) -> str:
         "last_observed_stage", "last_observed_updated",
         "promulgation", "entry_into_force", "adopted_celexes",
         "official_journal", "events",
+        "council_development",
         "publication_detected", "awaiting_final_review", "final_text_review",
     )}
+    council = fields.get("council_development")
+    if isinstance(council, dict):
+        # Retrieval time is represented by last_checked.  Keeping it in the
+        # transition fingerprint would manufacture a history event on every
+        # twice-daily poll even when the official Council metadata is stable.
+        fields["council_development"] = {
+            key: value for key, value in council.items()
+            if key != "fetched_at"
+        }
     return json.dumps(fields, ensure_ascii=False, sort_keys=True,
                       separators=(",", ":"))
 
@@ -242,6 +253,7 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
                 "url": current.get("url"),
                 "adopted_celexes": current.get("adopted_celexes") or [],
                 "official_journal": current.get("official_journal") or [],
+                "council_development": current.get("council_development"),
             }
             if prior_event is None:
                 history_additions.append(event)

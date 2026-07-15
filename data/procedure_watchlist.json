@@ -42,6 +42,17 @@
       "decided_by": "Council of the European Union by qualified majority",
       "official_url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
       "proposal_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:52026PC0345",
+      "council_register_document": "ST 11375/26",
+      "council_register_url": "https://www.consilium.europa.eu/en/documents/public-register/public-register-search/results/?DocumentNumber=11375%2F26&DocumentLanguage=EN&OrderBy=DOCUMENT_DATE+DESC",
+      "council_register_seed": {
+        "date": "2026-07-10",
+        "title": "Council Implementing Decision extending temporary protection, as introduced by Council Implementing Decision (EU) 2022/382, until 4 March 2028 - Political agreement",
+        "stage": "Political agreement",
+        "document_type": "NOTE",
+        "addressee": "Permanent Representatives Committee (Part 2)",
+        "meeting_date": "2026-07-15",
+        "content_accessible": false
+      },
       "queries": [
         "2026/0186/NLE",
         "COM(2026) 345",

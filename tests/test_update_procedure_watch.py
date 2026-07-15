@@ -57,12 +57,27 @@ def test_eu_requires_fetcher_terminal_evidence(tmp_path: Path) -> None:
     history = tmp_path / "history.jsonl"
     _write(watch, {"procedures": {"eu-x": {
         "id": "eu", "source": "EUR-Lex", "monitor": True}}})
+    council = {"source": "Council public register", "document": "ST 11375/26",
+               "date": "2026-07-10", "stage": "Political agreement",
+               "fetched_at": "2026-07-15T20:00:00Z", "terminal": False}
     row = {"id": "eu-x", "procedure": "2026/1/NLE", "status": "Ongoing",
            "stage": "Political agreement", "terminal": False,
+           "council_development": council,
            "adopted_celexes": [], "official_journal": []}
     result = update_watch_state(
         watch, state, history, [], [row], "2026-07-15T20:00:00Z")
-    assert result["state"]["procedures"]["eu-x"]["active"] is True
+    current = result["state"]["procedures"]["eu-x"]
+    assert current["active"] is True
+    assert current["status"] == "Ongoing"
+    assert current["council_development"] == council
+    assert result["changes"][0]["council_development"] == council
+
+    # A later successful poll with identical official metadata must not
+    # manufacture a status-history entry solely because it was fetched later.
+    council["fetched_at"] = "2026-07-16T08:00:00Z"
+    same = update_watch_state(
+        watch, state, history, [], [row], "2026-07-16T08:00:00Z")
+    assert same["changes"] == []
 
 
 def test_eu_oj_without_final_review_remains_active(tmp_path: Path) -> None:

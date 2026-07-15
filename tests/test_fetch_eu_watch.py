@@ -3,12 +3,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import requests
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline"))
 
 from fetch_eu_watch import (  # noqa: E402
     active_eu_watches,
     apply_final_review_gate,
+    fetch_council_development,
+    merge_council_development,
+    parse_council_register,
     parse_eurlex_procedure,
 )
 
@@ -107,3 +112,82 @@ def test_oj_publication_stays_active_until_matching_article_review() -> None:
         }}, journal)
     assert reviewed["awaiting_final_review"] is False
     assert reviewed["terminal"] is True
+
+
+COUNCIL_HTML = """
+<html><head><title>Public register - Consilium</title></head><body>
+<article>
+  <h3>ST 11375 2026 INIT - NOTE 10/07/2026</h3>
+  <p>Council Implementing Decision extending temporary protection, as
+  introduced by Council Implementing Decision (EU) 2022/382, until 4 March
+  2028 - Political agreement</p>
+  <dl>
+    <dt>Addressee:</dt><dd>Permanent Representatives Committee (Part 2)</dd>
+    <dt>Date of meeting:</dt><dd>15/07/2026</dd>
+  </dl>
+  <p>The content of this document is not accessible.</p>
+</article>
+</body></html>
+"""
+
+
+def test_council_register_is_newer_evidence_but_not_enactment() -> None:
+    config = {
+        "council_register_document": "ST 11375/26",
+        "council_register_url": "https://example.test/council-register",
+    }
+    development = parse_council_register(
+        COUNCIL_HTML, config, "2026-07-15T04:00:00Z")
+    assert development == {
+        "source": "Council public register",
+        "document": "ST 11375/26",
+        "url": "https://example.test/council-register",
+        "date": "2026-07-10",
+        "title": ("Council Implementing Decision extending temporary "
+                  "protection, as introduced by Council Implementing Decision "
+                  "(EU) 2022/382, until 4 March 2028 - Political agreement"),
+        "stage": "Political agreement",
+        "document_type": "NOTE",
+        "addressee": "Permanent Representatives Committee (Part 2)",
+        "meeting_date": "2026-07-15",
+        "content_accessible": False,
+        "fetched_at": "2026-07-15T04:00:00Z",
+        "retrieval_status": "fetched",
+        "terminal": False,
+    }
+    row = {
+        "status": "Ongoing", "stage": "Discussions within the Council",
+        "date": "2026-06-26", "terminal": False,
+        "events": [{"date": "2026-06-26", "title": "Discussions within the Council"}],
+    }
+    merged = merge_council_development(row, development)
+    assert merged["status"] == "Ongoing"
+    assert merged["stage"] == "Political agreement"
+    assert merged["date"] == "2026-07-10"
+    assert merged["terminal"] is False
+    assert merged["events"][-1]["document"] == "ST 11375/26"
+
+
+def test_council_register_browser_block_preserves_verified_seed() -> None:
+    class BlockedResponse:
+        def raise_for_status(self) -> None:
+            raise requests.HTTPError("403")
+
+    class BlockedHttp:
+        def get(self, _url: str, **_kwargs):
+            return BlockedResponse()
+
+    config = {
+        "council_register_document": "ST 11375/26",
+        "council_register_url": "https://example.test/register",
+        "council_register_seed": {
+            "date": "2026-07-10", "stage": "Political agreement",
+            "meeting_date": "2026-07-15", "content_accessible": False,
+        },
+    }
+    development = fetch_council_development(
+        BlockedHttp(), config, "2026-07-15T04:00:00Z")
+    assert development is not None
+    assert development["retrieval_status"] == "fetch_unavailable"
+    assert development["stage"] == "Political agreement"
+    assert development["terminal"] is False

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-15T02:59:13+00:00",
+  "checked_at": "2026-07-15T03:18:37+00:00",
   "procedures": {
     "329468": {
       "id": "329468",
@@ -23,11 +23,11 @@
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-15T02:59:13+00:00",
+      "last_checked": "2026-07-15T03:18:37+00:00",
       "last_observed_status": "Überwiesen",
       "last_observed_stage": "Überwiesen",
       "last_observed_updated": "2026-02-12T10:57:00+01:00",
-      "last_observed_at": "2026-07-15T02:59:13+00:00",
+      "last_observed_at": "2026-07-15T03:18:37+00:00",
       "last_changed": "2026-07-15T02:59:08+00:00"
     },
     "eu-2026-0186-nle": {
@@ -39,8 +39,8 @@
       "gesta": null,
       "title": "COM (2026) 345: Proposal for a COUNCIL IMPLEMENTING DECISION extending temporary protection, as introduced by Implementing Decision (EU) 2022/382, until 4 March 2028",
       "status": "Ongoing",
-      "stage": "Discussions within the Council or its preparatory bodies",
-      "date": "2026-06-26",
+      "stage": "Political agreement",
+      "date": "2026-07-10",
       "updated": null,
       "url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
       "promulgation": [],
@@ -68,8 +68,40 @@
           "documents": [
             "ST 11011 2026 INIT"
           ]
+        },
+        {
+          "date": "2026-07-10",
+          "title": "Political agreement",
+          "source": "Council public register",
+          "document": "ST 11375/26",
+          "url": "https://www.consilium.europa.eu/en/documents/public-register/public-register-search/results/?DocumentNumber=11375%2F26&DocumentLanguage=EN&OrderBy=DOCUMENT_DATE+DESC",
+          "document_type": "NOTE",
+          "addressee": "Permanent Representatives Committee (Part 2)",
+          "meeting_date": "2026-07-15",
+          "content_accessible": false,
+          "retrieval_status": "fetch_unavailable",
+          "terminal": false,
+          "celexes": [],
+          "documents": [
+            "ST 11375/26"
+          ]
         }
       ],
+      "council_development": {
+        "source": "Council public register",
+        "document": "ST 11375/26",
+        "url": "https://www.consilium.europa.eu/en/documents/public-register/public-register-search/results/?DocumentNumber=11375%2F26&DocumentLanguage=EN&OrderBy=DOCUMENT_DATE+DESC",
+        "date": "2026-07-10",
+        "title": "Council Implementing Decision extending temporary protection, as introduced by Council Implementing Decision (EU) 2022/382, until 4 March 2028 - Political agreement",
+        "stage": "Political agreement",
+        "document_type": "NOTE",
+        "addressee": "Permanent Representatives Committee (Part 2)",
+        "meeting_date": "2026-07-15",
+        "content_accessible": false,
+        "fetched_at": "2026-07-15T03:17:41+00:00",
+        "retrieval_status": "fetch_unavailable",
+        "terminal": false
+      },
       "publication_detected": false,
       "awaiting_final_review": false,
       "final_text_review": null,
@@ -77,12 +109,12 @@
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-15T02:59:13+00:00",
+      "last_checked": "2026-07-15T03:18:37+00:00",
       "last_observed_status": "Ongoing",
-      "last_observed_stage": "Discussions within the Council or its preparatory bodies",
+      "last_observed_stage": "Political agreement",
       "last_observed_updated": null,
-      "last_observed_at": "2026-07-15T02:59:13+00:00",
-      "last_changed": "2026-07-15T02:59:08+00:00"
+      "last_observed_at": "2026-07-15T03:18:37+00:00",
+      "last_changed": "2026-07-15T03:17:42+00:00"
     },
     "322125": {
       "id": "322125",

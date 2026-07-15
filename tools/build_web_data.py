@@ -633,6 +633,7 @@ def _eu_procedure_row(source: dict,
         "descriptors": [],
         "summary": str((watch or {}).get("scope") or ""),
         "events": source.get("events") or [],
+        "council_development": source.get("council_development"),
         "adopted_celexes": source.get("adopted_celexes") or [],
         "official_journal": source.get("official_journal") or [],
         "publication_detected": bool(source.get("publication_detected")),
@@ -724,6 +725,7 @@ def build_watched_procedures(hierarchy: dict) -> dict:
                 "publication_detected": bool(source.get("publication_detected")),
                 "awaiting_final_review": awaiting_review,
                 "final_text_review": source.get("final_text_review"),
+                "council_development": source.get("council_development"),
                 "tracking_state": ("pending_final_review"
                                    if active and awaiting_review else
                                    "active" if active else
@@ -744,6 +746,9 @@ def build_watched_procedures(hierarchy: dict) -> dict:
             "decided_by": config.get("decided_by"),
             "proposal_url": config.get("proposal_url"),
             "council_documents": list(config.get("council_documents") or []),
+            "council_register_document": config.get(
+                "council_register_document"),
+            "council_register_url": config.get("council_register_url"),
             "relevant_norms": list(config.get("relevant_norms") or []),
             "validation_ids": list(config.get("validation_ids") or []),
             "terminal_rule": config.get("terminal_rule"),

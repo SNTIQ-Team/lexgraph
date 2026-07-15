@@ -27,6 +27,8 @@ def test_watched_payload_merges_persistent_state_config_and_history(
             "id": "temporary-protection", "source": "EUR-Lex",
             "jurisdiction": "EU", "queries": ["Ukraine"],
             "scope": "Draft only", "draft_only": True,
+            "council_register_document": "ST 11375/26",
+            "council_register_url": "https://example.test/register",
         },
         "de-x": {
             "id": "finished", "source": "DIP", "monitor": False,
@@ -37,6 +39,9 @@ def test_watched_payload_merges_persistent_state_config_and_history(
                    "procedures": {
         "eu-x": {"id": "eu-x", "source": "EUR-Lex", "title": "EU draft",
                  "status": "Ongoing", "active": True, "terminal": False,
+                 "council_development": {"document": "ST 11375/26",
+                                         "stage": "Political agreement",
+                                         "terminal": False},
                  "tracking_state": "active", "last_checked": "2026-07-15T08:00:00Z"},
         "de-x": {"id": "de-x", "source": "DIP", "title": "Final act",
                  "status": "Verkündet", "active": False, "terminal": True,
@@ -60,6 +65,9 @@ def test_watched_payload_merges_persistent_state_config_and_history(
     assert active["queries"] == ["Ukraine"]
     assert active["scope"] == "Draft only"
     assert active["draft_only"] is True
+    assert active["council_register_document"] == "ST 11375/26"
+    assert active["council_register_url"] == "https://example.test/register"
+    assert active["council_development"]["stage"] == "Political agreement"
     assert active["history"][0]["event"] == "first_seen"
     final = payload["procedures"][1]
     assert final["validation_ids"] == ["validation-x"]

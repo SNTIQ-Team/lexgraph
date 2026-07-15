@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from bs4 import BeautifulSoup
 
 from common import Http, snapshot_dir, write_jsonl
@@ -27,6 +28,7 @@ ADOPTED_DECISION_RE = re.compile(r"^3\d{4}D\d{4,}$")
 ADOPTION_EVENT_RE = re.compile(
     r"(?:adoption by (?:the )?council|act adopted|final act|"
     r"publication in (?:the )?official journal)", re.IGNORECASE)
+COUNCIL_DATE_RE = re.compile(r"\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b")
 
 
 def _text(node) -> str:
@@ -107,6 +109,166 @@ def parse_eurlex_procedure(html: str, watch_key: str, config: dict,
     }
 
 
+def _iso_eu_date(value: str | None) -> str | None:
+    match = COUNCIL_DATE_RE.search(str(value or ""))
+    if not match:
+        return None
+    day, month, year = match.groups()
+    return f"{year}-{int(month):02d}-{int(day):02d}"
+
+
+def _council_document_pattern(document: str) -> str:
+    match = re.fullmatch(r"\s*([A-Z]+)\s+(\d+)\s*/\s*(\d{2,4})\s*",
+                         document, re.IGNORECASE)
+    if not match:
+        return re.escape(document)
+    prefix, number, year = match.groups()
+    year_long = f"20{year}" if len(year) == 2 else year
+    return (rf"{re.escape(prefix)}\s+{re.escape(number)}\s*"
+            rf"(?:/\s*{re.escape(year)}|{re.escape(year_long)})")
+
+
+def parse_council_register(html: str, config: dict,
+                           fetched_at: str) -> dict:
+    """Parse one Council public-register result into source evidence.
+
+    The register deliberately exposes metadata even when the document body is
+    not public.  Its title may describe a *political agreement*; this parser
+    records that wording but never treats it as adoption or enactment.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    page_title = _text(soup.title)
+    if "browser check" in page_title.casefold():
+        raise ValueError("Council register browser check returned")
+    text = _text(soup)
+    document = str(config.get("council_register_document") or "").strip()
+    if not document:
+        raise ValueError("council_register_document missing")
+    document_pattern = _council_document_pattern(document)
+    if not re.search(document_pattern, text, re.IGNORECASE):
+        raise ValueError(f"Council register document not found: {document}")
+
+    title_match = re.search(
+        r"(Council Implementing Decision.{1,700}?Political agreement)",
+        text, re.IGNORECASE)
+    title = " ".join(title_match.group(1).split()) if title_match else None
+    date_match = COUNCIL_DATE_RE.search(text)
+    addressee_match = re.search(
+        r"Addressee\s*:?\s*(.+?)(?=Date of meeting|The content|$)",
+        text, re.IGNORECASE)
+    meeting_match = re.search(
+        r"Date of meeting\s*:?\s*(\d{1,2}[./]\d{1,2}[./]\d{4})",
+        text, re.IGNORECASE)
+    type_match = re.search(
+        rf"{document_pattern}\s*(?:INIT\s*)?-\s*([A-Z][A-Z \"'-]+?)\s+"
+        r"(\d{1,2}[./]\d{1,2}[./]\d{4})", text, re.IGNORECASE)
+    inaccessible = bool(re.search(
+        r"content of this document is not accessible", text,
+        re.IGNORECASE))
+    return {
+        "source": "Council public register",
+        "document": document,
+        "url": config.get("council_register_url"),
+        "date": _iso_eu_date(type_match.group(2) if type_match else
+                             date_match.group(0) if date_match else None),
+        "title": title,
+        "stage": "Political agreement" if title and
+                 title.casefold().endswith("political agreement") else title,
+        "document_type": (" ".join(type_match.group(1).split()).upper()
+                          if type_match else None),
+        "addressee": (" ".join(addressee_match.group(1).split())
+                      if addressee_match else None),
+        "meeting_date": _iso_eu_date(
+            meeting_match.group(1) if meeting_match else None),
+        "content_accessible": not inaccessible,
+        "fetched_at": fetched_at,
+        "retrieval_status": "fetched",
+        "terminal": False,
+    }
+
+
+def _council_seed(config: dict, fetched_at: str,
+                  retrieval_status: str = "configured") -> dict | None:
+    seed = config.get("council_register_seed")
+    if not isinstance(seed, dict):
+        return None
+    return {
+        "source": "Council public register",
+        "document": config.get("council_register_document"),
+        "url": config.get("council_register_url"),
+        "date": seed.get("date"),
+        "title": seed.get("title"),
+        "stage": seed.get("stage") or "Political agreement",
+        "document_type": seed.get("document_type"),
+        "addressee": seed.get("addressee"),
+        "meeting_date": seed.get("meeting_date"),
+        "content_accessible": seed.get("content_accessible"),
+        "fetched_at": fetched_at,
+        "retrieval_status": retrieval_status,
+        "terminal": False,
+    }
+
+
+def fetch_council_development(http: Http, config: dict,
+                              fetched_at: str) -> dict | None:
+    """Fetch optional Council evidence, preserving verified seed metadata.
+
+    Consilium may serve a browser-check page to non-browser clients.  A
+    checked-in seed prevents that availability problem from erasing an
+    already verified register record; ``retrieval_status`` stays explicit.
+    """
+    url = str(config.get("council_register_url") or "")
+    document = str(config.get("council_register_document") or "")
+    if not url or not document:
+        return None
+    try:
+        response = http.get(url, timeout=45)
+        response.raise_for_status()
+        parsed = parse_council_register(response.text, config, fetched_at)
+        seed = _council_seed(config, fetched_at)
+        if seed:
+            for key, value in seed.items():
+                if parsed.get(key) is None:
+                    parsed[key] = value
+        parsed["retrieval_status"] = "fetched"
+        return parsed
+    except (requests.RequestException, ValueError):
+        return _council_seed(config, fetched_at, "fetch_unavailable")
+
+
+def merge_council_development(row: dict,
+                              development: dict | None) -> dict:
+    """Attach Council evidence and select the newest official event."""
+    if not development:
+        return row
+    row["council_development"] = development
+    event = {
+        "date": development.get("date"),
+        "title": development.get("stage") or development.get("title"),
+        "source": development.get("source"),
+        "document": development.get("document"),
+        "url": development.get("url"),
+        "document_type": development.get("document_type"),
+        "addressee": development.get("addressee"),
+        "meeting_date": development.get("meeting_date"),
+        "content_accessible": development.get("content_accessible"),
+        "retrieval_status": development.get("retrieval_status"),
+        "terminal": False,
+        "celexes": [],
+        "documents": [development.get("document")]
+                     if development.get("document") else [],
+    }
+    row["events"] = [*(row.get("events") or []), event]
+    row["events"].sort(key=lambda item: (
+        str(item.get("date") or ""), str(item.get("title") or "")))
+    latest = row["events"][-1]
+    row["stage"] = latest.get("title") or row.get("stage")
+    row["date"] = latest.get("date") or row.get("date")
+    # A political agreement is procedural evidence, never a final act.
+    row["terminal"] = False
+    return row
+
+
 def _official_journal_record(http: Http, celex: str) -> dict | None:
     url = f"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:{celex}"
     response = http.get(url, timeout=45)
@@ -165,6 +327,8 @@ def fetch_watch(http: Http, watch_key: str, config: dict,
     response = http.get(url, timeout=45)
     response.raise_for_status()
     row = parse_eurlex_procedure(response.text, watch_key, config, fetched_at)
+    row = merge_council_development(
+        row, fetch_council_development(http, config, fetched_at))
     journal = [record for celex in row["adopted_celexes"]
                if (record := _official_journal_record(http, celex))]
     return apply_final_review_gate(row, config, journal)
