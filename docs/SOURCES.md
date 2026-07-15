@@ -1,21 +1,23 @@
-# Data sources (audit baseline 2026-07-06; RII/EU breadth added 2026-07-14)
+# Data sources (audit baseline 2026-07-06; official state archive 2026-07-15)
 
 The 2026-07-06 baseline was probed live and adversarially re-tested. RII and
 the CELLAR breadth index were added from their current fetcher contracts on
-2026-07-14. Baseline audit snippets: [source-audit.json](source-audit.json).
+2026-07-14. The GII CAS, final-command capture and NeuRIS artifact retention
+were verified on 2026-07-15. Baseline audit snippets:
+[source-audit.json](source-audit.json).
 
 ## Verdict map
 
 | Source | Status | Role | History | Cadence |
 | --- | --- | --- | --- | --- |
 | **DIP** (search.dip.bundestag.de/api/v1) | live | **primary — anticipation** (process graph) | Vorgänge back to WP8 (1976), incl. failed bills | intraday; delta sync via `f.aktualisiert.start` |
-| **recht.bund.de** (BGBl) | live | **primary — genesis/promulgation** | append-only archive since 2023-01-01 (2,760 issues), stable ELI | several issues/week |
+| **recht.bund.de** (BGBl) | live | **primary — genesis/promulgation and final command** | append-only archive since 2023-01-01 (2,760 issues), stable ELI; captured landing metadata, PDF hashes/text and article splits | several issues/week |
 | **EUR-Lex / CELLAR** | live | **primary — EU layer** | consolidated versions are first-class dated works (CELEX sector 0) | working-daily |
 | **Rechtsprechung im Internet (RII)** (BMJV/BfJ) | default-off / migration pending | **official — corpus-relevant federal decisions already retrieved** | seven rolling RSS feeds + official ZIP/XML records; retained snapshot is cumulative | no scheduled intake; moving to NeuRIS API |
 | **OLDP** (openlegaldata.io) | live | research — bulk case graph (not in the current export) | 423,944 dated decisions, 18.6M case→§ citation edges | ~1 week ingest lag |
-| **NeuRIS** (testphase.rechtsinformationen.bund.de) | live | **secondary today, primary-designate** | LegalDocML with native temporal ELIs (`{pointInTime}/{version}`), changelog endpoint, forward-accruing | continuous (Testphase) |
+| **NeuRIS** (testphase.rechtsinformationen.bund.de) | live | **secondary today, primary-designate** | changelog metadata plus immediate content-addressed capture of advertised ZIP artifacts before temporary URLs disappear | continuous (Testphase) |
 | **buzer.de** | private candidates + public deep links | discovery/manual QA and one-click cross-check only | private version/synopsis database since 2006 is not republished | no scheduled crawl |
-| **GII** (gesetze-im-internet.de) | live | seed_only — current HEAD | none (current Fassung only) | continuous consolidation, days–weeks lag |
+| **GII** (gesetze-im-internet.de) | live | **primary — current HEAD and observed complete states** | source itself exposes current Fassung only; Lexgraph retains each complete retrieval in its own immutable SHA-256 state store | continuous consolidation, days–weeks lag; daily capture |
 | **gesetze-bayern.de** (BAYERN.RECHT) | live | **primary — Bavaria HEAD + back-history** (upgraded 2026-07-06) | ffn register carries per-act Fortführungsnachweis amendment chains; `/Content/Zip/<key>` = structured XML (satz.nr, typed verweis incl. EU) | few working days after GVBl |
 | **Internet Archive Wayback** (archived BAYERN.RECHT pages) | live/cache-first | secondary retrieval channel — sparse Bavarian old/new text | archived official per-norm pages from 2016+; only one-to-one state/event matches are exported | one-time backfill + cached reruns |
 | **verkuendung-bayern.de** (GVBl/BayMBl) | live | **primary — Bavaria promulgation** | GVBl issues 1945+, permalinks `/gvbl/{Y}-{page}/` + sha256; BayMBl electronic = amtlich, GVBl electronic = nachrichtlich | RSS 50-item feeds, CSV Jahreslisten |
@@ -37,9 +39,18 @@ the CELLAR breadth index were added from their current fetcher contracts on
   `builddate` + BJNE doknr counters = cheap diff detection; update feed is
   `aktuDienst-rss-feed.xml` (daily; announces **BGBl issues with ELI
   links**, not consolidation events). Latin-1 HTML. Public domain
-  (§ 5 UrhG).
+  (§ 5 UrhG). After every successful complete corpus fetch,
+  `tools/archive_gii_states.py` projects each act into canonical JSON, hashes
+  the **uncompressed** bytes, stores a deterministic gzip CAS object and
+  appends a retrieval observation. `observed_at` is never treated as an
+  effective date.
 - **recht.bund.de**: ELI scheme `/eli/bund/BGBl_1/{year}/{nr}`;
   append-only; officially sanctioned programmatic access.
+  `fetch_bgbl_documents.py` captures the canonical `VO.html` landing page and
+  `regelungstext.pdf`, checks the advertised MD5 before accepting it, records
+  its own SHA-256, extracts text/articles and joins referenced corpus acts and
+  DIP commencement rows. A GII state transition receives a legal effective
+  date only when every changed norm passes this final-command gate.
 - **EUR-Lex**: use the **CELLAR machine channel only** — the website (and
   even its robots.txt) sits behind a WAF JS-challenge. Formex XML carries
   `ARTICLE/PARAG IDENTIFIER`s; consolidated versions per date
@@ -66,8 +77,11 @@ the CELLAR breadth index were added from their current fetcher contracts on
   remain published with provenance.
 - **NeuRIS**: open API, no key; article-level eIds; temporal query params
   (`temporalCoverageFrom/To`); changelog endpoint returned 2,448 changes
-  for an arbitrary window. Testphase — treat as rising primary, keep GII
-  as HEAD source until coverage is proven.
+  for an arbitrary window. Changelog artifact URLs are locators, not a durable
+  archive: advertised ZIPs may disappear. The fetcher therefore downloads and
+  hashes each selected artifact during the changelog pass and retains the
+  original URL plus capture status. Testphase — treat as rising primary, keep
+  GII as HEAD source until coverage is proven.
 - **buzer.de**: permissive robots and the absence of a scraping clause are not
   a reuse licence. Although individual statutory passages are official works,
   the private consolidation, version segmentation and synopsis alignment may
@@ -110,12 +124,14 @@ the CELLAR breadth index were added from their current fetcher contracts on
 
 ```text
 HEAD (current law)     GII (federal) + gesetze-bayern XML (Land) + CELLAR (EU)
-Forward history        daily GII snapshots (builddate diff) + NeuRIS ELIs
-                       + gesetze-bayern builddate
-Verified federal rows  exact adjacent GII state pairs + DIP patch wording
-                       that independently matches the current official norm
-Back history           NeuRIS temporal/changelog data + BundesGit checkpoints
-                       (2013, 2022) + BGBl ELI archive (2023+)
+Forward observations   complete daily GII states in Lexgraph's SHA-256 CAS
+                       + captured NeuRIS artifacts + gesetze-bayern builddate
+Verified federal rows  own diffs between adjacent complete GII states;
+                       a legal effective date only after final BGBl command
+                       + exact DIP commencement review
+Back history           captured NeuRIS artifacts where still available
+                       + BundesGit checkpoints (2013, 2022)
+                       + BGBl ELI archive (2023+)
                        + Bavaria ffn Fortführungsnachweis chains
                        + sparse archived BAYERN.RECHT state transitions (2016+)
 Genesis / publication  recht.bund.de ELI (Bund), GVBl/BayMBl RSS (Bayern),

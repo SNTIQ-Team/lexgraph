@@ -24,6 +24,8 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /procedures/watched     persistent DIP/EUR-Lex watch state + history
   GET /amendment-fates        reviewed amendment document-chain validations
   GET /federal-history        official-only verified federal state/patch events
+  GET /official-states        exact GII retrieval observations + state hashes
+  GET /official-transition-reviews  BGBl/DIP accepted legal transitions
   GET /search?q=              deep search + complete GII metadata discovery
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
@@ -52,13 +54,14 @@ from api.act_archive import (
 from api.gii_catalog import GiiCatalogIndex
 from api.search_engine import SearchEngine, normalize_search_text
 from api.procedure_search import ProcedureSearchIndex
+from api.official_state_store import OfficialStateError, load_observed_state
 
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
     "LEXGRAPH_DATA",
     Path(__file__).resolve().parent.parent / "web" / "data"))
 
-app = FastAPI(title="Lexgraph", version="1.1")
+app = FastAPI(title="Lexgraph", version="1.2")
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)
 LANES = ["EU", "Bund", "Bayern", "Länder"]
@@ -174,7 +177,7 @@ def federal_history(
             None, pattern="^(exact|current_text_correspondence|metadata_only)$"),
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0)):
-    """Evidence-bound federal history built only from official GII/DIP.
+    """Evidence-bound federal history built only from official GII/BGBl/DIP.
 
     Buzer is not an input to this public file. ``exact`` means two captured
     official GII states; it does not silently infer their legal effective day.
@@ -198,6 +201,76 @@ def federal_history(
         "offset": offset,
         "limit": limit,
         "events": events[offset:offset + limit],
+    }
+
+
+@app.get("/official-states")
+def official_states(
+        act: str | None = Query(
+            None, min_length=1, description="act id or exact jurabk"),
+        limit: int = Query(250, ge=1, le=1000),
+        offset: int = Query(0, ge=0)):
+    """Immutable complete GII states indexed by exact retrieval date.
+
+    The observations are evidence that GII served a complete parsed state on
+    that day, not a claim about when its amendments entered into force.  The
+    full body is retrieved through ``/acts/{id}/markdown?at=...`` so the same
+    integrity-checked path serves both whole acts and individual norms.
+    """
+    data = _load("official_federal_states")
+    rows = list(data.get("observations") or [])
+    if act:
+        needle = act.casefold().strip()
+        rows = [row for row in rows if needle in {
+            str(row.get("act_id") or "").casefold(),
+            str(row.get("jurabk") or "").casefold(),
+        }]
+    rows.sort(key=lambda row: (
+        str(row.get("observed_at") or ""),
+        str(row.get("act_id") or "")), reverse=True)
+    return {
+        "schema_version": data.get("schema_version"),
+        "state_identity": data.get("state_identity"),
+        "source_policy": data.get("source_policy"),
+        "total_states": data.get("total_states"),
+        "total_observations": data.get("total_observations"),
+        "matched": len(rows),
+        "offset": offset,
+        "limit": limit,
+        "observations": rows[offset:offset + limit],
+    }
+
+
+@app.get("/official-transition-reviews")
+def official_transition_reviews(
+        act: str | None = Query(
+            None, min_length=1, description="act id or exact jurabk"),
+        procedure_id: str | None = Query(None, min_length=1),
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0)):
+    """Legal dates accepted by the final BGBl + DIP + GII state gate."""
+    data = _load("official_transition_reviews")
+    rows = list(data.get("reviews") or [])
+    if act:
+        needle = act.casefold().strip()
+        rows = [row for row in rows if needle in {
+            str(row.get("act_id") or "").casefold(),
+            str(row.get("jurabk") or "").casefold(),
+        }]
+    if procedure_id:
+        rows = [row for row in rows if str(
+            row.get("procedure_id") or "") == procedure_id]
+    rows.sort(key=lambda row: str(row.get("effective_at") or ""),
+              reverse=True)
+    return {
+        "schema_version": data.get("schema_version"),
+        "built_at": data.get("built_at"),
+        "source_policy": data.get("source_policy"),
+        "total": data.get("total"),
+        "matched": len(rows),
+        "offset": offset,
+        "limit": limit,
+        "reviews": rows[offset:offset + limit],
     }
 
 
@@ -267,11 +340,18 @@ def act_markdown(
     snapshot.  Historical gaps are also embedded at the top of the Markdown.
     """
     try:
+        act = _load_act(act_id)
+        observed_state = load_observed_state(DATA_DIR, act, at)
         result = render_markdown_snapshot(
-            _load_act(act_id), requested_at=at, norm=norm,
-            fallback_head=_archive_head_fallback())
+            act, requested_at=at, norm=norm,
+            fallback_head=_archive_head_fallback(),
+            observed_state=observed_state)
     except UnknownNormError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except OfficialStateError as exc:
+        # Integrity failure is a broken immutable data generation, not a bad
+        # user date.  Fail closed instead of falling back to a reconstruction.
+        raise HTTPException(503, str(exc)) from exc
     except ArchiveRequestError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -285,6 +365,22 @@ def act_markdown(
             "exact" if result["exact"] else "partial"),
         "X-Lexgraph-Missing-Transitions": str(len(result["gaps"])),
     }
+    if result.get("date_basis"):
+        headers["X-Lexgraph-Date-Basis"] = str(result["date_basis"])
+    if result.get("state_sha256"):
+        headers["X-Lexgraph-State-SHA256"] = str(result["state_sha256"])
+    if result.get("source_url"):
+        headers["X-Lexgraph-Source-URL"] = str(result["source_url"])
+    if result.get("legal_effect_verified") is True:
+        headers["X-Lexgraph-Legal-Effect-Verified"] = "true"
+    if result.get("published_at"):
+        headers["X-Lexgraph-Published-Date"] = str(result["published_at"])
+    if result.get("effective_at"):
+        headers["X-Lexgraph-Effective-Date"] = str(result["effective_at"])
+    if result.get("review_id"):
+        headers["X-Lexgraph-Review-ID"] = str(result["review_id"])
+    if result.get("procedure_id"):
+        headers["X-Lexgraph-Procedure-ID"] = str(result["procedure_id"])
     # Keep the raw Markdown response self-describing for browser clients.  Cap
     # this header to a compact summary; the Markdown body still lists every
     # selected-snapshot gap in full.

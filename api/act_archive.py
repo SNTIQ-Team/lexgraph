@@ -12,7 +12,10 @@ that the latter is a complete temporal database:
 * the federal synopse collector historically capped each side at 1,200
   characters, so a side of exactly that size is treated as truncated;
 * ``effective_date`` is the state transition date when present.  The version
-  row's ``date`` is only the fallback (and, for Bavaria, often publication).
+  row's ``date`` is only the fallback (and, for Bavaria, often publication);
+* an official retrieval observation is never treated as an effective date.
+  When the API supplies the matching content-addressed GII object, that
+  observed parsed state is exact for the retrieval day and rendered directly.
 
 The result is useful as a Wayback/git-style reader while keeping its evidence
 boundary visible in both response metadata and the Markdown itself.
@@ -73,6 +76,37 @@ def _parse_date(value: Any) -> str | None:
         return date.fromisoformat(raw).isoformat()
     except ValueError:
         return None
+
+
+def _is_retrieval_observation(value: Any) -> bool:
+    """Whether a date describes capture, not a legal state transition."""
+    return bool(re.search(
+        r"(?:retrieval|observed|observation)", str(value or ""), re.I))
+
+
+def _official_observations(act: dict[str, Any],
+                           head_date: str) -> list[dict[str, Any]]:
+    """Validated metadata for complete parsed states captured from GII."""
+    rows = []
+    for raw in act.get("official_states") or []:
+        if not isinstance(raw, dict):
+            continue
+        observed_at = _parse_date(raw.get("observed_at") or raw.get("date"))
+        digest = str(raw.get("state_sha256") or raw.get("state_digest") or "")
+        if observed_at is None or observed_at > head_date or not re.fullmatch(
+                r"[0-9a-f]{64}", digest):
+            continue
+        row = dict(raw)
+        row["observed_at"] = observed_at
+        row["state_sha256"] = digest
+        rows.append(row)
+    # A cumulative store may record multiple source builds on one retrieval
+    # day.  Keep the last deterministic row for that date.
+    by_date = {row["observed_at"]: row for row in sorted(
+        rows, key=lambda item: (
+            item["observed_at"], str(item.get("builddate") or ""),
+            item["state_sha256"]))}
+    return list(by_date.values())
 
 
 def head_date_for(act: dict[str, Any], fallback: Any = None) -> str | None:
@@ -231,6 +265,11 @@ def _change_rows(act: dict[str, Any], head_date: str) -> list[dict[str, Any]]:
     out = []
     seen: set[tuple[str, str, str, str]] = set()
     for version in _version_rows(act, head_date):
+        # Complete official state objects are resolved directly on their
+        # observed day.  Their diffs belong in Synopse/Git, but applying them
+        # as if the retrieval day were Inkrafttreten would manufacture law.
+        if _is_retrieval_observation(version.get("date_basis")):
+            continue
         event_date = version["_event_date"]
         for raw in version.get("changes") or []:
             effective = (_parse_date(raw.get("effective_date"))
@@ -310,6 +349,22 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
         entry["has_changes"] = entry["has_changes"] or bool(row.get("changes"))
         if not entry["label"] and row.get("text"):
             entry["label"] = str(row["text"])
+        if row.get("legal_effect_verified") is True:
+            entry.update({
+                "published_at": _parse_date(row.get("published_at")),
+                "effective_at": _parse_date(row.get("effective_at")) or day,
+                "observed_at": _parse_date(row.get("observed_at")),
+                "date_basis": row.get("date_basis"),
+                "verification": row.get("verification"),
+                "legal_verification": row.get("legal_verification")
+                or row.get("verification"),
+                "legal_effect_verified": True,
+                "review_id": row.get("review_id"),
+                "source_url": row.get("source_url") or row.get("url"),
+                "procedure_id": row.get("procedure_id"),
+                "bgbl": row.get("bgbl"),
+                "amending_articles": row.get("amending_articles"),
+            })
     for change in changes:
         day = change["effective_date"]
         entry = dates.setdefault(day, {
@@ -322,13 +377,35 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
             entry["label"] = (f"Wirksam ab {day}: {label}" if label
                               else f"Wirksam ab {day}")
 
-    dates[head_date] = {
-        "date": head_date,
+    observations = _official_observations(act, head_date)
+    for observation in observations:
+        day = observation["observed_at"]
+        entry = dates.setdefault(day, {
+            "date": day,
+            "label": "Official GII state observed",
+            "has_changes": False,
+            "exact": True,
+            "partial": False,
+        })
+        entry.update({
+            "observed_at": day,
+            "date_basis": observation.get("date_basis")
+            or "retrieval_observation_not_effective_date",
+            "state_digest": observation["state_sha256"],
+            "source_url": observation.get("source_url"),
+            "builddate": observation.get("builddate"),
+            "verification": observation.get("verification") or "exact",
+            "exact": True,
+            "partial": False,
+        })
+
+    head_entry = dates.setdefault(head_date, {"date": head_date})
+    head_entry.update({
         "label": "HEAD · consolidated source snapshot",
-        "has_changes": False,
+        "has_changes": bool(head_entry.get("has_changes")),
         "exact": True,
         "partial": False,
-    }
+    })
     gaps = _global_gaps(act, head_date)
     norms = [{
         "id": str(norm.get("enbez") or ""),
@@ -354,6 +431,14 @@ def build_archive_index(act: dict[str, Any], *, fallback_head: Any = None
         "norms": norms,
         "gaps": gaps,
         "complete": not gaps and len(dates) == 1,
+        "official_observations": len(observations),
+        "official_archive_start": min(
+            (row["observed_at"] for row in observations), default=None),
+        "date_semantics": {
+            "official_observations": (
+                "retrieval dates, not inferred effective dates"),
+            "effective_dates_inferred": False,
+        },
     }
 
 
@@ -526,7 +611,9 @@ def _yaml_string(value: Any) -> str:
 
 def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
               target: str, head_date: str, norm_ref: _NormRef | None,
-              exact: bool, gaps: list[dict[str, Any]]) -> str:
+              exact: bool, gaps: list[dict[str, Any]],
+              state_meta: dict[str, Any] | None = None,
+              legal_meta: dict[str, Any] | None = None) -> str:
     status = "exact" if exact else "partial"
     scope = norm_ref.label if norm_ref is not None else "entire act"
     lines = [
@@ -540,9 +627,26 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         f"archive_status: {status}",
         f"scope: {_yaml_string(scope)}",
         f"coverage_gaps: {len(gaps)}",
-        "---",
-        "",
     ]
+    if state_meta:
+        lines.extend([
+            f"date_basis: {_yaml_string(state_meta.get('date_basis'))}",
+            f"source: {_yaml_string(state_meta.get('source') or 'GII')}",
+            f"source_url: {_yaml_string(state_meta.get('source_url'))}",
+            f"source_build: {_yaml_string(state_meta.get('builddate'))}",
+            f"state_sha256: {_yaml_string(state_meta.get('state_sha256'))}",
+        ])
+    elif legal_meta:
+        lines.extend([
+            f"date_basis: {_yaml_string(legal_meta.get('date_basis'))}",
+            "legal_effect_verified: true",
+            f"published_at: {_yaml_string(legal_meta.get('published_at'))}",
+            f"effective_at: {_yaml_string(legal_meta.get('effective_at'))}",
+            f"verification: {_yaml_string(legal_meta.get('verification'))}",
+            f"review_id: {_yaml_string(legal_meta.get('review_id'))}",
+            f"source_url: {_yaml_string(legal_meta.get('source_url') or legal_meta.get('url'))}",
+        ])
+    lines.extend(["---", ""])
     title = str(act.get("title") or act.get("jurabk") or act.get("id") or "Act")
     if norm_ref is None:
         lines.append(f"# {title}")
@@ -552,7 +656,22 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         "",
         f"> Archive status: **{status}** · requested/resolved {target} · HEAD {head_date}.",
     ])
-    if gaps:
+    if state_meta:
+        lines.append(
+            "> This complete parsed state was observed in the official GII "
+            f"source on **{target}**. The date is a retrieval observation, "
+            "not an inferred legal effective date.")
+    elif legal_meta:
+        lines.append(
+            "> The effective date is verified against the final BGBl command "
+            "and its article-specific commencement rule; the consolidated "
+            "body is still a conservative reconstruction unless marked exact.")
+        if gaps:
+            lines.append(
+                "> Unproven transitions outside that reviewed change are not guessed:")
+            for gap in gaps:
+                lines.append(f"> - {gap['label']}")
+    elif gaps:
         lines.append(
             "> This is a conservative reconstruction. Unproven transitions are not guessed:")
         for gap in gaps:
@@ -590,7 +709,9 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
 
 def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
                              norm: str | None = None,
-                             fallback_head: Any = None) -> dict[str, Any]:
+                             fallback_head: Any = None,
+                             observed_state: dict[str, Any] | None = None
+                             ) -> dict[str, Any]:
     """Resolve an arbitrary date and render the full act or one norm."""
     head_date = head_date_for(act, fallback_head)
     if head_date is None:
@@ -602,11 +723,38 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         raise InvalidArchiveDateError(
             f"requested date {target} is newer than HEAD {head_date}")
 
-    current_norms = list(act.get("norms") or [])
+    state_meta: dict[str, Any] | None = None
+    if observed_state is not None:
+        observed_at = _parse_date(observed_state.get("observed_at"))
+        digest = str(observed_state.get("state_sha256") or "")
+        if observed_at != target:
+            raise ArchiveRequestError(
+                "official state observation does not match requested date")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ArchiveRequestError("official state observation has no digest")
+        observed_norms = observed_state.get("norms")
+        if not isinstance(observed_norms, list):
+            raise ArchiveRequestError("official state observation has no norms")
+        current_norms = list(observed_norms)
+        state_meta = dict(observed_state)
+    else:
+        current_norms = list(act.get("norms") or [])
+    legal_candidates = [
+        row for row in act.get("versions") or []
+        if isinstance(row, dict)
+        and row.get("legal_effect_verified") is True
+        and (_parse_date(row.get("effective_at"))
+             or _parse_date(row.get("date"))) == target
+    ]
+    legal_meta = legal_candidates[0] if len(legal_candidates) == 1 else None
     norm_ref = (_resolve_norm(current_norms, norm,
                               _historical_designators(act))
                 if norm is not None else None)
-    if target == head_date:
+    if state_meta is not None:
+        norms = copy.deepcopy(current_norms)
+        gaps = []
+        exact = True
+    elif target == head_date:
         norms = copy.deepcopy(current_norms)
         if norm_ref is not None and norm_ref.index < 0:
             gaps = [_gap(
@@ -622,8 +770,8 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         exact = not gaps
     markdown = _markdown(
         act, norms, target=target, head_date=head_date, norm_ref=norm_ref,
-        exact=exact, gaps=gaps)
-    return {
+        exact=exact, gaps=gaps, state_meta=state_meta, legal_meta=legal_meta)
+    result = {
         "act_id": act.get("id"),
         "requested_at": target,
         "resolved_at": target,
@@ -634,6 +782,31 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         "markdown": markdown,
         "gaps": gaps,
     }
+    if state_meta:
+        result.update({
+            "observed_at": target,
+            "date_basis": state_meta.get("date_basis")
+            or "retrieval_observation_not_effective_date",
+            "verification": state_meta.get("verification") or "exact",
+            "state_sha256": state_meta.get("state_sha256"),
+            "source": state_meta.get("source") or "GII",
+            "source_url": state_meta.get("source_url"),
+            "builddate": state_meta.get("builddate"),
+        })
+    elif legal_meta:
+        result.update({
+            "date_basis": legal_meta.get("date_basis"),
+            "verification": legal_meta.get("verification"),
+            "legal_effect_verified": True,
+            "published_at": _parse_date(legal_meta.get("published_at")),
+            "effective_at": _parse_date(legal_meta.get("effective_at"))
+            or target,
+            "review_id": legal_meta.get("review_id"),
+            "source_url": legal_meta.get("source_url")
+            or legal_meta.get("url"),
+            "procedure_id": legal_meta.get("procedure_id"),
+        })
+    return result
 
 
 def markdown_filename(result: dict[str, Any]) -> str:

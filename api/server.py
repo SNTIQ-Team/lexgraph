@@ -31,13 +31,14 @@ SERVICE_INDEX = {
         "/acts/{id}/markdown", "/decisions", "/decisions/{id}",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",
+        "/official-states", "/official-transition-reviews",
         "/search", "/digest",
     ],
 }
 
 server = FastAPI(
     title="Lexgraph API",
-    version="1.1",
+    version="1.2",
     docs_url="/docs",
     redoc_url=None,
 )
@@ -60,6 +61,14 @@ server.add_middleware(
         "X-Lexgraph-Archive-Status",
         "X-Lexgraph-Archive-Gaps",
         "X-Lexgraph-Missing-Transitions",
+        "X-Lexgraph-Date-Basis",
+        "X-Lexgraph-State-SHA256",
+        "X-Lexgraph-Source-URL",
+        "X-Lexgraph-Legal-Effect-Verified",
+        "X-Lexgraph-Published-Date",
+        "X-Lexgraph-Effective-Date",
+        "X-Lexgraph-Review-ID",
+        "X-Lexgraph-Procedure-ID",
     ],
     max_age=86400,
 )
@@ -127,6 +136,8 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="procedures/watched">/procedures/watched</a></td><td class="what">tracked DIP + EUR-Lex procedures and status history</td></tr>
     <tr><td class="ep"><a href="amendment-fates">/amendment-fates</a></td><td class="what">reviewed amendment chains + current-law checks</td></tr>
     <tr><td class="ep"><a href="federal-history">/federal-history</a></td><td class="what">official-only verified federal state and patch events</td></tr>
+    <tr><td class="ep"><a href="official-states">/official-states</a></td><td class="what">exact GII retrieval observations + immutable state hashes</td></tr>
+    <tr><td class="ep"><a href="official-transition-reviews">/official-transition-reviews</a></td><td class="what">legal dates accepted by final BGBl + DIP review</td></tr>
     <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>
   </table>

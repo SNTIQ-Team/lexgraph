@@ -204,3 +204,86 @@ def test_invalid_future_date_and_unknown_norm_are_rejected() -> None:
     with pytest.raises(UnknownNormError):
         render_markdown_snapshot(
             act, norm="§ 404", fallback_head="2026-07-15")
+
+
+def test_complete_official_observation_is_exact_but_not_effective_date() -> None:
+    digest = "a" * 64
+    act = _act(norms=[
+        {"enbez": "§ 24", "titel": "Schutz", "text": "HEAD"},
+    ])
+    act["official_states"] = [{
+        "observed_at": "2026-07-13",
+        "state_sha256": digest,
+        "norm_count": 1,
+        "builddate": "20260712010101",
+        "source_url": "https://www.gesetze-im-internet.de/testg/",
+        "date_basis": "retrieval_observation_not_effective_date",
+        "verification": "exact",
+    }]
+    state = {
+        **act["official_states"][0],
+        "source": "GII",
+        "norms": [{"enbez": "§ 24", "titel": "Schutz",
+                   "text": "Beobachteter amtlicher Text"}],
+    }
+
+    archive = build_archive_index(act, fallback_head="2026-07-15")
+    observed = next(row for row in archive["entries"]
+                    if row["date"] == "2026-07-13")
+    assert observed["exact"] is True
+    assert observed["partial"] is False
+    assert observed["date_basis"] == \
+        "retrieval_observation_not_effective_date"
+    assert observed["state_digest"] == digest
+
+    rendered = render_markdown_snapshot(
+        act, requested_at="2026-07-13", norm="§ 24",
+        fallback_head="2026-07-15", observed_state=state)
+    assert rendered["exact"] is True
+    assert rendered["partial"] is False
+    assert rendered["state_sha256"] == digest
+    assert "Beobachteter amtlicher Text" in rendered["markdown"]
+    assert "not an inferred legal effective date" in rendered["markdown"]
+    assert "date_basis: \"retrieval_observation_not_effective_date\"" in \
+        rendered["markdown"]
+
+
+def test_reviewed_legal_transition_exposes_provenance_without_claiming_exact() -> None:
+    act = _act(norms=[
+        {"enbez": "§ 29a", "titel": "Bericht", "text": "Neue Fassung"},
+    ], versions=[{
+        "date": "2026-07-10",
+        "published_at": "2026-07-09",
+        "effective_at": "2026-07-10",
+        "observed_at": "2026-07-13",
+        "date_basis": "official_bgbl_command_and_commencement_clause",
+        "verification": "official_final_text_and_complete_state_pair",
+        "legal_effect_verified": True,
+        "review_id": "fed-review:test",
+        "procedure_id": "327966",
+        "source_url": "https://www.recht.bund.de/example.pdf",
+        "text": "Amtliche BGBl-Änderung · Inkrafttreten geprüft",
+        "changes": [{
+            "para": "§ 29a", "effective_date": "2026-07-10",
+            "old": "Alte Fassung", "new": "Neue Fassung",
+            "source": "official_bgbl_review",
+        }],
+    }])
+
+    archive = build_archive_index(act, fallback_head="2026-07-15")
+    entry = next(row for row in archive["entries"]
+                 if row["date"] == "2026-07-10")
+    assert entry["legal_effect_verified"] is True
+    assert entry["published_at"] == "2026-07-09"
+    assert entry["observed_at"] == "2026-07-13"
+    assert entry["exact"] is False
+
+    rendered = render_markdown_snapshot(
+        act, requested_at="2026-07-10", norm="§ 29a",
+        fallback_head="2026-07-15")
+    assert rendered["legal_effect_verified"] is True
+    assert rendered["effective_at"] == "2026-07-10"
+    assert rendered["published_at"] == "2026-07-09"
+    assert rendered["partial"] is True
+    assert "legal_effect_verified: true" in rendered["markdown"]
+    assert "final BGBl command" in rendered["markdown"]

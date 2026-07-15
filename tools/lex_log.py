@@ -4,8 +4,11 @@
     python3 tools/lex_log.py AufnG            # Bavarian corpus
     python3 tools/lex_log.py "SGB 2" --all
 
-Federal sections: HEAD (GII), pending patches in the Bundestag pipeline
-(DIP, status ladder). Private Buzer candidates are shown only with the explicit
+Federal sections: HEAD (GII), exact content-addressed GII observations,
+observed state-pair diffs, separately verified BGBl/DIP legal transitions,
+and pending patches in the Bundestag pipeline (DIP, status ladder). An
+observation is never labelled as a legal effective date. Private Buzer
+candidates are shown only with the explicit
 ``LEXGRAPH_INCLUDE_QUARANTINED=1`` research switch.
 Bavarian sections: HEAD (BAYERN.RECHT XML), Landtag WP19 bills touching
 the act, GVBl/BayMBl promulgations (BayRS-Gliederungsnummer join),
@@ -24,6 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import latest_snapshot, read_jsonl          # noqa: E402
+from official_cli import load_official_act_history       # noqa: E402
+from official_states import DEFAULT_STORE, StateStoreError  # noqa: E402
 
 BADGE = {"proposed": "○ proposed", "adopted": "◑ adopted",
          "published": "● published", "rejected": "✗ rejected",
@@ -45,6 +50,7 @@ BY_NEEDLES = {
     "PAG": "polizeiaufgabengesetz",
     "BayEUG": "erziehungs- und unterrichtswesen",
 }
+OFFICIAL_STORE = DEFAULT_STORE
 
 
 def load(source: str, name: str) -> list[dict]:
@@ -54,6 +60,74 @@ def load(source: str, name: str) -> list[dict]:
 
 def include_private_candidates() -> bool:
     return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+
+
+def official_history(jurabk: str) -> dict[str, list[dict]]:
+    """Integrity-checked official rows; factored for focused CLI tests."""
+    return load_official_act_history(jurabk, store=OFFICIAL_STORE)
+
+
+def _limited(rows: list[dict], show_all: bool, limit: int = 10) -> list[dict]:
+    return rows if show_all else rows[:limit]
+
+
+def show_official_federal_history(jurabk: str, show_all: bool) -> None:
+    """Print observations and legal reviews in explicitly separate lanes."""
+    history = official_history(jurabk)
+    reviews = sorted(history["reviews"],
+                     key=lambda row: row["effective_at"], reverse=True)
+    if reviews:
+        print(f"\n-- verified legal transitions ({len(reviews)}, "
+              "final BGBl + DIP commencement):")
+        for review in _limited(reviews, show_all):
+            bgbl = review.get("bgbl") or {}
+            paras = sorted({str(change.get("para") or "")
+                            for change in review.get("changes") or []})
+            print(f"  ● effective {review['effective_at']}  "
+                  f"{', '.join(paras[:8])}")
+            print(f"      published {review['published_at']} · "
+                  f"{bgbl.get('document_id') or 'BGBl'} · "
+                  f"state {review['state_sha256'][:12]}")
+            if bgbl.get("pdf_url"):
+                print(f"      {bgbl['pdf_url']}")
+            if review.get("procedure_id"):
+                print("      https://dip.bundestag.de/vorgang/"
+                      f"{review['procedure_id']}")
+        if not show_all and len(reviews) > 10:
+            print(f"  … {len(reviews) - 10} more (--all)")
+
+    observed_changes = sorted(
+        history["transitions"], key=lambda row: row["observed_at"],
+        reverse=True)
+    if observed_changes:
+        print(f"\n-- observed GII content transitions "
+              f"({len(observed_changes)}; retrieval dates, NOT legal effect):")
+        for row in _limited(observed_changes, show_all):
+            paras = sorted({str(change.get("para") or "")
+                            for change in row.get("changes") or []})
+            print(f"  ◆ observed {row['observed_at']}  "
+                  f"{', '.join(paras[:8])}")
+            print(f"      after observation {row['previous_observed_at']} · "
+                  f"state {row['previous_state_sha256'][:12]} → "
+                  f"{row['state_sha256'][:12]}")
+            print(f"      {row.get('source_url') or ''}")
+        if not show_all and len(observed_changes) > 10:
+            print(f"  … {len(observed_changes) - 10} more (--all)")
+
+    observations = sorted(history["observations"],
+                          key=lambda row: row["observed_at"], reverse=True)
+    if observations:
+        print(f"\n-- exact official GII states ({len(observations)} "
+              "retrieval observations; checkout by exact date):")
+        for row in _limited(observations, show_all):
+            print(f"  ◇ observed {row['observed_at']}  "
+                  f"build {row['builddate'][:14]} · "
+                  f"{row['norm_count']} norms · "
+                  f"sha256:{row['state_sha256'][:12]}")
+            print(f"      date_basis={row['date_basis']}")
+            print(f"      {row['source_url']}")
+        if not show_all and len(observations) > 10:
+            print(f"  … {len(observations) - 10} more (--all)")
 
 
 def pick_act(query: str, acts: list[dict]) -> dict | None:
@@ -74,6 +148,7 @@ def federal_log(act: dict, show_all: bool) -> None:
           f"{act.get('norm_count')} §§")
     if act.get("stand"):
         print(f"      {act['stand'][:110]}")
+    show_official_federal_history(jb, show_all)
 
     patches = [p for p in load("patches", "patches.jsonl")
                if p["target_act"] == jb]
@@ -217,7 +292,12 @@ def main() -> int:
     bay = load("bayern_recht", "acts.jsonl")
     act = pick_act(args.act, fed)
     if act:
-        federal_log(act, args.all)
+        try:
+            federal_log(act, args.all)
+        except StateStoreError as exc:
+            print(f"official state history failed integrity checks: {exc}",
+                  file=sys.stderr)
+            return 1
         return 0
     act = pick_act(args.act, bay)
     if act:

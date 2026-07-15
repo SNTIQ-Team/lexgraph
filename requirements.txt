@@ -1,6 +1,7 @@
 # pipeline (fetchers + extractor)
 requests
 beautifulsoup4
+pypdf>=6,<7
 # api (optional until serving; stdlib json is the only hard dep)
 fastapi
 uvicorn

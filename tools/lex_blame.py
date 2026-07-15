@@ -2,7 +2,7 @@
 
     python3 tools/lex_blame.py blame AsylbLG 3a
     python3 tools/lex_blame.py blame AufnG 4
-    python3 tools/lex_blame.py checkout AsylbLG --at 2020-06-01
+    python3 tools/lex_blame.py checkout AsylG --at 2026-07-13 --norm 29a
 
 Read-only over data/snapshots — NO network, NO snapshot writes.
 
@@ -27,11 +27,14 @@ blame ACT REF     every known amendment/patch touching one §/Art.,
                   geänd.", Neufassung) are kept as "? unspezif." —
                   they MAY touch REF; hiding them would be dishonest.
 
-checkout ACT --at YYYY-MM-DD
-                  Bavaria uses its official ffn/XML chain. Public federal
-                  mode refuses to manufacture a lossless checkout and points
-                  to exact GII observations; private mode can inspect the
-                  latest Buzer candidate dated <= AT.
+checkout ACT --at YYYY-MM-DD [--norm REF]
+                  A federal checkout succeeds only on an exact official GII
+                  retrieval observation and emits the complete law (or one
+                  norm) as Markdown, including its content hash/provenance.
+                  The retrieval date is explicitly not called an effective
+                  date. Bavaria uses its official ffn/XML chain. Private mode
+                  can inspect a Buzer candidate when no exact observation is
+                  available, but never replaces official evidence.
 
 Acts resolve case-insensitively via jurabk (federal gii acts.jsonl
 first, then Bavarian bayern_recht acts.jsonl); REF accepts "3a",
@@ -46,8 +49,18 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
+from api.act_archive import (  # noqa: E402
+    ArchiveRequestError,
+    render_markdown_snapshot,
+)
 from common import latest_snapshot, read_jsonl          # noqa: E402
+from official_cli import (  # noqa: E402
+    exact_observed_state,
+    load_official_act_history,
+)
+from official_states import DEFAULT_STORE, StateStoreError  # noqa: E402
 
 BADGE = {"proposed": "○ proposed", "adopted": "◑ adopted",
          "published": "● published", "rejected": "✗ rejected",
@@ -64,6 +77,7 @@ BAY_LIST_RE = re.compile(r"(?:Art[.,]|Artikel|§§?)\s*"
                          r"(\d+[a-z]?(?:\s*(?:,|und|bis)\s*\d+[a-z]?)*)")
 PAGE_RE = re.compile(r"S\.\s*(\d+)")
 DATE_ARG_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+OFFICIAL_STORE = DEFAULT_STORE
 
 
 def load(source: str, name: str) -> list[dict]:
@@ -73,6 +87,11 @@ def load(source: str, name: str) -> list[dict]:
 
 def include_private_candidates() -> bool:
     return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+
+
+def official_history(jurabk: str) -> dict[str, list[dict]]:
+    """Integrity-checked official rows; factored for focused CLI tests."""
+    return load_official_act_history(jurabk, store=OFFICIAL_STORE)
 
 
 def pick_act(query: str, acts: list[dict]) -> dict | None:
@@ -231,6 +250,57 @@ def patch_events(jurabk: str, ref: str) -> list[dict]:
     return events
 
 
+def official_norm_events(jurabk: str, ref: str) -> list[dict]:
+    """Observed state-pair diffs and accepted legal events, kept separate."""
+    history = official_history(jurabk)
+    events: list[dict] = []
+    for transition in history["transitions"]:
+        changes = [change for change in transition.get("changes") or []
+                   if norm_ref(change.get("para")) == ref]
+        if not changes:
+            continue
+        operations = ", ".join(sorted({str(change.get("operation"))
+                                       for change in changes}))
+        events.append({
+            "sort": transition["observed_at"],
+            "label": transition["observed_at"],
+            "badge": "◆ observed  [GII exact state pair] — NOT effective date",
+            "lines": [
+                f"{len(changes)} complete norm diff(s): {operations}",
+                (f"state {transition['previous_state_sha256'][:12]} → "
+                 f"{transition['state_sha256'][:12]}"),
+                str(transition.get("source_url") or ""),
+            ],
+            "kind": "observed",
+        })
+
+    for review in history["reviews"]:
+        changes = [change for change in review.get("changes") or []
+                   if norm_ref(change.get("para")) == ref]
+        if not changes:
+            continue
+        bgbl = review.get("bgbl") or {}
+        lines = [
+            (f"final BGBl command verified; published "
+             f"{review['published_at']}"),
+            (f"{bgbl.get('document_id') or 'BGBl'} · "
+             f"Art. {', '.join(review.get('amending_articles') or [])}"),
+        ]
+        if bgbl.get("pdf_url"):
+            lines.append(str(bgbl["pdf_url"]))
+        if review.get("procedure_id"):
+            lines.append(
+                f"https://dip.bundestag.de/vorgang/{review['procedure_id']}")
+        events.append({
+            "sort": review["effective_at"],
+            "label": review["effective_at"],
+            "badge": "● effective [BGBl final text + DIP commencement]",
+            "lines": lines,
+            "kind": "amended",
+        })
+    return events
+
+
 def cmd_blame(args: argparse.Namespace) -> int:
     act, corpus = resolve_act(args.act)
     if not act:
@@ -245,6 +315,12 @@ def cmd_blame(args: argparse.Namespace) -> int:
 
     if corpus == "federal":
         sym = "Artikel" if jb == "GG" else "§"
+        try:
+            events += official_norm_events(jb, ref)
+        except StateStoreError as exc:
+            print(f"official state history failed integrity checks: {exc}",
+                  file=sys.stderr)
+            return 1
         if include_private_candidates():
             for v in load("buzer", "versions.jsonl"):
                 if v["jurabk"] != jb:
@@ -293,9 +369,11 @@ def cmd_blame(args: argparse.Namespace) -> int:
     title = act.get("long_title") or ""
     print(f"== blame {jb} {sym} {ref} — {title[:44]}".rstrip())
     n_am = sum(1 for e in events if e["kind"] == "amended")
+    n_ob = sum(1 for e in events if e["kind"] == "observed")
     n_pi = sum(1 for e in events if e["kind"] == "pipeline")
     n_un = sum(1 for e in events if e["kind"] == "unspec")
-    print(f"   {corpus} corpus · {n_am} amendment(s) name {sym} {ref} · "
+    print(f"   {corpus} corpus · {n_am} verified amendment(s) · "
+          f"{n_ob} observed state transition(s) · "
           f"{n_pi} pipeline patch(es) · {n_un} unspecific")
     if not events:
         print(f"\n  no known amendment or patch touches {sym} {ref} "
@@ -319,19 +397,50 @@ def cmd_checkout(args: argparse.Namespace) -> int:
         return 1
     jb = act["jurabk"]
     title = act.get("long_title") or ""
-    print(f"== checkout {jb} @ {at} — {title[:42]}".rstrip())
-
-    if corpus == "federal" and not include_private_candidates():
-        print("   federal corpus · official public history only")
-        print("\n  no lossless official consolidated checkout is available "
-              "for this date; use /federal-history for exact observed GII "
-              "state pairs. Private Buzer candidates require "
-              "LEXGRAPH_INCLUDE_QUARANTINED=1.")
-        return 0
     if corpus == "federal":
+        try:
+            history = official_history(jb)
+            exact = exact_observed_state(
+                history, at, store=OFFICIAL_STORE)
+        except StateStoreError as exc:
+            print(f"official state checkout failed integrity checks: {exc}",
+                  file=sys.stderr)
+            return 1
+        if exact is not None:
+            state, observation = exact
+            observed_state = dict(state)
+            observed_state.update(observation)
+            try:
+                result = render_markdown_snapshot(
+                    state, requested_at=at, norm=getattr(args, "norm", None),
+                    fallback_head=at, observed_state=observed_state)
+            except ArchiveRequestError as exc:
+                print(f"checkout failed: {exc}", file=sys.stderr)
+                return 1
+            # Markdown front matter carries the state hash, official URL,
+            # source build and date basis, making stdout directly saveable.
+            print(result["markdown"], end="")
+            return 0
+
+        print(f"== checkout {jb} @ {at} — {title[:42]}".rstrip())
+        available = sorted({row["observed_at"]
+                            for row in history["observations"]})
+        print("   federal corpus · official public state store")
+        print("\n  no exact official GII observation exists for this date; "
+              "checkout will not silently substitute the nearest state.")
+        if available:
+            shown = ", ".join(available[-12:])
+            prefix = "… " if len(available) > 12 else ""
+            print(f"  exact observed date(s): {prefix}{shown}")
+        else:
+            print("  this act has no archived official observation yet")
+        print("  observation dates prove retrieval only, not legal effect.")
+        if not include_private_candidates():
+            return 2
+
         vs = sorted((v for v in load("buzer", "versions.jsonl")
                      if v["jurabk"] == jb), key=lambda v: v["date"])
-        print("   federal corpus · buzer back-history "
+        print("\n   private fallback · buzer back-history "
               "(non-authoritative, 2006+)")
         if not vs:
             print("\n  no version history on file — GII HEAD is the "
@@ -365,6 +474,7 @@ def cmd_checkout(args: argparse.Namespace) -> int:
             print(f"\n  no amendment after {at} on file — this is "
                   f"HEAD (GII: {(act.get('stand') or '')[:52]})")
     else:
+        print(f"== checkout {jb} @ {at} — {title[:42]}".rstrip())
         evs = bavarian_events(jb)
         print("   bavarian corpus · amtlich BayRS ffn/XML "
               f"(BayRS {act.get('bayrs_nr')})")
@@ -419,6 +529,8 @@ def main() -> int:
     c.add_argument("act", help="jurabk (federal first, then Bavaria)")
     c.add_argument("--at", required=True, metavar="YYYY-MM-DD",
                    help="point in time")
+    c.add_argument("--norm", metavar="REF",
+                   help='emit one exact observed norm, e.g. "§ 29a"')
     c.set_defaults(fn=cmd_checkout)
     args = ap.parse_args()
     return args.fn(args)

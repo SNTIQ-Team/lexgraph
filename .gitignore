@@ -4,6 +4,10 @@ data/cache/
 data/*.qfs
 data/*.qfs.policy.json
 data/neuris_archive.jsonl
+data/neuris_work_map.json
+data/neuris_objects/
+data/federal_states/
+data/bgbl_documents/
 web/data/
 
 # raw legal-content working set (not part of the open dataset)

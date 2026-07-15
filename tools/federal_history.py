@@ -76,10 +76,12 @@ def validate_public_event(event: dict) -> None:
     official_hosts = {
         "GII": {"www.gesetze-im-internet.de"},
         "DIP": {"dip.bundestag.de", "search.dip.bundestag.de"},
+        "BGBl": {"www.recht.bund.de", "recht.bund.de"},
     }
     for row in evidence:
-        if not isinstance(row, dict) or row.get("source") not in {"GII", "DIP"}:
-            raise ValueError("federal-history evidence must be official GII/DIP")
+        if not isinstance(row, dict) or row.get("source") not in official_hosts:
+            raise ValueError(
+                "federal-history evidence must be official GII/DIP/BGBl")
         url = str(row.get("url") or "")
         parsed = urlparse(url)
         if parsed.scheme != "https" or parsed.hostname not in official_hosts[
@@ -89,16 +91,119 @@ def validate_public_event(event: dict) -> None:
         changes = event.get("changes") or []
         if not changes:
             raise ValueError("exact state pairs require changes")
+        complete_pair = event.get("complete_parsed_state_pair") is True
+        if complete_pair:
+            for key in ("old_state_sha256", "new_state_sha256"):
+                if not re.fullmatch(r"[0-9a-f]{64}", str(event.get(key) or "")):
+                    raise ValueError("complete state pair requires state hashes")
         for change in changes:
             old, new = change.get("old"), change.get("new")
-            if not isinstance(old, str) or not isinstance(new, str) or old == new:
+            old_present = change.get("old_present") is True
+            new_present = change.get("new_present") is True
+            if (not isinstance(old, str) or not isinstance(new, str)
+                    or old == new or (not old_present and not new_present)):
                 raise ValueError("exact state pairs require distinct text states")
             if change.get("old_sha256") != _sha256(old) or \
                     change.get("new_sha256") != _sha256(new):
                 raise ValueError("exact state-pair hash mismatch")
-            if change.get("old_present") is not True or \
-                    change.get("new_present") is not True:
+            if not complete_pair and (not old_present or not new_present):
                 raise ValueError("exact state pairs require both captured norms")
+
+
+def official_state_transition_events(
+        transitions: Iterable[dict]) -> list[dict]:
+    """Project complete, content-addressed GII state pairs to public events.
+
+    Unlike the older adjacent-snapshot helper, a complete state object proves
+    norm additions and removals as well as replacements.  It still proves only
+    what the official source served on two retrieval days.  Publication and
+    legal-effect dates remain empty until a final BGBl command is separately
+    joined and verified.
+    """
+    events = []
+    for transition in transitions:
+        act = str(transition.get("jurabk") or transition.get("act") or "")
+        observed_at = str(transition.get("observed_at") or "")
+        previous_at = str(transition.get("previous_observed_at") or "")
+        old_digest = str(transition.get("previous_state_sha256")
+                         or transition.get("old_state_sha256") or "")
+        new_digest = str(transition.get("state_sha256")
+                         or transition.get("new_state_sha256") or "")
+        changes = list(transition.get("changes") or [])
+        if not (act and re.fullmatch(r"\d{4}-\d{2}-\d{2}", observed_at)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", previous_at)
+                and changes):
+            continue
+        digest = _sha256(json.dumps(
+            [act, previous_at, observed_at, old_digest, new_digest],
+            ensure_ascii=False, separators=(",", ":")))[:16]
+        slug = str(transition.get("slug") or "")
+        source_url = str(transition.get("source_url") or (
+            f"https://www.gesetze-im-internet.de/{slug}/" if slug else
+            "https://www.gesetze-im-internet.de/"))
+        reviewed = bool(transition.get("effective_at")
+                        and transition.get("published_at")
+                        and transition.get("legal_effect_verified"))
+        event = {
+            "id": f"fed-history:{digest}",
+            "act": act,
+            "title": ("Final BGBl command matched to complete GII state pair"
+                      if reviewed else
+                      "Complete official GII state change observed"),
+            "procedure": None,
+            "published_at": transition.get("published_at") if reviewed else None,
+            "effective_at": transition.get("effective_at") if reviewed else None,
+            "previous_observed_at": previous_at,
+            "observed_at": observed_at,
+            "date_basis": transition.get("date_basis") if reviewed else
+            "retrieval_observation_not_effective_date",
+            "verification": "exact",
+            "verification_scope": (
+                "final_bgbl_command_and_complete_parsed_official_state_pair"
+                if reviewed else "complete_parsed_official_state_pair"),
+            "complete_parsed_state_pair": True,
+            "legal_effect_attribution": reviewed,
+            "legal_effect_verified": reviewed,
+            "old_builddate": transition.get("old_builddate"),
+            "new_builddate": transition.get("new_builddate")
+            or transition.get("builddate"),
+            "old_state_sha256": old_digest,
+            "new_state_sha256": new_digest,
+            "changes": changes,
+            "evidence": (list(transition.get("review_evidence") or [])
+                         if reviewed else [
+                {"source": "GII", "url": source_url,
+                 "snapshot": previous_at,
+                 "builddate": transition.get("old_builddate"),
+                 "state_sha256": old_digest},
+                {"source": "GII", "url": source_url,
+                 "snapshot": observed_at,
+                 "builddate": transition.get("new_builddate")
+                 or transition.get("builddate"),
+                 "state_sha256": new_digest},
+            ]),
+            "derivation": {
+                "tool": "lexgraph-official-states",
+                "schema_version": SCHEMA_VERSION,
+                "algorithm": (
+                    "gii-state-pair+bgbl-final-command+dip-commencement"
+                    if reviewed else
+                    "content-addressed-complete-state-diff"),
+            },
+        }
+        if reviewed:
+            event.update({
+                "review_id": transition.get("review_id"),
+                "legal_verification": transition.get("legal_verification"),
+                "amending_articles": transition.get("amending_articles"),
+                "procedure": (f"dip-vorgang:{transition['procedure_id']}"
+                              if transition.get("procedure_id") else None),
+                "bgbl": transition.get("bgbl"),
+            })
+        validate_public_event(event)
+        events.append(event)
+    return sorted(events, key=lambda event: (
+        event["observed_at"], event["id"]), reverse=True)
 
 
 def current_text_correspondence_events(
@@ -303,8 +408,11 @@ def exact_gii_state_events(snapshot_dirs: Iterable[Path]) -> list[dict]:
 def build_public_federal_history(patches: Iterable[dict],
                                  norms: Iterable[dict],
                                  snapshot_dirs: Iterable[Path],
-                                 observed_at: str) -> dict:
-    events = exact_gii_state_events(snapshot_dirs)
+                                 observed_at: str,
+                                 exact_events: Iterable[dict] | None = None
+                                 ) -> dict:
+    events = (list(exact_events) if exact_events is not None
+              else exact_gii_state_events(snapshot_dirs))
     events.extend(current_text_correspondence_events(
         patches, norms, observed_at))
     for event in events:

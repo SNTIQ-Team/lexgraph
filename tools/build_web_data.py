@@ -14,6 +14,9 @@ Outputs:
     web/data/watched_procedures.json  persistent DIP/EUR-Lex watch state
     web/data/amendment_fates.json     reviewed document-chain validations
     web/data/verified_federal_events.json  official-only federal history
+    web/data/official_federal_states.json  cumulative GII observation manifest
+    web/data/official_transition_reviews.json  BGBl/DIP accepted legal dates
+    web/data/federal_states/…   immutable complete GII state objects
     web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
@@ -25,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import zlib
 from datetime import date, datetime, timezone
@@ -37,7 +41,17 @@ from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
 from api.search_engine import build_search_database       # noqa: E402
 from procedure_analysis import analyse_procedure           # noqa: E402
-from federal_history import build_public_federal_history    # noqa: E402
+from federal_history import (                             # noqa: E402
+    build_public_federal_history,
+    official_state_transition_events,
+)
+from official_states import (                             # noqa: E402
+    DEFAULT_STORE as FEDERAL_STATE_STORE,
+    load_manifest as load_official_state_manifest,
+    load_state_verified as load_official_state,
+    transitions as build_official_state_transitions,
+)
+from official_transition_review import review_transitions  # noqa: E402
 
 WEB = ROOT / "web" / "data"
 
@@ -1174,7 +1188,8 @@ def _hash(key: str) -> str:
     return f"{zlib.crc32(key.encode()) & 0xffffffff:08x}"
 
 
-def build_git() -> dict:
+def build_git(official_transitions: list[dict] | None = None,
+              transition_reviews: list[dict] | None = None) -> dict:
     """The normative history as a git commit graph: one commit per
     legislative change, laned by jurisdiction (EU/Bund/Bayern/Länder).
     Promulgated procedure = solid commit, pending = open branch,
@@ -1183,6 +1198,96 @@ def build_git() -> dict:
     raw = load("patches", "patches.jsonl")
     vorg = {str(v["id"]): v for v in load("dip", "vorgaenge.jsonl")}
     commits: list[dict] = []
+
+    # Official GII observations are real Git-like state commits, but their
+    # retrieval date is deliberately not presented as Inkrafttreten.  The
+    # checkout pointer addresses the complete immutable state object.
+    for transition in official_transitions or []:
+        paras = []
+        for change in transition.get("changes") or []:
+            label = str(change.get("para") or "").strip()
+            label = re.sub(r"^(?:§+|Art(?:ikel)?\.?)\s*", "", label,
+                           flags=re.IGNORECASE)
+            if label:
+                paras.append(label)
+        digest = str(transition.get("state_sha256") or "")
+        commits.append({
+            "hash": _hash("gii-state:" + digest),
+            "date": transition["observed_at"],
+            "lane": 1,
+            "type": "commit",
+            "actor": "GII",
+            "msg": "Amtlicher konsolidierter Stand beobachtet",
+            "acts": [transition["jurabk"]],
+            "paras": paras[:20],
+            "refs": ["official_state_observed", "not_effective_date"],
+            "merge_ref": None,
+            "url": transition.get("source_url"),
+            "targets_verified": True,
+            "target_basis": "complete_content_addressed_gii_state_pair",
+            "date_basis": "retrieval_observation_not_effective_date",
+            "verification": "exact",
+            "observed_at": transition["observed_at"],
+            "state_digest": digest,
+            "previous_state_digest": transition.get(
+                "previous_state_sha256"),
+            "checkout": {
+                "act_id": transition["act_id"],
+                "observed_at": transition["observed_at"],
+                "state_digest": digest,
+            },
+        })
+
+    # A legal-effect commit is separate from the later GII observation.  It is
+    # emitted only after a final, integrity-checked BGBl command was matched to
+    # the complete state pair and DIP supplied the article-specific
+    # commencement date.  This keeps the graph useful without pretending that
+    # the crawler observed the law on the day it entered into force.
+    for review in transition_reviews or []:
+        paras = []
+        for change in review.get("changes") or []:
+            label = str(change.get("para") or "").strip()
+            label = re.sub(r"^(?:§+|Art(?:ikel)?\.?)\s*", "", label,
+                           flags=re.IGNORECASE)
+            if label:
+                paras.append(label)
+        bgbl = dict(review.get("bgbl") or {})
+        articles = [str(value) for value in
+                    (review.get("amending_articles") or []) if value]
+        refs = ["effective_date_verified"]
+        if bgbl.get("document_id"):
+            refs.append(str(bgbl["document_id"]))
+        refs.extend(f"Artikel {value}" for value in articles)
+        commits.append({
+            "hash": _hash("official-review:" + str(review.get("id") or "")),
+            "date": review["effective_at"],
+            "lane": 1,
+            "type": "commit",
+            "actor": "BGBl / Lexgraph",
+            "msg": ("Amtliche Änderung wirksam · "
+                    f"{review.get('jurabk') or review.get('act') or ''}"),
+            "acts": [review.get("jurabk") or review.get("act")],
+            "paras": paras[:20],
+            "refs": refs,
+            "merge_ref": None,
+            "url": bgbl.get("pdf_url"),
+            "targets_verified": True,
+            "target_basis": (
+                "final_bgbl_command+complete_gii_state_pair+"
+                "dip_article_commencement"),
+            "date_basis": review.get("date_basis"),
+            "verification": review.get("verification"),
+            "legal_verification": review.get("verification"),
+            "legal_effect_verified": True,
+            "published_at": review.get("published_at"),
+            "effective_at": review.get("effective_at"),
+            "observed_at": review.get("observed_at"),
+            "state_digest": review.get("state_sha256"),
+            "previous_state_digest": review.get("previous_state_sha256"),
+            "review_id": review.get("id"),
+            "procedure_id": review.get("procedure_id"),
+            "bgbl": bgbl,
+        })
 
     # Bund: group patch commands by procedure (a commit touches N laws)
     proc: dict[str, dict] = {}
@@ -1267,13 +1372,109 @@ def build_git() -> dict:
     return {"lanes": LANES, "commits": commits, "total": len(commits)}
 
 
+def publish_official_federal_states() -> tuple[dict, list[dict]]:
+    """Verify the durable GII CAS and copy its referenced objects to web.
+
+    The source store is cumulative; the public manifest is authoritative, so
+    stale unreferenced content-addressed files are harmless.  Existing blobs
+    are reused byte-for-byte and each referenced canonical state is verified
+    before publication.
+    """
+    manifest = load_official_state_manifest(FEDERAL_STATE_STORE)
+    observations = list(manifest.get("observations") or [])
+    objects = manifest.get("objects") or {}
+    destination = WEB / "federal_states"
+    for digest, metadata in objects.items():
+        load_official_state(FEDERAL_STATE_STORE, digest)
+        relative = Path(str(metadata["path"]))
+        source = FEDERAL_STATE_STORE / relative
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.is_file() or target.stat().st_size != source.stat().st_size:
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            shutil.copyfile(source, temporary)
+            temporary.replace(target)
+    change_rows = build_official_state_transitions(
+        manifest, FEDERAL_STATE_STORE) if observations else []
+    public = {
+        **manifest,
+        "total_observations": len(observations),
+        "total_states": len(objects),
+        "total_transitions": len(change_rows),
+        "archive_start": min(
+            (row["observed_at"] for row in observations), default=None),
+        "archive_end": max(
+            (row["observed_at"] for row in observations), default=None),
+        "source_policy": {
+            "official_only": True,
+            "source": "GII",
+            "date_basis": "retrieval_observation_not_effective_date",
+            "effective_dates_inferred": False,
+        },
+    }
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "manifest.json").write_text(
+        json.dumps(public, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8")
+    return public, change_rows
+
+
+def _join_transition_reviews(transitions: list[dict],
+                             reviews: list[dict]) -> list[dict]:
+    """Attach legal provenance without weakening observation semantics.
+
+    ``transitions`` remains the immutable retrieval ledger used for checkout.
+    This derived copy is used for legal history events, where one independently
+    reviewed BGBl/DIP match may add publication/effect dates.  Duplicate
+    reviews fail closed because choosing one would manufacture certainty.
+    """
+    indexed: dict[tuple[str, str, str], dict] = {}
+    for review in reviews:
+        key = (str(review.get("act_id") or ""),
+               str(review.get("previous_state_sha256") or ""),
+               str(review.get("state_sha256") or ""))
+        if key in indexed:
+            raise ValueError(f"ambiguous official transition review: {key}")
+        indexed[key] = review
+
+    out = []
+    for transition in transitions:
+        key = (str(transition.get("act_id") or ""),
+               str(transition.get("previous_state_sha256") or ""),
+               str(transition.get("state_sha256") or ""))
+        review = indexed.get(key)
+        row = dict(transition)
+        if review:
+            row.update({
+                "published_at": review["published_at"],
+                "effective_at": review["effective_at"],
+                "date_basis": review["date_basis"],
+                "legal_effect_verified": True,
+                "legal_verification": review["verification"],
+                "review_id": review["id"],
+                "review_evidence": list(review.get("evidence") or []),
+                "amending_articles": list(
+                    review.get("amending_articles") or []),
+                "procedure_id": review.get("procedure_id"),
+                "bgbl": dict(review.get("bgbl") or {}),
+            })
+        out.append(row)
+    return out
+
+
 def main() -> int:
     (WEB / "acts").mkdir(parents=True, exist_ok=True)
+    official_states, official_transitions = publish_official_federal_states()
+    bgbl_documents = load("bgbl_documents", "documents.jsonl")
+    transition_reviews = review_transitions(
+        official_transitions, bgbl_documents)
+    reviewed_transitions = _join_transition_reviews(
+        official_transitions, transition_reviews)
     feed = build_feed()
     wiki_idx, details = build_wiki()
     hierarchy = build_hierarchy(wiki_idx)
     graph = build_graph()
-    git = build_git()
+    git = build_git(official_transitions, transition_reviews)
     decisions = load_decisions()
     data_policy = {
         "schema_version": 1,
@@ -1295,6 +1496,8 @@ def main() -> int:
 
     patches = load("patches", "patches.jsonl")
     gii_snapshot = latest_snapshot("gii")
+    exact_state_events = official_state_transition_events(
+        reviewed_transitions)
     federal_history = build_public_federal_history(
         patches,
         (read_jsonl(gii_snapshot / "norms.jsonl")
@@ -1303,15 +1506,92 @@ def main() -> int:
         ((SNAPSHOTS / "gii").iterdir()
          if (SNAPSHOTS / "gii").is_dir() else []),
         gii_snapshot.name if gii_snapshot else built_at[:10],
+        exact_events=exact_state_events,
     )
+    observations_by_act: dict[str, list[dict]] = {}
+    for observation in official_states.get("observations") or []:
+        observations_by_act.setdefault(
+            str(observation.get("act_id") or ""), []).append(observation)
+    transitions_by_act: dict[str, list[dict]] = {}
+    for transition in official_transitions:
+        transitions_by_act.setdefault(transition["act_id"], []).append(
+            transition)
+    reviews_by_act: dict[str, list[dict]] = {}
+    for review in transition_reviews:
+        reviews_by_act.setdefault(str(review.get("act_id") or ""), []).append(
+            review)
     history_by_act: dict[str, list[dict]] = {}
     for event in federal_history["events"]:
         history_by_act.setdefault(str(event.get("act") or ""), []).append(
             event)
     for act in details.values():
         if act.get("juris") == "DE":
+            act_id = str(act.get("id") or "")
             act["verified_history"] = history_by_act.get(
                 str(act.get("jurabk") or ""), [])
+            act["official_states"] = sorted(
+                observations_by_act.get(act_id, []),
+                key=lambda row: row["observed_at"])
+            act["official_transition_reviews"] = sorted(
+                reviews_by_act.get(act_id, []),
+                key=lambda row: str(row.get("effective_at") or ""),
+                reverse=True)
+            observed_versions = []
+            for transition in transitions_by_act.get(act_id, []):
+                observed_versions.append({
+                    "date": transition["observed_at"],
+                    "observed_at": transition["observed_at"],
+                    "previous_observed_at": transition[
+                        "previous_observed_at"],
+                    "date_basis": transition["date_basis"],
+                    "verification": transition["verification"],
+                    "text": "Amtlicher konsolidierter GII-Stand geändert",
+                    "url": transition.get("source_url"),
+                    "source_url": transition.get("source_url"),
+                    "state_digest": transition["state_sha256"],
+                    "previous_state_digest": transition[
+                        "previous_state_sha256"],
+                    "builddate": transition.get("new_builddate"),
+                    "changes": [
+                        {**change, "source": "gii_observed_state"}
+                        for change in transition.get("changes") or []
+                    ],
+                })
+            legal_versions = []
+            for review in reviews_by_act.get(act_id, []):
+                bgbl = dict(review.get("bgbl") or {})
+                legal_versions.append({
+                    "date": review["effective_at"],
+                    "published_at": review["published_at"],
+                    "effective_at": review["effective_at"],
+                    "observed_at": review["observed_at"],
+                    "previous_observed_at": review[
+                        "previous_observed_at"],
+                    "date_basis": review["date_basis"],
+                    "verification": review["verification"],
+                    "legal_effect_verified": True,
+                    "legal_verification": review["verification"],
+                    "review_id": review["id"],
+                    "text": "Amtliche BGBl-Änderung · Inkrafttreten geprüft",
+                    "url": bgbl.get("pdf_url"),
+                    "source_url": bgbl.get("pdf_url"),
+                    "state_digest": review["state_sha256"],
+                    "previous_state_digest": review[
+                        "previous_state_sha256"],
+                    "procedure_id": review.get("procedure_id"),
+                    "amending_articles": list(
+                        review.get("amending_articles") or []),
+                    "bgbl": bgbl,
+                    "changes": [
+                        {**change,
+                         "effective_date": review["effective_at"],
+                         "source": "official_bgbl_review"}
+                        for change in review.get("changes") or []
+                    ],
+                })
+            act["versions"].extend(observed_versions + legal_versions)
+            act["versions"].sort(
+                key=lambda row: str(row.get("date") or ""), reverse=True)
     sts: dict[str, int] = {}
     for p_ in patches:
         sts[p_["status"]] = sts.get(p_["status"], 0) + 1
@@ -1338,6 +1618,12 @@ def main() -> int:
         "amendment_fates_validated": amendment_fates["validated"],
         "verified_federal_events": federal_history["total"],
         "verified_federal_event_tiers": federal_history["tiers"],
+        "official_federal_observations": official_states[
+            "total_observations"],
+        "official_federal_states": official_states["total_states"],
+        "official_federal_transitions": official_states[
+            "total_transitions"],
+        "official_federal_legal_reviews": len(transition_reviews),
         "bay_bills": len(bills),
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),
@@ -1369,6 +1655,21 @@ def main() -> int:
         "amendment_fates.json": dump("amendment_fates.json", amendment_fates),
         "verified_federal_events.json": dump(
             "verified_federal_events.json", federal_history),
+        "official_federal_states.json": dump(
+            "official_federal_states.json", official_states),
+        "official_transition_reviews.json": dump(
+            "official_transition_reviews.json", {
+                "schema_version": 1,
+                "built_at": built_at,
+                "source_policy": {
+                    "official_only": True,
+                    "effective_dates_inferred": False,
+                    "gate": ("complete_gii_state_pair+final_bgbl_command+"
+                             "dip_article_commencement"),
+                },
+                "total": len(transition_reviews),
+                "reviews": transition_reviews,
+            }),
         "hierarchy.json": dump("hierarchy.json", hierarchy),
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),

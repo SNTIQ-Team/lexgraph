@@ -52,6 +52,9 @@ Files written:
 | `decisions.json` | Manual + official cumulative RII decisions, newest first. |
 | `eu_index.json` | In-force EU directives + basic regulations, metadata only. |
 | `gii_catalog.json` | Complete official GII TOC, metadata only; deep fields exist only for curated acts. |
+| `official_federal_states.json` | Cumulative public GII observation manifest: canonical state hashes, retrieval provenance and counts. |
+| `federal_states/manifest.json` + `federal_states/objects/sha256/…` | The same manifest beside its verified deterministic-gzip full-state CAS. |
+| `official_transition_reviews.json` | Federal state changes whose legal date passed final BGBl command + DIP commencement review. |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
 | `hierarchy.json` | Competence-aware legal layers (EU / Bund / Bayern / Länder). |
 | `watched_procedures.json` | Persistent DIP/EUR-Lex watch state and change history. |
@@ -81,6 +84,10 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "watched_terminal": 1,
   "amendment_fates": 1,
   "amendment_fates_validated": 1,
+  "official_federal_observations": 172,
+  "official_federal_states": 63,
+  "official_federal_transitions": 7,
+  "official_federal_legal_reviews": 1,
   "bay_bills": 123,
   "bay_verkuendet": 60,
   "eu_instruments": 47,
@@ -103,6 +110,10 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `watched_procedures` | Compact rows from the persistent DIP/EUR-Lex watch ledger. An active entry can still be a non-enacted proposal. |
 | `watched_active` / `watched_terminal` | Active polling set / terminal records retained as an archive. |
 | `amendment_fates` / `amendment_fates_validated` | Reviewed document-chain records / records whose declared current-law checks passed. |
+| `official_federal_observations` | Complete GII act retrievals retained in the cumulative state manifest. |
+| `official_federal_states` | Unique canonical full-act objects in the federal SHA-256 CAS. |
+| `official_federal_transitions` | Normative changes found by Lexgraph between adjacent complete states; their retrieval dates are not legal dates. |
+| `official_federal_legal_reviews` | State transitions that additionally passed the final BGBl command and exact DIP commencement gate. |
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
 | `eu_instruments` / `transpositions` | Curated EU instruments / DEU transposition mentions in the deep layer. |
 | `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
@@ -642,7 +653,7 @@ fetchers refuse to overwrite a good same-day snapshot with empty output.
 ./refresh.sh
 ```
 
-The 21 steps are:
+The 23 steps are:
 
 | # | Step | Fetcher |
 |---|------|---------|
@@ -651,22 +662,24 @@ The 21 steps are:
 | 3 | Persistent watch state + change-only history (fresh observations or an explicitly marked persisted fallback) | `tools/update_procedure_watch.py` |
 | 4 | BGBl promulgation events | `fetch_bgbl_events.py` |
 | 5 | GII corpus HEAD | `fetch_gii.py` |
-| 6 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `LEXGRAPH_ENABLE_RII=1`) | `fetch_rii.py` |
-| 7 | NeuRIS changelog (append-only) | `fetch_neuris_changelog.py` |
-| 8 | Private version-history research (**default-off**, permission gate `LEXGRAPH_ENABLE_BUZER=1`) | `fetch_buzer.py` |
-| 9 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
-| 10 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
-| 11 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
-| 12 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
-| 13 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
-| 14 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
-| 15 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
-| 16 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
-| 17 | Länder discovery monitor (**default-off**, permission gate) | `fetch_parlamentsspiegel.py` |
-| 18 | Broad Länder discovery (**default-off**, separate bulk permission gate) | `fetch_laender_bills.py` |
-| 19 | Build the QFS arena | `tools/build_qfs.py` |
-| 20 | Export web data | `tools/build_web_data.py` |
-| 21 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
+| 6 | Verify and append every complete GII act state to the cumulative canonical SHA-256 store | `tools/archive_gii_states.py` |
+| 7 | Capture final BGBl landing/PDF documents, verify integrity, split articles and join DIP commencement rows | `fetch_bgbl_documents.py` |
+| 8 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `LEXGRAPH_ENABLE_RII=1`) | `fetch_rii.py` |
+| 9 | NeuRIS changelog plus immediate content-addressed capture of selected expiring ZIP artifacts | `fetch_neuris_changelog.py` |
+| 10 | Private version-history QA (**default-off**, explicit opt-in `LEXGRAPH_ENABLE_BUZER=1`; not used by public builds) | `fetch_buzer.py` |
+| 11 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
+| 12 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
+| 13 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
+| 14 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
+| 15 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
+| 16 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
+| 17 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
+| 18 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
+| 19 | Länder discovery monitor (**default-off**, permission gate) | `fetch_parlamentsspiegel.py` |
+| 20 | Broad Länder discovery (**default-off**, separate bulk permission gate) | `fetch_laender_bills.py` |
+| 21 | Build the QFS arena | `tools/build_qfs.py` |
+| 22 | Verify official state/review inputs and export web data | `tools/build_web_data.py` |
+| 23 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
 
 Snapshots land in `data/snapshots/<source>/<date>/*.jsonl`; each build reads the
 newest snapshot per source. **Each fetcher documents its own source, cadence,
@@ -676,7 +689,7 @@ Permission-gated snapshots are retained only as private research artifacts;
 the public web/HF builders exclude them unless an explicit private build mode
 is selected, and the HF exporter refuses that mode.
 
-Step 19 also deploys the arena to a local `qfs_visualizer` checkout if present.
+Step 21 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
 ---
 
@@ -718,6 +731,8 @@ database.
 | `GET /stats` | `summary.json` | the dashboard counts, verbatim |
 | `GET /data-policy` | `data_policy.json` | public-build mode and excluded source families |
 | `GET /federal-history?act=&tier=&limit=&offset=` | `verified_federal_events.json` | official-only state pairs and current-text-verified DIP patches |
+| `GET /official-states?act=&limit=&offset=` | `official_federal_states.json` | exact GII retrieval observations and immutable state hashes |
+| `GET /official-transition-reviews?act=&procedure_id=&limit=&offset=` | `official_transition_reviews.json` | legal dates accepted by the final BGBl + DIP + complete-state gate |
 | `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
@@ -750,7 +765,7 @@ Returns **503** if `summary.json` is missing (run `tools/build_web_data.py`).
 ## `GET /version`
 
 ```json
-{ "dataset": "Lexgraph", "version": "1.0",
+{ "dataset": "Lexgraph", "version": "1.2",
   "built_at": "2026-07-06T17:43:26+00:00",
   "source": "https://github.com/SNTIQ-Team/lexgraph" }
 ```
@@ -783,6 +798,11 @@ curl http://127.0.0.1:8010/acts/fed_asylblg
 { "id": "fed_asylblg", "jurabk": "AsylbLG", "juris": "DE",
   "title": "Asylbewerberleistungsgesetz", "stand": "…", "build": "20260611",
   "norm_count": 31, "patches": [ … ], "upcoming": [], "versions": [ … ],
+  "official_states": [
+    {"observed_at":"2026-07-15","state_sha256":"…",
+     "date_basis":"retrieval_observation_not_effective_date",
+     "verification":"exact","source_url":"https://www.gesetze-im-internet.de/…/"}
+  ],
   "temporal": { … }, "norms": [ … ] }
 ```
 
@@ -807,24 +827,73 @@ curl 'http://127.0.0.1:8010/git?lane=0&limit=3'
 
 Returns the public federal-history ledger without reading the quarantined
 Buzer cache. `act` is an exact case-insensitive JurAbk filter; `tier` is
-`exact`, `current_text_correspondence`, or `metadata_only`. `exact` means Lexgraph captured
-two different official GII states and hashed both sides. Its `observed_at` is
-a retrieval date, **not** a silently inferred legal effective date.
+`exact`, `current_text_correspondence`, or `metadata_only`. `exact` means
+Lexgraph captured two different complete official GII states and hashed both
+sides. Its `observed_at` is a retrieval date, **not** a silently inferred legal
+effective date.
 
 ```bash
 curl 'http://127.0.0.1:8010/federal-history?act=AsylbLG&tier=current_text_correspondence'
 ```
 
 Each event carries official `evidence[]`, derivation metadata and a
-verification tier. A `current_text_correspondence` row proves only a sufficiently
-distinctive correspondence with the current official norm; it leaves
-`effective_at` and `published_at` empty. A procedure-state date is exposed as
+verification tier. An exact event has non-null `published_at` / `effective_at`
+only when its complete state pair also passed
+`official_final_text_and_complete_state_pair`: every changed norm matched one
+integrity-checked final BGBl command and DIP supplied an unambiguous
+commencement date for that exact amending article. The event keeps
+`observed_at` separately, because consolidation may be observed later.
+
+A `current_text_correspondence` row proves only a sufficiently distinctive
+correspondence with the current official norm; it leaves `effective_at` and
+`published_at` empty. A procedure-state date is exposed as
 `procedure_status_at`; a bill-level commencement date may be retained as
 `draft_bill_declared_effective_at`, but neither is asserted as a promulgation
 or individual patch effective date. The
 corresponding act detail embeds its rows in
 `verified_history[]`; `cross_checks[]` may additionally contain a secondary,
 non-authoritative Buzer deep link.
+
+### Official federal state store
+
+`official_federal_states.json` and `federal_states/manifest.json` describe the
+same cumulative store. State identity is the SHA-256 of canonical,
+**uncompressed** UTF-8 JSON; the referenced object is a deterministic gzip at
+`federal_states/objects/sha256/{first-two}/{digest}.json.gz`. Every object is a
+complete act projection (`id`, `jurabk`, title/stand/build and all `norms`).
+Every `observations[]` row records GII `source_url`, `builddate`, `observed_at`,
+`state_sha256`, `date_basis` and verification. Repeated observations of an
+unchanged state remain in the manifest while the CAS stores its bytes once.
+
+`official_transition_reviews.json` is deliberately separate. Its `reviews[]`
+rows join a complete old/new state pair to a final BGBl PDF hash, amending
+article, DIP procedure and exact commencement clause. It contains no private
+Buzer snapshot or synopsis. The Hugging Face export makes the same boundary
+portable as four JSONL configurations:
+
+- `official_federal_state_observations.jsonl` — retrieval facts;
+- `official_federal_state_transitions.jsonl` — Lexgraph's own state diffs,
+  `effective_at:null` unless separately reviewed;
+- `official_federal_state_objects.jsonl` — full verified states and their
+  observation provenance;
+- `official_transition_reviews.jsonl` — the stricter legal-event gate.
+
+The same evidence boundary is queryable without downloading the top-level
+files:
+
+```bash
+# Exact retrieval observations for one act (id or exact JurAbk)
+curl --get 'http://127.0.0.1:8010/official-states' \
+  --data-urlencode 'act=AsylVfG 1992'
+
+# Only transitions whose legal date passed the final-source gate
+curl 'http://127.0.0.1:8010/official-transition-reviews?act=fed_asylvfg_1992'
+```
+
+`/official-states` returns metadata and SHA-256 pointers; retrieve the verified
+full state or one norm through `/acts/{id}/markdown?at=...`. It never substitutes
+the nearest observation. `/official-transition-reviews` may legitimately be
+small: a row exists only when every strict acceptance check passes.
 
 ## `GET /eu-index?q=&kind=&limit=&offset=`
 
@@ -888,10 +957,12 @@ curl 'http://127.0.0.1:8010/amendment-fates?procedure_id=322125'
 ## Dated act archive and Markdown
 
 `GET /acts/{id}/archive` lists the deployment's exact consolidated `HEAD`,
-known amendment event dates, distinct `effective_date` values, current and
-historical norm designators, and corpus-level gaps. Publication/event date and
-effective date are intentionally both retained: a Bavarian act can be
-promulgated on one day and enter into force on another.
+exact archived official GII observation dates, known amendment event dates,
+distinct `effective_date` values, current and historical norm designators, and
+corpus-level gaps. Observation, publication/event and effective dates are
+intentionally all retained: GII may expose a consolidated change days after it
+legally entered into force, and a Bavarian act can be promulgated on one day
+and enter into force on another.
 
 ```bash
 curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/archive'
@@ -904,6 +975,10 @@ curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/archive'
   "entries": [
     {"date":"2024-03-01","label":"…","has_changes":true,
      "exact":false,"partial":true},
+    {"date":"2026-07-13","observed_at":"2026-07-13",
+     "date_basis":"retrieval_observation_not_effective_date",
+     "state_digest":"…","source_url":"https://www.gesetze-im-internet.de/…/",
+     "exact":true,"partial":false},
     {"date":"2026-07-15","label":"HEAD · consolidated source snapshot",
      "has_changes":false,"exact":true,"partial":false}
   ],
@@ -917,7 +992,8 @@ curl 'http://127.0.0.1:8010/acts/fed_aufenthg_2004/archive'
 Both filters are optional:
 
 - omit `at` for the exact current HEAD; `at=YYYY-MM-DD` requests the state on
-  an earlier date;
+  an earlier date. If that date is an official GII observation, its verified
+  content-addressed full state is rendered directly;
 - omit `norm` for the **entire act**; use `norm=§24`, `norm=24`, or
   `norm=Art.59` for one norm;
 - `download=true` adds an attachment filename so browsers save a `.md` file.
@@ -945,13 +1021,24 @@ X-Lexgraph-Exact: false
 X-Lexgraph-Archive-Status: partial
 X-Lexgraph-Missing-Transitions: 3
 X-Lexgraph-Archive-Gaps: [{"reason":"…","label":"…"}]
+X-Lexgraph-Date-Basis: retrieval_observation_not_effective_date
+X-Lexgraph-State-SHA256: 012345…cdef
+X-Lexgraph-Source-URL: https://www.gesetze-im-internet.de/…/
+X-Lexgraph-Legal-Effect-Verified: true  # only for a reviewed legal transition
+X-Lexgraph-Published-Date: 2026-07-09
+X-Lexgraph-Effective-Date: 2026-07-10
+X-Lexgraph-Review-ID: fed-review:…
+X-Lexgraph-Procedure-ID: 327966
 Content-Disposition: attachment; filename="…md"   # download=true only
 ```
 
-The truth boundary is strict: only HEAD is a complete consolidated source
-snapshot. Historical output uses dated complete norm states from verified
-Bavarian Wayback/daily snapshots where available, then conservatively reverses
-only reconcilable recorded `old/new` bodies; it is labelled `partial`.
+The truth boundary is strict: HEAD and a date backed by a verified complete GII
+CAS object are exact source snapshots. An exact observation says what GII
+served on that day; the header and Markdown front matter explicitly state that
+the date is a retrieval observation, not commencement. Other historical output
+uses dated complete norm states from verified Bavarian Wayback/daily snapshots
+where available, then conservatively reverses only reconcilable recorded
+`old/new` bodies; it is labelled `partial`.
 Metadata-only changes, the historic
 1,200-character federal capture cap, empty change sides, ambiguous ordering,
 and state mismatches are reported and never guessed. In particular, an empty
