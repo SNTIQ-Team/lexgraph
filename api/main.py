@@ -50,7 +50,7 @@ from api.act_archive import (
 )
 from api.gii_catalog import GiiCatalogIndex
 from api.search_engine import SearchEngine, normalize_search_text
-from api.procedure_search import search_procedures
+from api.procedure_search import ProcedureSearchIndex
 
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
@@ -68,6 +68,8 @@ _SEARCH_ENGINE: SearchEngine | None = None
 _SEARCH_LOCK = threading.RLock()
 _GII_CATALOG_INDEX: GiiCatalogIndex | None = None
 _GII_CATALOG_LOCK = threading.RLock()
+_PROCEDURE_SEARCH_INDEX: ProcedureSearchIndex | None = None
+_PROCEDURE_SEARCH_LOCK = threading.RLock()
 
 
 def _load(name: str) -> object:
@@ -98,6 +100,15 @@ def _gii_catalog_index(rows: list[dict]) -> GiiCatalogIndex:
         return _GII_CATALOG_INDEX
 
 
+def _procedure_search_index(hierarchy: object) -> ProcedureSearchIndex:
+    global _PROCEDURE_SEARCH_INDEX
+    with _PROCEDURE_SEARCH_LOCK:
+        if (_PROCEDURE_SEARCH_INDEX is None
+                or _PROCEDURE_SEARCH_INDEX.source_hierarchy is not hierarchy):
+            _PROCEDURE_SEARCH_INDEX = ProcedureSearchIndex(hierarchy)
+        return _PROCEDURE_SEARCH_INDEX
+
+
 def warm_search_indexes() -> None:
     """Pay immutable index setup costs during startup, not on first input."""
     try:
@@ -107,6 +118,11 @@ def warm_search_indexes() -> None:
     rows = payload.get("acts") if isinstance(payload, dict) else []
     if isinstance(rows, list):
         _gii_catalog_index(rows)
+    try:
+        hierarchy = _load("hierarchy")
+    except HTTPException:
+        return
+    _procedure_search_index(hierarchy)
 
 
 # Uvicorn imports this module once per worker.  Warming here is compatible
@@ -398,8 +414,8 @@ def search(q: str = Query(..., min_length=1),
     # DIP has only a few hundred current procedures.  Count the full match set
     # first so ``procedure_total`` follows the act/norm total contract, then
     # expose only the requested page.
-    all_procedure_matches = search_procedures(
-        _load("hierarchy"), q, 10_000)
+    all_procedure_matches = _procedure_search_index(
+        _load("hierarchy")).search(q, 10_000)
     procedure_total = len(all_procedure_matches)
     procedure_matches = all_procedure_matches[:procedure_limit]
     index_path = DATA_DIR / "search.sqlite"

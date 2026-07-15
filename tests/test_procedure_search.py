@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from api.procedure_search import search_procedures
+from api.procedure_search import ProcedureSearchIndex, search_procedures
 
 
 def _hierarchy() -> dict:
@@ -61,3 +61,12 @@ def test_searches_eurlex_identifiers_and_watch_aliases() -> None:
         assert [hit["id"] for hit in hits] == ["eu-2026-0186-nle"]
         assert hits[0]["source"] == "EUR-Lex"
         assert hits[0]["status"] == "Ongoing"
+
+
+def test_prepared_index_reuses_normalized_procedure_fields() -> None:
+    hierarchy = _hierarchy()
+    index = ProcedureSearchIndex(hierarchy)
+
+    assert [row["id"] for row in index.search("Fiktionsbescheinigung")] == [
+        "329468"]
+    assert index.source_hierarchy is hierarchy
