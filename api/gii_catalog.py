@@ -126,6 +126,43 @@ class GiiCatalogIndex:
         self.source_rows = rows
         self.rows = tuple(
             (source, _normalized_values(source)) for source in rows)
+        self.gram_rows: dict[str, set[int]] = {}
+        self.exact_word_rows: dict[str, set[int]] = {}
+        self.alias_prefix_rows: dict[str, set[int]] = {}
+        for position, (_, values) in enumerate(self.rows):
+            for value in values.values():
+                for word in value.split():
+                    self.exact_word_rows.setdefault(word, set()).add(position)
+                # Three-character postings preserve infix/phrase semantics
+                # while reducing a query to a few dozen candidate rows.
+                for offset in range(max(0, len(value) - 2)):
+                    gram = value[offset:offset + 3]
+                    self.gram_rows.setdefault(gram, set()).add(position)
+            # The ranking contract permits two-character prefixes only for
+            # dedicated identifiers/abbreviations, never arbitrary titles.
+            for field in ("id", "abbrev", "jurabk", "alias"):
+                value = values[field]
+                for width in range(2, len(value) + 1):
+                    self.alias_prefix_rows.setdefault(
+                        value[:width], set()).add(position)
+
+    def _candidate_positions(self, needle: str) -> set[int]:
+        per_token: list[set[int]] = []
+        for token in needle.split():
+            if len(token) >= 3:
+                postings = [self.gram_rows.get(token[offset:offset + 3], set())
+                            for offset in range(len(token) - 2)]
+                candidates = (set.intersection(*postings)
+                              if postings and all(postings) else set())
+            else:
+                candidates = set(self.exact_word_rows.get(token, set()))
+                if len(token) >= 2:
+                    candidates.update(
+                        self.alias_prefix_rows.get(token, set()))
+            if not candidates:
+                return set()
+            per_token.append(candidates)
+        return set.intersection(*per_token) if per_token else set()
 
     def search(self, query: str, limit: int = 25,
                exclude_act_ids: set[str] | None = None
@@ -133,7 +170,8 @@ class GiiCatalogIndex:
         needle = normalize_search_text(query)
         excluded = exclude_act_ids or set()
         hits: list[tuple[dict, str]] = []
-        for source, values in self.rows:
+        for position in self._candidate_positions(needle):
+            source, values = self.rows[position]
             if str(source.get("act_id") or "") in excluded:
                 continue
             score, fields = _score_values(source, values, needle)
