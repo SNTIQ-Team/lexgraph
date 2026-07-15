@@ -221,6 +221,11 @@ active polling set. `amendment_fates.json` separates reviewed roles in a
 parliamentary document chain from the mechanical checks performed against the
 current consolidated corpus.
 
+DIP-derived rows use the attribution **Deutscher Bundestag/Bundesrat – DIP**.
+Lexgraph extraction, ranking, annotations and forecasts are transformations,
+not source statements. DIP makes its source data available free of charge at
+[dip.bundestag.de](https://dip.bundestag.de).
+
 Every source and file-level rights regime is documented in the repository's
 `docs/SOURCES.md` and `docs/RIGHTS.md`; reproduce
 the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts
