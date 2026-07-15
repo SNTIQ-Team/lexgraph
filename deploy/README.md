@@ -61,3 +61,26 @@ journalctl -u lexgraph-procedure-watch.service -n 100 --no-pager
 The service is resource-controlled (`Nice`, CPU/IO weights and a 420 MiB hard
 memory limit) so a source or build regression cannot consume the entire 1 GiB
 VPS.  `EnvironmentFile=-/etc/sntiq/lexgraph.env` remains optional.
+
+## Broken advertised IPv6 route
+
+The current VPS provider advertises an IPv6 default route, but outbound TLS
+over IPv6 can remain in `SYN-SENT` while IPv4 succeeds.  This looks like a
+hung crawler or package upload rather than a connection error.  Verify both
+families before debugging an individual fetcher:
+
+```bash
+timeout 5 curl -6 -fsS https://huggingface.co >/dev/null || echo ipv6-failed
+timeout 5 curl -4 -fsS https://huggingface.co >/dev/null && echo ipv4-ok
+```
+
+Prefer IPv4 without disabling IPv6 by enabling the existing RFC 3484 rule in
+`/etc/gai.conf`:
+
+```text
+precedence ::ffff:0:0/96  100
+```
+
+Keep a backup of `gai.conf` and confirm `getent ahosts huggingface.co` lists
+IPv4 first.  This is a host-level provider workaround, not a crawler retry
+policy; remove it once outbound IPv6 is known to work.
