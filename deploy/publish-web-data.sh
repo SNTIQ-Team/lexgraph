@@ -146,12 +146,22 @@ rollback() {
 }
 
 # A successful systemctl return is not enough: uvicorn can still die during
-# import/startup.  Treat delayed liveness or health failure exactly like a
-# restart failure and restore the prior immutable generation.
-if ! (systemctl restart "$SERVICE" \
-      && sleep 3 \
-      && systemctl is-active --quiet "$SERVICE" \
-      && curl -fsS http://127.0.0.1:8002/health >/dev/null); then
+# import/startup.  Warming the 61 MB search index takes about eight seconds on
+# the 1 GB VPS, so poll with a hard deadline instead of treating a healthy cold
+# start as a failure after a fixed three-second sleep.
+healthy=0
+if systemctl restart "$SERVICE"; then
+    for _attempt in $(seq 1 30); do
+        if systemctl is-active --quiet "$SERVICE" \
+                && curl -fsS http://127.0.0.1:8002/health >/dev/null 2>&1; then
+            healthy=1
+            break
+        fi
+        systemctl is-failed --quiet "$SERVICE" && break
+        sleep 1
+    done
+fi
+if [ "$healthy" -ne 1 ]; then
     rollback
     exit 1
 fi
