@@ -13,6 +13,29 @@ sys.path.insert(0, str(ROOT / "tools"))
 import build_web_data as web_data  # noqa: E402
 
 
+def test_public_build_does_not_read_quarantined_snapshots(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LEXGRAPH_INCLUDE_QUARANTINED", raising=False)
+
+    def forbidden(_source: str) -> Path:
+        raise AssertionError("quarantined snapshot lookup must not happen")
+
+    monkeypatch.setattr(web_data, "latest_snapshot", forbidden)
+    for source in web_data.QUARANTINED_SOURCES:
+        assert web_data.load(source, "rows.jsonl") == []
+
+
+def test_quarantined_snapshot_requires_explicit_private_opt_in(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "rows.jsonl").write_text('{"id":1}\n', encoding="utf-8")
+    monkeypatch.setenv("LEXGRAPH_INCLUDE_QUARANTINED", "1")
+    monkeypatch.setattr(web_data, "latest_snapshot", lambda _source: snapshot)
+
+    assert web_data.load("buzer", "rows.jsonl") == [{"id": 1}]
+
+
 def test_legal_layers_separate_constitutions_statutes_and_ordinances() -> None:
     acts = [
         {"id": "fed_gg", "jurabk": "GG", "title": "Grundgesetz für die Bundesrepublik Deutschland"},
@@ -66,6 +89,10 @@ def test_hierarchy_v2_keeps_flat_lists_and_adds_legal_layers(
         "schema_version": 2,
         "model": "competence-aware",
         "not_a_total_order": True,
+        "coverage": {
+            "laender_monitor": "origin_verification_required",
+            "laender_keys": 16,
+        },
     }
     assert hierarchy["eu"]["instruments"] == (
         hierarchy["eu"]["secondary"]["directives"]
@@ -79,6 +106,9 @@ def test_hierarchy_v2_keeps_flat_lists_and_adds_legal_layers(
     assert hierarchy["bund"]["layers"]["constitution"] == [wiki[0]]
     assert hierarchy["bund"]["layers"]["ordinances"] == [wiki[1]]
     assert hierarchy["bayern"]["layers"]["constitution"] == [wiki[2]]
+    assert set(hierarchy["laender"]) == set(
+        web_data.ALL_LAENDER_JURISDICTIONS)
+    assert hierarchy["laender"]["DE-HB"] == []
 
 
 def test_hierarchy_keeps_full_searchable_dip_procedure_and_watch_metadata(

@@ -20,11 +20,13 @@ and killed bills (pFalse) — the 12-Monatsfrist discipline, visual.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import json
 import re as _re
 import sys
 import zlib
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -84,7 +86,9 @@ def main() -> int:
     acts = list(read_jsonl(gii / "acts.jsonl")) if gii else []
     ev_snap = latest_snapshot("bgbl_events")
     events = list(read_jsonl(ev_snap / "events.jsonl")) if ev_snap else []
-    bz = latest_snapshot("buzer")
+    include_quarantined = os.environ.get(
+        "LEXGRAPH_INCLUDE_QUARANTINED") == "1"
+    bz = latest_snapshot("buzer") if include_quarantined else None
     versions = list(read_jsonl(bz / "versions.jsonl")) if bz else []
     upcoming = list(read_jsonl(bz / "upcoming.jsonl")) if bz else []
     nr = latest_snapshot("neuris_changelog")
@@ -101,7 +105,7 @@ def main() -> int:
     _s = latest_snapshot("eu_layer")
     instruments = list(read_jsonl(_s / "instruments.jsonl")) if _s else []
     transpositions = list(read_jsonl(_s / "transpositions.jsonl"))         if _s else []
-    _s = latest_snapshot("laender_monitor")
+    _s = latest_snapshot("laender_monitor") if include_quarantined else None
     laender_ev = list(read_jsonl(_s / "events.jsonl")) if _s else []
     print(f"building from {len(vorgaenge)} Vorgänge, {len(acts)} acts, "
           f"{len(events)} promulgation events, {len(versions)} act "
@@ -455,10 +459,15 @@ def main() -> int:
           f"(Umsetzung/Durchführung), {n_transp} DEU transposition edges")
 
     # ================= Länder monitor (16 Landtage) ===================
-    topic = w.add_node("Asyl/Migration (Länder-Monitor)", trust=3)
+    # Do not even emit the monitor hub in a public build.  A dangling label
+    # would still disclose a quarantined source family and used to survive in
+    # graph.json after the underlying rows were excluded.
+    topic = (w.add_node("Asyl/Migration (Länder-Monitor)", trust=3)
+             if laender_ev else None)
     land_nodes: dict[str, int] = {}
     land_count: dict[str, int] = {}
     for e in laender_ev:
+        assert topic is not None
         code = (e.get("jurisdiction") or "DE-?")[3:]
         if code not in land_nodes:
             land_nodes[code] = w.add_node(f"Landtag {code}", trust=3)
@@ -473,6 +482,7 @@ def main() -> int:
                          p_none=.50, born_tick=t, memory="ephemeral",
                          source_trust=2)
     for code, node in land_nodes.items():
+        assert topic is not None
         w.add_edge([(node, 0.0), (topic, 0.0)], reltype=40,
                    delta=min(1.0, land_count[code] / 20), trust=2)
     print(f"  Länder: {len(land_nodes)} Landtage active, "
@@ -532,8 +542,29 @@ def main() -> int:
                     source_trust=5)
 
     n = w.write(args.out)
-    p = parse_qfs(open(args.out, "rb").read())
+    arena_bytes = Path(args.out).read_bytes()
+    p = parse_qfs(arena_bytes)
+    policy = {
+        "schema_version": 1,
+        "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "arena": Path(args.out).name,
+        "qfs_sha256": hashlib.sha256(arena_bytes).hexdigest(),
+        "public_build": not include_quarantined,
+        "includes_quarantined_sources": include_quarantined,
+        "included_snapshot_families": [
+            "dip", "gii", "bgbl_events", "neuris_changelog", "patches",
+            "bayern_recht", "bay_landtag", "gvbl_events", "eu_layer",
+        ] + (["buzer", "laender_monitor"] if include_quarantined else []),
+    }
+    policy_path = Path(f"{args.out}.policy.json")
+    policy_tmp = policy_path.with_suffix(policy_path.suffix + ".tmp")
+    policy_tmp.write_text(
+        json.dumps(policy, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8")
+    policy_tmp.replace(policy_path)
     print(f"wrote {args.out} ({n:,} B)")
+    print(f"  policy: {policy_path} "
+          f"({'private' if include_quarantined else 'public'})")
     print(f"  validated: {p.counts}")
     print(f"  timeline: {len(ticks)} month ticks "
           f"({ticks and date(ticks[0]//12, ticks[0]%12+1, 1)} … "

@@ -8,6 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import api.search_engine as search_engine_module  # noqa: E402
 from api.search_engine import (  # noqa: E402
     SearchEngine,
     build_search_database,
@@ -196,6 +197,57 @@ def test_ukraine_concept_priority_precedes_title_and_body_matches(
         if "concept" not in row["matched_fields"])
     assert max(positions[key] for key in transition_norms |
                ukraine_regulations) < first_plain_text
+
+
+def test_search_reuses_indexed_normalized_fields(
+        engine: SearchEngine, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A result body's size must not add request-time normalization work.
+
+    The built index already contains ``*_n`` fields.  Count calls instead of
+    asserting wall-clock time so the regression remains deterministic on CI.
+    ``Ukraine`` intentionally returns many act and norm rows from the fixture;
+    every value normalized during the request must still be just the query.
+    """
+    original = search_engine_module.normalize_search_text
+    seen: list[str] = []
+
+    def counted(value: object) -> str:
+        seen.append(str(value or ""))
+        return original(value)
+
+    monkeypatch.setattr(search_engine_module, "normalize_search_text", counted)
+    result = engine.search("Ukraine", act_limit=10, norm_limit=50)
+
+    assert len(result["norm_matches"]) > 10
+    assert seen
+    assert set(seen) == {"Ukraine"}
+    assert len(seen) <= 8
+
+
+def test_natural_language_ukraine_query_relaxes_into_semantic_targets(
+        engine: SearchEngine) -> None:
+    result = engine.search(
+        "Sozialhilfe ukrainische Geflüchtete", act_limit=10, norm_limit=50)
+    rows = result["norm_matches"]
+    positions = {(row["jurabk"], row["enbez"]): position
+                 for position, row in enumerate(rows)}
+
+    assert result["result_total"] > 0
+    assert ("SGB 12", "§ 146") in positions
+    assert ("SGB 2", "§ 74") in positions
+    assert ("AsylbLG", "§ 1") in positions
+    assert "concept" in rows[positions[("SGB 12", "§ 146")]][
+        "matched_fields"]
+    assert (rows[0]["jurabk"], rows[0]["enbez"]) == ("SGB 12", "§ 146")
+
+
+def test_explicit_norm_reference_does_not_use_broad_concept_fallback(
+        engine: SearchEngine) -> None:
+    result = engine.search("Ukraine § 24", act_limit=10, norm_limit=50)
+
+    assert {(row["jurabk"], row["enbez"])
+            for row in result["norm_matches"]} == {
+        ("AufenthG 2004", "§ 24")}
 
 
 @pytest.mark.parametrize("query", [

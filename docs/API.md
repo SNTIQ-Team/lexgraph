@@ -49,12 +49,13 @@ Files written:
 | `acts/<id>.json` | One full act (head, patches/bills, versions, norms). |
 | `decisions.json` | Manual + official cumulative RII decisions, newest first. |
 | `eu_index.json` | In-force EU directives + basic regulations, metadata only. |
+| `gii_catalog.json` | Complete official GII TOC, metadata only; deep fields exist only for curated acts. |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
 | `hierarchy.json` | Competence-aware legal layers (EU / Bund / Bayern / Länder). |
 | `watched_procedures.json` | Persistent DIP/EUR-Lex watch state and change history. |
 | `amendment_fates.json` | Reviewed document chains plus mechanical current-law checks. |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
-| `git.json` | The commit-graph of lawmaking. |
+| `git.json` | Dated legislative chronology; legacy filename kept for API compatibility. |
 
 JSON is minified (`separators=(",",":")`, `ensure_ascii=False`). All dates are
 ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
@@ -82,6 +83,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "bay_verkuendet": 60,
   "eu_instruments": 47,
   "eu_index_total": 7934,
+  "gii_catalog_total": 6125,
   "transpositions": 136,
   "feed_events": 600,
   "decisions": 82,
@@ -102,6 +104,7 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
 | `eu_instruments` / `transpositions` | Curated EU instruments / DEU transposition mentions in the deep layer. |
 | `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
+| `gii_catalog_total` | Official federal acts discoverable through the metadata-only GII catalogue; `0` for older snapshots. |
 | `feed_events` | Rows in `feed.json`. |
 | `decisions` | Merged manual + official RII decisions in `decisions.json`. |
 | `search` | Acts and current norms indexed in `search.sqlite`. |
@@ -132,6 +135,34 @@ about 7,934 and will move as CELLAR's in-force status changes.
 
 ---
 
+## `gii_catalog.json`
+
+Metadata-only discovery layer for every item in the official
+`gesetze-im-internet.de/gii-toc.xml`. It does **not** download or imply local
+full text outside the curated corpus.
+
+```json
+{
+  "schema_version": 1,
+  "built_at": "2026-07-15",
+  "total": 6125,
+  "acts": [
+    {"id":"gii:bgb","abbrev":"bgb","title":"Bürgerliches Gesetzbuch",
+     "url":"https://www.gesetze-im-internet.de/bgb/",
+     "act_id":"fed_bgb","jurabk":"BGB"},
+    {"id":"gii:mietbg","abbrev":"mietbg","title":"Mietbeihilfengesetz",
+     "url":"https://www.gesetze-im-internet.de/mietbg/"}
+  ]
+}
+```
+
+`id` and `abbrev` are derived from GII's stable path token. `abbrev` is not a
+guessed printed abbreviation. Only a curated row has `act_id` (the local
+`/acts/{id}` key) and the XML-derived official `jurabk`. All other rows link
+straight to the official GII page.
+
+---
+
 ## `feed.json`
 
 Merged, deduplicated realtime stream across all sources, newest first, capped
@@ -140,12 +171,12 @@ at ~600. Array of:
 ```json
 [
   {
-    "time":  "2026-10-01",
+    "time":  "2026-07-13",
     "juris": "DE",
-    "source": "buzer",
-    "kind":  "tritt in Kraft ⏳",
-    "title": "Verordnung zur Gleichstellung von Prüfungszeugnissen …",
-    "url":   "https://www.buzer.de/gesetz/7822/l.htm",
+    "source": "BGBl",
+    "kind":  "verkündet",
+    "title": "BGBl. 2026 I Nr. 200",
+    "url":   "https://www.recht.bund.de/eli/bund/BGBl_1/2026/200",
     "badge": null
   }
 ]
@@ -155,7 +186,7 @@ at ~600. Array of:
 |-------|---------|
 | `time` | Event date (`YYYY-MM-DD`). |
 | `juris` | Jurisdiction: `DE`, `DE-BY`, `EU`, `DE-<Land>`, … |
-| `source` | Originating source label (`BGBl`, `GVBl`, `OJ L`, `Landtag`, `Parlamentsspiegel`, `buzer`, a court short name like `SG München`, …). |
+| `source` | Published source label (`BGBl`, `GVBl`, `OJ L`, `Landtag`, a court short name like `SG München`, …). Permission-gated research sources are excluded from public builds. |
 | `kind` | Event kind (`verkündet`, `veröffentlicht`, `gesetzentwurf`, `tritt in Kraft ⏳`, `Entscheidung`, …). |
 | `title` | Truncated to 160 chars. |
 | `url` | Source link, or `null`. |
@@ -235,18 +266,12 @@ Keys: `id`, `jurabk`, `juris`, `title`, `stand`, `build`, `norm_count`,
       "new": null
     }
   ],
-  "upcoming": [ { "date": "…", "title": "…", "url": "…" } ],
-  "versions": [
-    {
-      "date": "2026-06-12",
-      "text": "§§ § 1 , § 1a , § 11 Artikel 4 GEAS-Anpassungsgesetz vom 23. April 2026 (BGBl. 2026 I Nr. 111)",
-      "url": "https://www.buzer.de/gesetz/4846/v338943-2026-06-12.htm"
-    }
-  ],
+  "upcoming": [],
+  "versions": [],
   "temporal": {
-    "last_change": "2026-06-12",
-    "first_change": "2007-08-28",
-    "change_count": 17,
+    "last_change": null,
+    "first_change": null,
+    "change_count": 0,
     "next_change": "2029-06-12",
     "pending": 10
   },
@@ -552,10 +577,11 @@ the legislative process.
 
 ---
 
-## `git.json`
+## `git.json` (legacy filename)
 
-The normative history rendered as a **git commit graph** — one commit per
-legislative change, laned by jurisdiction, newest first.
+The dated legislative chronology, laned by jurisdiction and newest first.
+The filename and `commits` field are compatibility names; consumers should
+interpret each row as a legal event, not as a software commit.
 
 ```json
 {
@@ -582,17 +608,17 @@ legislative change, laned by jurisdiction, newest first.
 | Field | Meaning |
 |-------|---------|
 | `lanes` | The four jurisdiction lanes, in index order. |
-| `total` | Commit count. |
-| `commits[].hash` | 8-hex CRC32 of the commit key. |
-| `commits[].date` | Commit date. |
+| `total` | Event count. |
+| `commits[].hash` | Stable 8-hex CRC32 event identifier (legacy field name). |
+| `commits[].date` | Event date. |
 | `commits[].lane` | **Integer** index into `lanes` (`0`=EU, `1`=Bund, `2`=Bayern, `3`=Länder). |
-| `commits[].type` | `commit` (enacted) / `open` (pending branch) / `merge` (an EU directive merged into German law). |
+| `commits[].type` | Compatibility enum: `commit` = change in force, `open` = pending proposal, `merge` = a legally specific EU implementation/applicability link. |
 | `commits[].actor` | `Bundestag`, `Landtag Bayern`, `EU`, `Landtag <Land>`. |
 | `commits[].msg` | Title (≤120 chars). |
 | `commits[].acts` | Affected acts (≤6). |
 | `commits[].paras` | Affected §§ (≤8). |
 | `commits[].refs` | Status / stand tags. |
-| `commits[].merge_ref` | For `type=merge`: the CELEX-style id of the merged directive/regulation (e.g. `32023L2225`), else `null`. |
+| `commits[].merge_ref` | For `type=merge`: the related CELEX id (e.g. `32023L2225`), else `null`; this does not imply blanket EU supervision. |
 | `commits[].doc` | Source document (`bt-ds:…`, Drs.-Nr., …). |
 
 Per-lane extras: EU commits add `celex`; Bavarian add `url` and `gvbl`;
@@ -603,7 +629,7 @@ Länder add `url`.
 # B) Pipeline — how the data is produced
 
 [`refresh.sh`](../refresh.sh) is the cron entrypoint. It pulls the live
-legislative state across Bund / Bayern / EU / Länder, rebuilds the QFS arena,
+legislative state across Bund / Bayern / EU, rebuilds the QFS arena,
 then exports the web JSON. **Fetch steps degrade gracefully** (a flaky source
 must not kill the arena rebuild); the arena and web-data builds are fatal, and
 fetchers refuse to overwrite a good same-day snapshot with empty output.
@@ -621,9 +647,9 @@ The 21 steps are:
 | 3 | Persistent watch state + change-only history (fresh observations or an explicitly marked persisted fallback) | `tools/update_procedure_watch.py` |
 | 4 | BGBl promulgation events | `fetch_bgbl_events.py` |
 | 5 | GII corpus HEAD | `fetch_gii.py` |
-| 6 | Federal case law from seven official RII feeds | `fetch_rii.py` |
+| 6 | Federal case law from seven official RII feeds (**default-off** pending NeuRIS migration; `LEXGRAPH_ENABLE_RII=1`) | `fetch_rii.py` |
 | 7 | NeuRIS changelog (append-only) | `fetch_neuris_changelog.py` |
-| 8 | buzer back-history (max once/day; skipped if today's snapshot exists) | `fetch_buzer.py` |
+| 8 | Private version-history research (**default-off**, permission gate `LEXGRAPH_ENABLE_BUZER=1`) | `fetch_buzer.py` |
 | 9 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
 | 10 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
 | 11 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
@@ -632,8 +658,8 @@ The 21 steps are:
 | 14 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
 | 15 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
 | 16 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
-| 17 | Länder monitor (Parlamentsspiegel, Asyl/Sozial) | `fetch_parlamentsspiegel.py` |
-| 18 | Länder-Gesetzentwürfe (all 16 Landtage) | `fetch_laender_bills.py` |
+| 17 | Länder discovery monitor (**default-off**, permission gate) | `fetch_parlamentsspiegel.py` |
+| 18 | Broad Länder discovery (**default-off**, separate bulk permission gate) | `fetch_laender_bills.py` |
 | 19 | Build the QFS arena | `tools/build_qfs.py` |
 | 20 | Export web data | `tools/build_web_data.py` |
 | 21 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
@@ -642,6 +668,9 @@ Snapshots land in `data/snapshots/<source>/<date>/*.jsonl`; each build reads the
 newest snapshot per source. **Each fetcher documents its own source, cadence,
 and quirks in its module docstring** — read the top of any
 `pipeline/fetch_*.py` for the authoritative behavior of that step.
+Permission-gated snapshots are retained only as private research artifacts;
+the public web/HF builders exclude them unless an explicit private build mode
+is selected, and the HF exporter refuses that mode.
 
 Step 19 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
@@ -683,6 +712,7 @@ database.
 | `GET /health` | liveness | `{status, built_at, data_dir}`; 503 if data missing |
 | `GET /version` | build id | `dataset`, `version`, `built_at` |
 | `GET /stats` | `summary.json` | the dashboard counts, verbatim |
+| `GET /data-policy` | `data_policy.json` | public-build mode and excluded source families |
 | `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
 | `GET /acts` | `wiki.json` | the act index |
 | `GET /acts/{id}` | `acts/<id>.json` | full act; **404** if unknown |
@@ -696,7 +726,7 @@ database.
 | `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
 | `GET /procedures/watched` | `watched_procedures.json` | active and archived DIP/EUR-Lex watches with change history |
 | `GET /amendment-fates?procedure_id=&validation_id=` | `amendment_fates.json` | reviewed document chains and current-law validation checks |
-| `GET /search?q=&limit=&norm_limit=&procedure_limit=` | `search.sqlite` + `wiki.json` + `hierarchy.json` | ranked search over acts, current norms and official DIP/EUR-Lex procedures |
+| `GET /search?q=&limit=&norm_limit=&procedure_limit=&catalog_limit=` | deep index + procedures + `gii_catalog.json` | ranked deep results followed by complete official federal-law discovery |
 | `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |
 
 `/stats`, `/acts`, `/acts/{id}`, `/decisions/{id}`, `/graph`, `/hierarchy`
@@ -729,8 +759,8 @@ curl 'http://127.0.0.1:8010/feed?limit=2'
 ```
 
 ```json
-{ "total": 600, "limit": 2, "events": [ { "time": "2026-10-01", "juris": "DE",
-  "source": "buzer", "kind": "tritt in Kraft ⏳", "title": "…", "url": "…",
+{ "total": 600, "limit": 2, "events": [ { "time": "2026-07-13", "juris": "DE",
+  "source": "BGBl", "kind": "verkündet", "title": "BGBl. 2026 I Nr. 200", "url": "https://www.recht.bund.de/eli/bund/BGBl_1/2026/200",
   "badge": null } ] }
 ```
 
@@ -753,7 +783,7 @@ curl http://127.0.0.1:8010/acts/fed_asylblg
 
 ## `GET /git?lane=&limit=`
 
-The commit-graph `git.json`. Optional `lane` filters by the integer lane index
+Compatibility route for the dated chronology in `git.json`. Optional `lane` filters by the integer lane index
 (`0`=EU, `1`=Bund, `2`=Bayern, `3`=Länder); `limit` ∈ [1, 1000], default 100.
 
 ```bash
@@ -901,7 +931,7 @@ side can be a paragraph-level edit; the API never treats it as proof that a
 whole §/Art. was created or repealed. Norm headings in reconstructed output
 remain HEAD metadata and are disclosed as such.
 
-## `GET /search?q=&limit=&norm_limit=&procedure_limit=`
+## `GET /search?q=&limit=&norm_limit=&procedure_limit=&catalog_limit=`
 
 Ranked SQLite FTS5 search across act id/abbreviation/title and every current
 norm's §/Art. identifier, heading, and complete text. Matching is Unicode- and
@@ -922,8 +952,9 @@ Rows configured in `data/procedure_watchlist.json` additionally carry explicit
 search aliases and watch metadata. This exposes the current official stage; it
 does not present a bill as enacted law or infer that its text is in force.
 
-`limit` caps act results, `norm_limit` caps norm results, and
-`procedure_limit` caps DIP procedure results (defaults 25, 50 and 20).
+`limit` caps act results, `norm_limit` caps norm results,
+`procedure_limit` caps DIP/EUR-Lex procedure results, and `catalog_limit` caps
+metadata-only GII discovery results (defaults 25, 50, 20 and 25).
 For compatibility, `total` and `matches` retain the original act-only contract
 and every `matches` row keeps the `/acts` index shape. `act_matches` adds
 ranking metadata; `norm_matches` contains
@@ -932,8 +963,14 @@ source,url}`. Snippets are plain text, `source` is `gii` or `bayern_recht`, and
 `url` is the API-relative act detail path. `procedure_matches` contains the
 official DIP or EUR-Lex id, title, stage, dates, source-specific identifiers,
 topics, initiators, descriptors, abstract/scope, source link and optional watch
-metadata. `result_total` is
-`act_total + norm_total + procedure_total` before the three result limits.
+metadata. `catalog_matches` is ranked deterministically after the deep corpus:
+exact/prefix abbreviation matches precede title phrase and token-prefix
+matches. A catalogue row without `act_id` has not been downloaded or indexed
+locally; use its official `url`. Rows already present in the curated deep
+corpus are excluded from this last section, including deep hits beyond the
+current page limit. `catalog_total` is the unpaginated remaining match count.
+`result_total` is
+`act_total + norm_total + procedure_total + catalog_total` before limits.
 
 ```bash
 curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
@@ -964,6 +1001,13 @@ curl 'http://127.0.0.1:8010/search?q=Ukraine&norm_limit=10'
     {"id":"329468","gesta":"G013","status":"Überwiesen",
      "watched":true,"source":"DIP",
      "url":"https://dip.bundestag.de/vorgang/_/329468", …}
+  ],
+  "catalog_total": 2,
+  "catalog_matches": [
+    {"id":"gii:sozsichabkg_ukr","abbrev":"sozsichabkg_ukr",
+     "title":"Gesetz zu dem Abkommen … Deutschland und der Ukraine über Soziale Sicherheit",
+     "url":"https://www.gesetze-im-internet.de/sozsichabkg_ukr/",
+     "score":760,"matched_fields":["title"],"source":"gii_catalog"}
   ]
 }
 ```
@@ -1027,7 +1071,7 @@ Read-only over `data/snapshots` — **no network, no snapshot writes**. Acts
 resolve case-insensitively by `jurabk` (federal GII corpus first, then the
 Bavarian corpus), so the same tools work for federal and Bavarian acts.
 
-## `tools/lex_log.py` — `git log` for one act
+## `tools/lex_log.py` — chronology for one act
 
 ```bash
 python3 tools/lex_log.py AsylbLG          # federal corpus
@@ -1037,14 +1081,15 @@ python3 tools/lex_log.py "SGB 2" --all    # full back-history
 
 Prints, in one view:
 
-- **HEAD** — GII / BAYERN.RECHT build date, norm count (and BayRS number for
+- **Current snapshot** — GII / BAYERN.RECHT build date, norm count (and BayRS number for
   Bavaria).
 - **Pipeline** — pending Bundestag patches / Landtag bills, on the status
   ladder, explicitly marked **NOT geltendes Recht**.
-- **Promulgated, enters force soon** — buzer `/v.htm` upcoming.
-- **Back-history** — amendment history (buzer 2006+ for federal;
-  ffn *Fortführungsnachweis* + XML `aenderungsverlauf` for Bavaria). Last 10 by
-  default; `--all` for the full list.
+- **Promulgated, enters force soon** — official pipeline data when available.
+- **Back-history** — official Bavarian ffn *Fortführungsnachweis* + XML
+  `aenderungsverlauf`; private quarantined research caches may add federal
+  hints only after explicit source permission/risk review. Last 10 by default;
+  `--all` for the full list.
 
 A recommended-but-unmerged patch always appears under its real status and never
 as geltendes Recht — the VISION acceptance discipline.
@@ -1060,10 +1105,11 @@ python3 tools/lex_blame.py blame AufnG 4
 python3 tools/lex_blame.py checkout AsylbLG --at 2020-06-01
 ```
 
-- **`blame <ACT> <REF>`** — merges three tiers: `buzer` (federal back-history,
-  affected-§ list parsed from the synopsis title, non-authoritative);
-  `amtlich` (Bavarian BayRS ffn + XML); `pipeline` (extracted Bundestag patch
-  commands, pending ones flagged NOT geltendes Recht). `REF` accepts `3a`,
+- **`blame <ACT> <REF>`** — merges the official Bavarian BayRS ffn + XML tier
+  (`amtlich`) with extracted Bundestag patch commands (`pipeline`). A private,
+  permission-gated research cache can additionally supply non-authoritative
+  federal affected-§ hints; it is not part of the public dataset. Pending patch
+  commands are flagged **NOT geltendes Recht**. `REF` accepts `3a`,
   `§ 3a`, `Art. 4` alike. Version rows that name no §/Art. are kept as
   `? unspezif.` rather than hidden — they *may* touch the ref, and silence is
   not proof.

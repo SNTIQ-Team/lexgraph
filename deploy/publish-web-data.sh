@@ -48,15 +48,40 @@ root = Path(sys.argv[1])
 required = (
     "summary.json", "wiki.json", "hierarchy.json", "graph.json",
     "git.json", "watched_procedures.json", "amendment_fates.json",
-    "search.sqlite",
+    "gii_catalog.json", "data_policy.json", "search.sqlite",
 )
 for name in required:
     path = root / name
     if not path.is_file() or path.stat().st_size == 0:
         raise SystemExit(f"publish validation: missing/empty {name}")
-for name in required[:-1]:
+for name in required:
+    if not name.endswith(".json"):
+        continue
     with (root / name).open(encoding="utf-8") as handle:
         json.load(handle)
+with (root / "summary.json").open(encoding="utf-8") as handle:
+    summary = json.load(handle)
+with (root / "gii_catalog.json").open(encoding="utf-8") as handle:
+    catalog = json.load(handle)
+with (root / "data_policy.json").open(encoding="utf-8") as handle:
+    policy = json.load(handle)
+with (root / "graph.json").open(encoding="utf-8") as handle:
+    graph = json.load(handle)
+if int(summary.get("gii_catalog_total") or 0) != int(catalog.get("total") or 0):
+    raise SystemExit("publish validation: GII catalogue total mismatch")
+if policy.get("includes_quarantined_sources") or not policy.get("public_build"):
+    raise SystemExit("publish validation: refusing non-public/quarantined data build")
+graph_policy = graph.get("source_policy") or {}
+if graph_policy.get("includes_quarantined_sources") or not graph_policy.get(
+        "public_build"):
+    raise SystemExit("publish validation: graph source policy is not public")
+for path in [root / "feed.json", root / "graph.json", *(root / "acts").glob("*.json")]:
+    folded = path.read_text(encoding="utf-8").casefold()
+    if any(marker in folded for marker in (
+            '"source":"buzer"', "buzer.de", '"source":"parlamentsspiegel"',
+            "länder-monitor")):
+        raise SystemExit(
+            f"publish validation: quarantined source leaked into {path.name}")
 with sqlite3.connect(f"file:{root / 'search.sqlite'}?mode=ro", uri=True) as db:
     result = db.execute("PRAGMA quick_check").fetchone()
 if not result or result[0] != "ok":

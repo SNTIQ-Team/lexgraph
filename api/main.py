@@ -11,18 +11,19 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /health                 liveness + data-plane check
   GET /version                dataset + built_at (from summary.json)
   GET /stats                  the summary.json counts
+  GET /data-policy            public-build source exclusions and mode
   GET /feed?limit=            realtime event stream, newest first
   GET /acts                   the act index (wiki.json)
   GET /acts/{id}              one full act (acts/<id>.json); 404 if unknown
   GET /acts/{id}/archive      selectable HEAD + historical transition dates
   GET /acts/{id}/markdown     full act or one norm as dated Markdown
-  GET /git?lane=&limit=       the commit-graph, optionally filtered by lane
+  GET /git?lane=&limit=       dated chronology (legacy route name), by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
   GET /eu-index               all in-force EU directives + basic regulations
   GET /procedures/watched     persistent DIP/EUR-Lex watch state + history
   GET /amendment-fates        reviewed amendment document-chain validations
-  GET /search?q=              ranked full-text search over acts + current norms
+  GET /search?q=              deep search + complete GII metadata discovery
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
   GET /digest                 LLM digest of legislative activity; 404 if none
@@ -47,6 +48,7 @@ from api.act_archive import (
     markdown_filename,
     render_markdown_snapshot,
 )
+from api.gii_catalog import search_gii_catalog
 from api.search_engine import SearchEngine, normalize_search_text
 from api.procedure_search import search_procedures
 
@@ -110,6 +112,12 @@ def version():
 def stats():
     """The summary.json counts (acts, patches, vorgaenge, EU, graph, …)."""
     return _load("summary")
+
+
+@app.get("/data-policy")
+def data_policy():
+    """Machine-readable public-build/quarantine policy and exclusions."""
+    return _cached(_load("data_policy"))
 
 
 @app.get("/feed")
@@ -217,9 +225,10 @@ def act_markdown(
 @app.get("/git")
 def git(lane: int | None = Query(None, ge=0, le=3),
         limit: int = Query(100, ge=1, le=1000)):
-    """The commit-graph (git.json), optionally filtered by lane, newest first.
+    """Dated legal chronology, optionally filtered by lane, newest first.
 
-    lane: 0=EU, 1=Bund, 2=Bayern, 3=Länder (git.json's integer lane index).
+    ``/git`` and the ``commits`` key are legacy compatibility names.  Lane:
+    0=EU, 1=Bund, 2=Bayern, 3=Länder.
     """
     data = _load("git")
     commits = data["commits"]
@@ -309,11 +318,39 @@ def amendment_fates(
     })
 
 
+def _append_gii_catalog(result: dict, query: str, limit: int) -> dict:
+    """Append metadata-only breadth matches after deep corpus results."""
+    try:
+        payload = _load("gii_catalog")
+    except HTTPException:
+        payload = {"acts": []}  # compatibility with older data deployments
+    rows = payload.get("acts") if isinstance(payload, dict) else []
+    deep_act_ids = {
+        str(row.get("act_id") or row.get("id") or "")
+        for row in result.get("act_matches") or []
+    }
+    deep_act_ids.update(
+        str(row.get("act_id") or "")
+        for row in result.get("norm_matches") or [])
+    # The final section is breadth discovery, not a second rendering of the
+    # curated corpus.  Exclude every catalogue row that already has a local
+    # deep act, including deep hits beyond the current result-page limit.
+    deep_act_ids.update(str(row.get("act_id")) for row in rows or []
+                        if row.get("act_id"))
+    matches, total = search_gii_catalog(
+        rows or [], query, limit=limit, exclude_act_ids=deep_act_ids)
+    result["catalog_total"] = total
+    result["catalog_matches"] = matches
+    result["result_total"] = int(result.get("result_total") or 0) + total
+    return result
+
+
 @app.get("/search")
 def search(q: str = Query(..., min_length=1),
            limit: int = Query(25, ge=1, le=200),
            norm_limit: int = Query(50, ge=1, le=200),
-           procedure_limit: int = Query(20, ge=1, le=100)):
+           procedure_limit: int = Query(20, ge=1, le=100),
+           catalog_limit: int = Query(25, ge=1, le=100)):
     """Ranked Unicode full-text search over acts and current norms.
 
     ``matches`` and ``total`` retain the original act-search contract.
@@ -323,7 +360,9 @@ def search(q: str = Query(..., min_length=1),
     data-driven and embedded into the built ``search.sqlite`` artifact.
 
     If an old deployment has no FTS artifact yet, the endpoint degrades to the
-    previous title/abbreviation substring search instead of failing.
+    previous title/abbreviation substring search instead of failing.  Complete
+    GII catalogue matches are appended as metadata-only discovery results and
+    never masquerade as locally indexed full text.
     """
     rows = _load("wiki")
     # DIP has only a few hundred current procedures.  Count the full match set
@@ -341,13 +380,15 @@ def search(q: str = Query(..., min_length=1),
                        or needle in normalize_search_text(r.get("jurabk"))
                        or needle in normalize_search_text(r.get("title"))]
         matches = all_matches[:limit]
-        return {"query": q, "total": len(all_matches), "matches": matches,
-                "result_total": len(all_matches) + procedure_total,
-                "act_total": len(all_matches),
-                "norm_total": 0, "act_matches": matches,
-                "norm_matches": [],
-                "procedure_total": procedure_total,
-                "procedure_matches": procedure_matches}
+        return _append_gii_catalog({
+            "query": q, "total": len(all_matches), "matches": matches,
+            "result_total": len(all_matches) + procedure_total,
+            "act_total": len(all_matches),
+            "norm_total": 0, "act_matches": matches,
+            "norm_matches": [],
+            "procedure_total": procedure_total,
+            "procedure_matches": procedure_matches,
+        }, q, catalog_limit)
 
     global _SEARCH_ENGINE
     with _SEARCH_LOCK:
@@ -397,7 +438,7 @@ def search(q: str = Query(..., min_length=1),
     result["procedure_matches"] = procedure_matches
     result["result_total"] = (result["act_total"] + result["norm_total"]
                               + result["procedure_total"])
-    return result
+    return _append_gii_catalog(result, q, catalog_limit)
 
 
 @app.get("/decisions")

@@ -1,10 +1,8 @@
-"""Fetch per-act amendment chronology (2006+) from buzer.de.
+"""Private research fetch of amendment chronology from buzer.de.
 
-buzer is the verified back-history source: every version of nearly all
-Bundesrecht since 2006, each mapped to its amending act and BGBl citation
-(robots.txt and Impressum permit this; /s2.htm full-text search is
-disallowed and NOT used). Tier: non-authoritative convenience — every
-record is marked source=buzer and must never outrank official sources.
+The service is useful for manual cross-checking, but permissive robots does
+not grant database-reuse rights.  This fetcher is quarantined and refuses to
+run unless ``LEXGRAPH_ENABLE_BUZER=1`` is set after permission/risk review.
 
 Fetched per corpus act (log level only — one request per act):
   /<Abk>.htm            act index -> internal act id
@@ -21,6 +19,7 @@ Output (data/snapshots/buzer/<date>/):
 from __future__ import annotations
 
 import re
+import os
 import sys
 
 from bs4 import BeautifulSoup
@@ -177,6 +176,10 @@ def upcoming(http: Http) -> list[dict]:
 
 
 def main() -> int:
+    if os.environ.get("LEXGRAPH_ENABLE_BUZER") != "1":
+        print("buzer fetch quarantined: set LEXGRAPH_ENABLE_BUZER=1 only "
+              "for authorised private research", file=sys.stderr)
+        return 2
     gii = latest_snapshot("gii")
     if not gii:
         print("run fetch_gii.py first", file=sys.stderr)

@@ -2,8 +2,8 @@
 (the only cross-Länder index; joint documentation portal of the
 Landesparlamente, HTML-only).
 
-Same sanctioned path as fetch_parlamentsspiegel.py (verified
-2026-07-06): server-rendered HTML search with GET permalinks; the
+Same technically available, permission-gated path as
+fetch_parlamentsspiegel.py: server-rendered HTML search with GET permalinks; the
 first request sets a JSESSIONID cookie which Http's requests.Session
 keeps. Canonical endpoint after the redirect:
 
@@ -47,6 +47,7 @@ Usage:
 from __future__ import annotations
 
 import re
+import os
 import sys
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
@@ -149,6 +150,10 @@ def parse_vorgang(block, fetched_at: str) -> dict | None:
 
 
 def main() -> int:
+    if os.environ.get("LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL_BULK") != "1":
+        print("broad Parlamentsspiegel extraction is quarantined: explicit "
+              "reuse permission required", file=sys.stderr)
+        return 2
     http = Http(delay=1.0)
     http.s.headers["User-Agent"] = (
         "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)")

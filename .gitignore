@@ -2,6 +2,7 @@
 data/snapshots/
 data/cache/
 data/*.qfs
+data/*.qfs.policy.json
 data/neuris_archive.jsonl
 web/data/
 

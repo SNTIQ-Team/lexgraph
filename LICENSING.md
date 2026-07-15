@@ -11,15 +11,15 @@ journalism and education:
 | Scope | License |
 |---|---|
 | Code (pipeline, API, tools, schema) | [Apache License 2.0](LICENSE-APACHE-2.0) |
-| Database contents, documentation, media | [CC BY-NC-SA 4.0](LICENSE-CC-BY-NC-SA-4.0) |
+| SNTIQ-authored annotations, graph/database selection, documentation and media | [CC BY-NC-SA 4.0](LICENSE-CC-BY-NC-SA-4.0) |
 
 Free to use, modify and share. Attribution required (see below);
-data/media derivatives stay under the same license.
+derivatives of that original SNTIQ material stay under the same license.
 
 ## Commercial / corporate / governmental track
 
-All use by commercial entities, corporations and public-sector bodies —
-**code and media alike** — is governed by the
+Use by commercial entities, corporations and public-sector bodies of
+**SNTIQ-authored code, annotations, documentation and media** is governed by the
 **[SNTIQ-CM License v1.0](LICENSE-SNTIQ-CM)**:
 
 - prior **written permission** required — free of charge;
@@ -41,6 +41,11 @@ All use by commercial entities, corporations and public-sector bodies —
 
 ## In every case
 
-The dataset is general information, **not legal advice**. Underlying
-records originate from official German public registers whose own terms
-govern the raw records — see [docs/SOURCES.md](docs/SOURCES.md).
+These licences do not assert ownership of or relicense statutory texts,
+official decisions, public-authority metadata, third-party databases,
+source-site editorial material, trademarks or logos. Those components retain
+their own statutory or source-specific regime. The file-level rights matrix,
+reuse boundaries and attributions are in [docs/RIGHTS.md](docs/RIGHTS.md);
+source provenance is in [docs/SOURCES.md](docs/SOURCES.md).
+
+The dataset is general information, **not legal advice**.

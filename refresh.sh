@@ -29,12 +29,22 @@ else
 fi
 step " 4/21" "BGBl promulgation events (daily feed)"       python3 pipeline/fetch_bgbl_events.py
 step " 5/21" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetch_gii.py
-step " 6/21" "Federal case law (official RII feeds)"       python3 pipeline/fetch_rii.py
+echo "==> [ 6/21] Federal case law intake"
+if [ "${LEXGRAPH_ENABLE_RII:-0}" = "1" ]; then
+    # RII permits reuse of decisions, but its robots/TDM headers conflict
+    # with automated ZIP polling.  Keep this legacy intake explicit until
+    # it is replaced by the documented NeuRIS bulk/changelog API.
+    python3 pipeline/fetch_rii.py || echo "[warn] step degraded — continuing"
+else
+    echo "    skipped by data policy (use NeuRIS; legacy RII is explicit opt-in)"
+fi
 step " 7/21" "NeuRIS changelog (append-only archive)"      python3 pipeline/fetch_neuris_changelog.py
 
-echo "==> [ 8/21] buzer back-history (max once per day — private site)"
-if [ -d "data/snapshots/buzer/$(date +%F)" ]; then
-    echo "    today's snapshot exists, skipping"
+echo "==> [ 8/21] private back-history source"
+if [ "${LEXGRAPH_ENABLE_BUZER:-0}" != "1" ]; then
+    echo "    quarantined by data policy (written database-reuse permission required)"
+elif [ -d "data/snapshots/buzer/$(date +%F)" ]; then
+    echo "    explicit opt-in enabled; today's snapshot exists, skipping"
 else
     python3 pipeline/fetch_buzer.py || echo "[warn] step degraded — continuing"
 fi
@@ -58,8 +68,18 @@ step "13/21" "GVBl/BayMBl promulgation events (RSS)"       python3 pipeline/fetc
 step "14/21" "Bayerischer Landtag WP19 pipeline"           python3 pipeline/fetch_bay_landtag.py
 step "15/21" "EU layer: curated corpus + transpositions"   python3 pipeline/fetch_eu_layer.py
 step "16/21" "EU breadth index (all directives + basic regulations)" python3 pipeline/fetch_eu_index.py
-step "17/21" "Länder monitor (Parlamentsspiegel, Asyl/Sozial)" python3 pipeline/fetch_parlamentsspiegel.py
-step "18/21" "Länder-Gesetzentwürfe (alle 16 Landtage)"    python3 pipeline/fetch_laender_bills.py
+echo "==> [17/21] Länder discovery monitor"
+if [ "${LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL:-0}" = "1" ]; then
+    python3 pipeline/fetch_parlamentsspiegel.py || echo "[warn] step degraded — continuing"
+else
+    echo "    skipped by data policy (origin-Landtag verification required before publication)"
+fi
+echo "==> [18/21] broad Länder discovery index"
+if [ "${LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL_BULK:-0}" = "1" ]; then
+    python3 pipeline/fetch_laender_bills.py || echo "[warn] step degraded — continuing"
+else
+    echo "    quarantined by data policy (no republication permission for the portal database)"
+fi
 
 echo "==> [19/21] build arena"
 python3 tools/build_qfs.py

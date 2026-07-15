@@ -1,4 +1,4 @@
-Amtsgraph — Licensing
+Lexgraph — Licensing
 Copyright (c) 2026 David Glushkov / SNTIQ
 
 This project is dual-licensed by audience. Three license texts apply:
@@ -7,12 +7,19 @@ This project is dual-licensed by audience. Three license texts apply:
   (individuals, human-rights and non-profit organizations, research,
    journalism, education)
     - Code:                      LICENSE-APACHE-2.0
-    - Data, documentation, media: LICENSE-CC-BY-NC-SA-4.0
+    - SNTIQ-authored annotations, graph selection, documentation and media:
+                                  LICENSE-CC-BY-NC-SA-4.0
 
   COMMERCIAL / CORPORATE / GOVERNMENTAL TRACK
-    - Everything (code & media):  LICENSE-SNTIQ-CM
+    - SNTIQ-authored code, annotations, documentation and media:
+                                  LICENSE-SNTIQ-CM
       (written permission required; free of charge; non-harm covenant,
        attribution and case-by-case reciprocity apply)
 
 Which track applies to you, the designated attribution string and the
 permission contact are defined in LICENSING.md. If in doubt, ask first.
+
+This licence does not relicense statutory texts, official decisions, public
+authority metadata, third-party databases, source-site editorial material,
+trademarks or logos. Their file-level regimes and attribution requirements are
+listed in docs/RIGHTS.md.

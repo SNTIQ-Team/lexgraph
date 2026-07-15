@@ -2,10 +2,11 @@
 16 Landtage via parlamentsspiegel.de (joint documentation portal of
 the Landesparlamente).
 
-parlamentsspiegel.de has NO robots.txt (302 to the app) and no API/
-RSS/sitemap — the server-rendered HTML search with GET permalinks is
-the sanctioned path (verified 2026-07-06). The first request sets a
-JSESSIONID cookie; Http's requests.Session keeps it. Canonical search
+parlamentsspiegel.de has no documented public API. The server-rendered HTML
+search with GET permalinks is technically available, but that is not a reuse
+licence or a sanctioned bulk interface. This fetcher is therefore default-off
+and retained only as a permission-gated internal discovery tool. The first
+request sets a JSESSIONID cookie; Http's requests.Session keeps it. Canonical search
 endpoint after the redirect:
 
     https://www.parlamentsspiegel.de/suche
@@ -35,6 +36,7 @@ Usage:
 from __future__ import annotations
 
 import re
+import os
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -131,6 +133,11 @@ def parse_vorgang(block, fetched_at: str) -> dict | None:
 
 
 def main() -> int:
+    if os.environ.get("LEXGRAPH_ENABLE_PARLAMENTSSPIEGEL") != "1":
+        print("Parlamentsspiegel discovery is default-off until origin-"
+              "Landtag verification or reuse permission is in place",
+              file=sys.stderr)
+        return 2
     http = Http(delay=1.0)
     http.s.headers["User-Agent"] = (
         "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)")

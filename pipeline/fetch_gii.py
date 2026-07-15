@@ -6,6 +6,8 @@ element per §, builddate + BJNE doknr as cheap change detectors, public
 domain (§ 5 UrhG). Daily snapshots of this fetch build forward history.
 
 Output (data/snapshots/gii/<date>/):
+    catalog.jsonl one metadata-only row for every official GII TOC item
+                  {id, abbrev, title, url}
     acts.jsonl    one row per act  {slug, jurabk, long_title, builddate,
                                     doknr, stand, norm_count}
     norms.jsonl   one row per §    {slug, jurabk, enbez, titel, text,
@@ -101,6 +103,38 @@ def parse_law(xml_bytes: bytes, slug: str) -> tuple[dict, list[dict]]:
     return act, norms
 
 
+def parse_toc(xml_bytes: bytes) -> tuple[dict[str, str], list[dict]]:
+    """Parse GII's official master TOC without fetching any act text.
+
+    The TOC exposes only a title and the stable ``/<slug>/xml.zip`` path.
+    Consequently ``abbrev`` is deliberately the official GII path token, not
+    a guessed printed ``JurAbk``.  Curated rows are enriched with their real
+    ``jurabk`` later by ``build_web_data.py`` after their XML has been parsed.
+    """
+    toc = ET.fromstring(xml_bytes)
+    links: dict[str, str] = {}
+    catalog: list[dict] = []
+    for item in toc.findall("item"):
+        title = " ".join((item.findtext("title") or "").split())
+        link = (item.findtext("link") or "").strip().replace(
+            "http://", "https://", 1)
+        match = re.search(r"/([^/?]+)/xml\.zip(?:$|\?)", link)
+        if not match or not title:
+            continue
+        slug = match.group(1).lower()
+        if slug in links:  # stable path is the identity; keep source-first
+            continue
+        xml_url = link.split("?", 1)[0]
+        links[slug] = xml_url
+        catalog.append({
+            "id": f"gii:{slug}",
+            "abbrev": slug,
+            "title": title,
+            "url": xml_url.removesuffix("xml.zip"),
+        })
+    return links, catalog
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slugs", help="comma list; default: practice corpus")
@@ -109,13 +143,7 @@ def main() -> int:
 
     http = Http(delay=0.4)
     print("[toc] fetching index …")
-    toc = ET.fromstring(http.get(TOC_URL, timeout=60).content)
-    links = {}
-    for item in toc.findall("item"):
-        link = (item.findtext("link") or "").strip()
-        m = re.search(r"/([^/]+)/xml\.zip$", link)
-        if m:
-            links[m.group(1).lower()] = link.replace("http://", "https://")
+    links, catalog = parse_toc(http.get(TOC_URL, timeout=60).content)
     print(f"[toc] {len(links)} laws in the federal index")
 
     missing = sorted(wanted - links.keys())
@@ -134,6 +162,7 @@ def main() -> int:
               f"build {act['builddate'][:8]}")
 
     out = snapshot_dir("gii")
+    write_jsonl(out / "catalog.jsonl", catalog)
     write_jsonl(out / "acts.jsonl", acts)
     write_jsonl(out / "norms.jsonl", norms)
     print(f"\n{len(acts)} acts, {len(norms)} norms -> {out}")

@@ -26,7 +26,7 @@ SERVICE_INDEX = {
     "dataset": "https://github.com/SNTIQ-Team/lexgraph",
     "docs": "/docs",
     "endpoints": [
-        "/health", "/version", "/stats", "/feed",
+        "/health", "/version", "/stats", "/data-policy", "/feed",
         "/acts", "/acts/{id}", "/acts/{id}/archive",
         "/acts/{id}/markdown", "/decisions", "/decisions/{id}",
         "/git", "/graph", "/hierarchy", "/eu-index",
@@ -111,6 +111,7 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="health">/health</a></td><td class="what">liveness + data-plane check</td></tr>
     <tr><td class="ep"><a href="version">/version</a></td><td class="what">dataset + build timestamp</td></tr>
     <tr><td class="ep"><a href="stats">/stats</a></td><td class="what">dashboard counts</td></tr>
+    <tr><td class="ep"><a href="data-policy">/data-policy</a></td><td class="what">public source-policy and quarantine exclusions</td></tr>
     <tr><td class="ep"><a href="feed">/feed</a></td><td class="what">realtime event stream, newest first</td></tr>
     <tr><td class="ep"><a href="acts">/acts</a></td><td class="what">the act index (federal + Bavaria)</td></tr>
     <tr><td class="ep">/acts/{id}</td><td class="what">one full act — head, patches, versions, norms</td></tr>
@@ -118,7 +119,7 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep">/acts/{id}/markdown</td><td class="what">full act or one §/Art. as Markdown; optional download</td></tr>
     <tr><td class="ep"><a href="decisions">/decisions</a></td><td class="what">court decisions (Rechtsprechung)</td></tr>
     <tr><td class="ep">/decisions/{id}</td><td class="what">one complete exported decision row</td></tr>
-    <tr><td class="ep"><a href="git">/git</a></td><td class="what">the commit-graph of lawmaking</td></tr>
+    <tr><td class="ep"><a href="git">/git</a></td><td class="what">dated legal chronology (legacy route name)</td></tr>
     <tr><td class="ep"><a href="graph">/graph</a></td><td class="what">the QFS arena export</td></tr>
     <tr><td class="ep"><a href="hierarchy">/hierarchy</a></td><td class="what">jurisdiction tree (EU / Bund / Bayern / Länder)</td></tr>
     <tr><td class="ep"><a href="eu-index">/eu-index</a></td><td class="what">all in-force EU directives + basic regulations</td></tr>

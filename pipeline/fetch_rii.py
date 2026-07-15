@@ -559,6 +559,11 @@ def main() -> int:
         "--limit", type=positive_int,
         help="testing: process at most N newest RSS items per selected court")
     args = parser.parse_args()
+    if os.environ.get("LEXGRAPH_ENABLE_RII") != "1":
+        print("RII automated intake is default-off pending NeuRIS migration; "
+              "set LEXGRAPH_ENABLE_RII=1 for an explicitly reviewed run",
+              file=sys.stderr)
+        return 2
     selected = parse_courts(args.courts, parser)
 
     try:

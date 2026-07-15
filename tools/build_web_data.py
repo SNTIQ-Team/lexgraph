@@ -10,6 +10,7 @@ Outputs:
     web/data/acts/<id>.json    per-act article: head, patches, versions, norms
     web/data/decisions.json    merged manual/RII decisions, newest first
     web/data/eu_index.json     in-force EU breadth metadata
+    web/data/gii_catalog.json  every official GII act as metadata only
     web/data/watched_procedures.json  persistent DIP/EUR-Lex watch state
     web/data/amendment_fates.json     reviewed document-chain validations
     web/data/search.sqlite     ranked full-text index (acts + current norms)
@@ -19,7 +20,9 @@ Outputs:
 from __future__ import annotations
 
 import html
+import hashlib
 import json
+import os
 import re
 import sys
 import zlib
@@ -41,6 +44,15 @@ HUBS = {"WIRD_GESETZ", "BGBl (verkündet)", "Gesetzgebungsverfahren",
         "TEXTÄNDERUNG in Kraft", "KONSOLIDIERT (NeuRIS)",
         "Amtsblatt der EU (OJ L)", "Asyl/Migration (Länder-Monitor)"}
 
+# Always expose all 16 Länder, including an explicit empty array when the
+# upstream six-month window has a known ingestion gap.  Absence of a key used
+# to make Bremen disappear entirely and overstated the monitor's coverage.
+ALL_LAENDER_JURISDICTIONS = (
+    "DE-BB", "DE-BE", "DE-BW", "DE-BY", "DE-HB", "DE-HE", "DE-HH",
+    "DE-MV", "DE-NI", "DE-NW", "DE-RP", "DE-SH", "DE-SL", "DE-SN",
+    "DE-ST", "DE-TH",
+)
+
 
 # Cumulative word-diff ledger for Bavarian law.  BAYERN.RECHT serves only the
 # current consolidation, so current changes come from adjacent daily snapshots;
@@ -51,6 +63,19 @@ PROCEDURE_WATCHLIST = ROOT / "data" / "procedure_watchlist.json"
 PROCEDURE_WATCH_STATE = ROOT / "data" / "procedure_watch_state.json"
 PROCEDURE_WATCH_HISTORY = ROOT / "data" / "procedure_watch_history.jsonl"
 AMENDMENT_FATES = ROOT / "data" / "amendment_fates.json"
+
+# These snapshots may be retained locally for research/verification, but they
+# are not part of the public data plane without separate database-reuse
+# permission.  Statutory text being an official work does not extinguish a
+# private database producer's rights in systematic selection/arrangement.
+QUARANTINED_SOURCES = frozenset({
+    "buzer", "buzer_synopse", "laender_bills", "laender_monitor",
+})
+
+
+def include_quarantined_sources() -> bool:
+    """Explicit private/research opt-in; public builds must leave this off."""
+    return os.environ.get("LEXGRAPH_INCLUDE_QUARANTINED") == "1"
 
 
 def _update_by_diff_ledger() -> None:
@@ -140,7 +165,41 @@ def build_eu_index() -> dict | None:
     return {"built_at": snap.name, "total": len(rows), "instruments": rows}
 
 
+def build_gii_catalog(wiki_idx: list[dict]) -> dict | None:
+    """Export the complete official GII TOC as a metadata-only breadth layer.
+
+    Only acts already in the curated corpus receive an ``act_id`` and parsed
+    ``jurabk``.  No norm or full-text fetch is implied for the other entries.
+    """
+    snap = latest_snapshot("gii")
+    if not snap or not (snap / "catalog.jsonl").is_file():
+        return None
+
+    wiki_by_jurabk = {
+        str(row.get("jurabk")): row
+        for row in wiki_idx if row.get("juris") == "DE"
+    }
+    curated_by_slug = {
+        str(row.get("slug")): wiki_by_jurabk.get(str(row.get("jurabk")))
+        for row in read_jsonl(snap / "acts.jsonl")
+    } if (snap / "acts.jsonl").is_file() else {}
+
+    rows: list[dict] = []
+    for source in read_jsonl(snap / "catalog.jsonl"):
+        row = {key: source.get(key) for key in (
+            "id", "abbrev", "title", "url")}
+        curated = curated_by_slug.get(str(source.get("abbrev") or ""))
+        if curated:
+            row["act_id"] = curated["id"]
+            row["jurabk"] = curated["jurabk"]
+        rows.append(row)
+    return {"schema_version": 1, "built_at": snap.name,
+            "total": len(rows), "acts": rows}
+
+
 def load(source: str, name: str) -> list[dict]:
+    if source in QUARANTINED_SOURCES and not include_quarantined_sources():
+        return []
     snap = latest_snapshot(source)
     if not snap or not (snap / name).is_file():
         return []
@@ -281,8 +340,15 @@ def temporal(versions: list[dict], upcoming: list[dict],
     All dates ISO; the frontend formats to dd.mm.yyyy and localises.
     next_change counts only dates in the future (already-passed
     valid_from values would otherwise read as a fake upcoming change)."""
-    past = sorted((v["date"] for v in versions if v.get("date")),
-                  reverse=True)
+    # Official published PatchInstructions provide a safe recent-history
+    # fallback when a private version database is excluded from the public
+    # build.  A proposal/adopted draft is never counted as a past change.
+    past_dates = {v["date"] for v in versions if v.get("date")}
+    past_dates.update(
+        p["valid_from"] for p in patches
+        if p.get("status") == "published" and p.get("valid_from")
+        and p["valid_from"] <= TODAY)
+    past = sorted(past_dates, reverse=True)
     fut = [u["date"] for u in upcoming
            if u.get("date") and u["date"] > TODAY]
     fut += [p["valid_from"] for p in patches
@@ -806,7 +872,8 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
     for t in transp:
         tr_count[t["directive_celex"]] = \
             tr_count.get(t["directive_celex"], 0) + 1
-    laender: dict[str, list] = {}
+    laender: dict[str, list] = {
+        jurisdiction: [] for jurisdiction in ALL_LAENDER_JURISDICTIONS}
     for e in load("laender_bills", "bills.jsonl") or \
              load("laender_monitor", "events.jsonl"):
         laender.setdefault(e.get("jurisdiction", "DE-?"), []).append(
@@ -827,6 +894,12 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
             "schema_version": 2,
             "model": "competence-aware",
             "not_a_total_order": True,
+            "coverage": {
+                "laender_monitor": (
+                    "research_only" if include_quarantined_sources()
+                    else "origin_verification_required"),
+                "laender_keys": len(ALL_LAENDER_JURISDICTIONS),
+            },
         },
         "eu": {
             # Keep the flat list for API clients using hierarchy schema v1.
@@ -960,7 +1033,27 @@ def build_amendment_fates(details: dict[str, dict],
 # ----------------------------------------------------------------- graph
 def build_graph() -> dict:
     arena = ROOT / "data" / "lexgraph_de_wp21.qfs"
-    p = parse_qfs(arena.read_bytes())
+    policy_path = Path(f"{arena}.policy.json")
+    if not policy_path.is_file():
+        raise RuntimeError(
+            "QFS provenance policy is missing; run tools/build_qfs.py before "
+            "publishing web data")
+    policy = _read_json_object(policy_path, {})
+    arena_bytes = arena.read_bytes()
+    digest = hashlib.sha256(arena_bytes).hexdigest()
+    if policy.get("qfs_sha256") != digest:
+        raise RuntimeError(
+            "QFS provenance policy does not match the arena; rebuild QFS")
+    expected_quarantine = include_quarantined_sources()
+    if bool(policy.get("includes_quarantined_sources")) != expected_quarantine:
+        mode = "private research" if expected_quarantine else "public"
+        raise RuntimeError(
+            f"QFS provenance is incompatible with the requested {mode} "
+            "web build; rebuild QFS in the same source-policy mode")
+    if not expected_quarantine and not policy.get("public_build"):
+        raise RuntimeError("refusing to publish a non-public QFS arena")
+
+    p = parse_qfs(arena_bytes)
     offs = sorted(p.nodes)
     idx_of = {off: i for i, off in enumerate(offs)}
 
@@ -1034,7 +1127,14 @@ def build_graph() -> dict:
             "tick_labels": {t: month_str(t) for t in ticks},
             "worlds": [{"id": w["id"], "stability": w["stability"],
                         "contradiction": w["contradictionLevel"]}
-                       for w in p.worlds.values()]}
+                       for w in p.worlds.values()],
+            "source_policy": {
+                "public_build": bool(policy.get("public_build")),
+                "includes_quarantined_sources": bool(
+                    policy.get("includes_quarantined_sources")),
+                "built_at": policy.get("built_at"),
+                "qfs_sha256": digest,
+            }}
 
 
 EU_REF = re.compile(r"(Richtlinie|Verordnung)\s*\((EU|EG)\)\s*(\d{4})/(\d+)")
@@ -1142,7 +1242,17 @@ def main() -> int:
     graph = build_graph()
     git = build_git()
     decisions = load_decisions()
+    data_policy = {
+        "schema_version": 1,
+        "public_build": not include_quarantined_sources(),
+        "includes_quarantined_sources": include_quarantined_sources(),
+        "excluded_snapshot_families": (
+            [] if include_quarantined_sources()
+            else sorted(QUARANTINED_SOURCES)),
+        "reason": "third-party database/reuse permission not established",
+    }
     eu_index = build_eu_index()
+    gii_catalog = build_gii_catalog(wiki_idx)
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     amendment_fates = build_amendment_fates(details, built_at)
     watched = build_watched_procedures(hierarchy, amendment_fates, built_at)
@@ -1179,9 +1289,11 @@ def main() -> int:
                               if b["status"] == "verkuendet"),
         "eu_instruments": len(load("eu_layer", "instruments.jsonl")),
         "eu_index_total": eu_index["total"] if eu_index else 0,
+        "gii_catalog_total": gii_catalog["total"] if gii_catalog else 0,
         "transpositions": len(load("eu_layer", "transpositions.jsonl")),
         "feed_events": len(feed),
         "decisions": len(decisions),
+        "data_policy": data_policy,
         "search": search_counts,
         "graph": {k: len(v) for k, v in graph.items()
                   if isinstance(v, list)},
@@ -1195,6 +1307,7 @@ def main() -> int:
 
     sizes = {
         "summary.json": dump("summary.json", summary),
+        "data_policy.json": dump("data_policy.json", data_policy),
         "feed.json": dump("feed.json", feed),
         "wiki.json": dump("wiki.json", wiki_idx),
         "decisions.json": dump("decisions.json", decisions),
@@ -1208,6 +1321,10 @@ def main() -> int:
         sizes["eu_index.json"] = dump("eu_index.json", eu_index)
     else:
         (WEB / "eu_index.json").unlink(missing_ok=True)
+    if gii_catalog:
+        sizes["gii_catalog.json"] = dump("gii_catalog.json", gii_catalog)
+    else:
+        (WEB / "gii_catalog.json").unlink(missing_ok=True)
     for aid, d in details.items():
         dump(f"acts/{aid}.json", d)
     print(f"web data -> {WEB}")

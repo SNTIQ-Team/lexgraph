@@ -36,6 +36,10 @@ NORM_REF_RE = re.compile(
 # § 74 merely because "Ukraine" occurs in all of its display fields).
 CONCEPT_MATCH_BASE = 10_000
 CONCEPT_PRIORITY_STEP = 1_000
+# Within a semantic concept, an additional lexical/context hit is more useful
+# than a generic high-priority target.  It is still smaller than the entire
+# concept band, so curated meaning continues to precede unrelated body text.
+CONCEPT_CONTEXT_BONUS = 1_500
 
 
 def normalize_search_text(value: object) -> str:
@@ -408,20 +412,32 @@ class SearchEngine:
                 for concept in concepts)
             clauses.append("(" + " OR ".join(sorted(alternatives)) + ")")
         expression = " AND ".join(clauses)
+        # A concept-bearing natural-language query must not collapse to zero
+        # merely because every descriptive word is absent from one official
+        # norm.  For example, ``Sozialhilfe ukrainische Geflüchtete`` should
+        # still reach the curated Ukraine transition norms even though the
+        # legislator's text may say neither ``ukrainisch`` nor
+        # ``Geflüchtete``.  Keep the strict all-token expression as the
+        # highest-precision branch, but add the matched concept as a semantic
+        # recall branch.  Explicit norm references remain strict: ``Ukraine
+        # § 24`` must not silently turn into every Ukraine-related section.
+        #
         # A multi-word synonym is one concept, not two unrelated token
-        # expansions.  Recognise the whole normalized query and OR its curated
-        # concept targets with the ordinary lexical expression.
+        # expansions.  Recognise the whole normalized query and prefer that
+        # narrower concept over a generic concept matched by one token.
         whole = normalize_search_text(query)
         whole_concepts = self._concepts_for(whole, whole=True)
-        if expression and whole_concepts:
+        if whole_concepts:
             # An exact multi-word concept is more specific than a generic
             # concept matched by one token inside it.  Rank by the whole
             # phrase ("Rechtskreiswechsel Ukraine"), while retaining the
             # token clauses in the candidate expression for lexical recall.
             matched_concepts = set(whole_concepts)
+        if (expression and matched_concepts
+                and not NORM_REF_RE.search(query)):
             concept_clause = " OR ".join(
                 "concepts_n:" + _quote_fts(concept)
-                for concept in sorted(whole_concepts))
+                for concept in sorted(matched_concepts))
             expression = f"(({expression}) OR ({concept_clause}))"
         return (expression,
                 sorted(snippet_terms, key=lambda s: (-len(s), s)),
@@ -431,15 +447,19 @@ class SearchEngine:
     def _matched_fields(row: sqlite3.Row, terms: list[str],
                         kind: str,
                         concepts: set[str] | None = None) -> list[str]:
-        fields = [("jurabk", row["jurabk"]),
-                  ("act_title", row["act_title"])]
+        # The build already stores every searchable field in normalized form.
+        # Re-normalizing raw result bodies here used to dominate query latency
+        # on the small production VPS (the same long norm body was folded for
+        # candidate ranking, final scoring, and again for its snippet).
+        fields = [("jurabk", row["jurabk_n"]),
+                  ("act_title", row["act_title_n"])]
         if kind == "norm":
-            fields.extend((("enbez", row["enbez"]),
-                           ("norm_title", row["norm_title"]),
-                           ("text", row["body"])))
+            fields.extend((("enbez", row["norm_ref_n"]),
+                           ("norm_title", row["norm_title_n"]),
+                           ("text", row["body_n"])))
         matched = []
         for name, value in fields:
-            folded = normalize_search_text(value)
+            folded = str(value or "")
             if any(term and term in folded for term in terms):
                 matched.append(name)
         if concepts and concepts.intersection(
@@ -448,8 +468,9 @@ class SearchEngine:
         return matched
 
     @staticmethod
-    def _relevance(row: sqlite3.Row, fields: list[str], query: str,
-                   kind: str, concepts: set[str] | None = None) -> int:
+    def _relevance(row: sqlite3.Row, fields: list[str], direct: str,
+                   kind: str, concepts: set[str] | None = None,
+                   query_token_count: int = 1) -> int:
         """Deterministic field-aware boost on top of FTS candidate ranking.
 
         For norm results, a hit in the norm heading/body is deliberately more
@@ -468,14 +489,16 @@ class SearchEngine:
                            default=1)
             score += CONCEPT_MATCH_BASE
             score += max(0, priority - 1) * CONCEPT_PRIORITY_STEP
-        direct = normalize_search_text(query)
+            if (query_token_count > 1
+                    and any(field != "concept" for field in fields)):
+                score += CONCEPT_CONTEXT_BONUS
         if direct:
             values = {
-                "jurabk": normalize_search_text(row["jurabk"]),
-                "act_title": normalize_search_text(row["act_title"]),
-                "enbez": normalize_search_text(row["enbez"]),
-                "norm_title": normalize_search_text(row["norm_title"]),
-                "text": normalize_search_text(row["body"]),
+                "jurabk": str(row["jurabk_n"] or ""),
+                "act_title": str(row["act_title_n"] or ""),
+                "enbez": str(row["norm_ref_n"] or ""),
+                "norm_title": str(row["norm_title_n"] or ""),
+                "text": str(row["body_n"] or ""),
             }
             for field, value in values.items():
                 if direct == value:
@@ -486,12 +509,15 @@ class SearchEngine:
 
     @staticmethod
     def _snippet(value: str, terms: list[str], fallback: str,
-                 width: int = 260) -> str:
+                 width: int = 260, *, folded: str | None = None) -> str:
         """Return a compact official-spelling excerpt around the best term."""
         value = " ".join((value or fallback or "").split())
         if not value:
             return ""
-        folded = normalize_search_text(value)
+        # Callers pass the corresponding indexed ``*_n`` value.  Retain a
+        # fallback for direct unit use, but the search hot path never folds a
+        # full norm body at request time.
+        folded = folded if folded is not None else normalize_search_text(value)
         positions = [(folded.find(term), term) for term in terms if term]
         positions = [(pos, term) for pos, term in positions if pos >= 0]
         if not positions:
@@ -553,11 +579,25 @@ class SearchEngine:
         norm_total, norm_rows = self._rows(
             norm_expression, "norm", norm_candidates, norm_act_ids)
 
+        direct = normalize_search_text(query)
+        query_token_count = len(_tokens(query))
+        evaluations: dict[tuple[str, int], tuple[list[str], int]] = {}
+
+        def evaluate(row: sqlite3.Row, kind: str) -> tuple[list[str], int]:
+            key = (kind, int(row["rowid"]))
+            cached = evaluations.get(key)
+            if cached is not None:
+                return cached
+            fields = self._matched_fields(row, terms, kind, concepts)
+            score = self._relevance(
+                row, fields, direct, kind, concepts, query_token_count)
+            result = (fields, score)
+            evaluations[key] = result
+            return result
+
         def rerank(rows: list[sqlite3.Row], kind: str) -> list[sqlite3.Row]:
             return sorted(rows, key=lambda row: (
-                -self._relevance(
-                    row, self._matched_fields(row, terms, kind, concepts),
-                    query, kind, concepts),
+                -evaluate(row, kind)[1],
                 row["rank"], row["act_id"], row["enbez"], row["rowid"]))
 
         act_rows = rerank(act_rows, "act")[:act_limit]
@@ -568,13 +608,15 @@ class SearchEngine:
             base = dict(self.wiki.get(row["act_id"]) or {
                 "id": row["act_id"], "jurabk": row["jurabk"],
                 "juris": row["juris"], "title": row["act_title"]})
-            fields = self._matched_fields(row, terms, "act", concepts)
-            display = row["act_title"] if "act_title" in fields \
-                else row["jurabk"]
+            fields, score = evaluate(row, "act")
+            if "act_title" in fields:
+                display, display_n = row["act_title"], row["act_title_n"]
+            else:
+                display, display_n = row["jurabk"], row["jurabk_n"]
             base.update({
-                "score": self._relevance(
-                    row, fields, query, "act", concepts),
-                "snippet": self._snippet(display, terms, display),
+                "score": score,
+                "snippet": self._snippet(
+                    display, terms, display, folded=str(display_n or "")),
                 "matched_fields": fields,
                 "source": row["source"],
                 "url": f"/acts/{row['act_id']}",
@@ -583,9 +625,15 @@ class SearchEngine:
 
         norm_matches = []
         for position, row in enumerate(norm_rows, 1):
-            fields = self._matched_fields(row, terms, "norm", concepts)
-            snippet_source = row["body"] if "text" in fields else \
-                row["norm_title"] or row["act_title"]
+            fields, score = evaluate(row, "norm")
+            if "text" in fields:
+                snippet_source, snippet_folded = row["body"], row["body_n"]
+            elif row["norm_title"]:
+                snippet_source = row["norm_title"]
+                snippet_folded = row["norm_title_n"]
+            else:
+                snippet_source = row["act_title"]
+                snippet_folded = row["act_title_n"]
             norm_matches.append({
                 "act_id": row["act_id"],
                 "jurabk": row["jurabk"],
@@ -594,9 +642,9 @@ class SearchEngine:
                 "enbez": row["enbez"],
                 "norm_title": row["norm_title"],
                 "snippet": self._snippet(snippet_source, terms,
-                                         row["act_title"]),
-                "score": self._relevance(
-                    row, fields, query, "norm", concepts),
+                                         row["act_title"],
+                                         folded=str(snippet_folded or "")),
+                "score": score,
                 "matched_fields": fields,
                 "source": row["source"],
                 "url": f"/acts/{row['act_id']}",

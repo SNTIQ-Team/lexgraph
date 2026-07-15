@@ -1,4 +1,4 @@
-"""Fetch per-§ old/new text from buzer.de synopse pages.
+"""Private research fetch of per-§ old/new text from buzer.de.
 
 The buzer version log gives us WHEN and WHICH §§ changed; the synopse page
 (`/gesetz/<id>/v<n>-<date>.htm`) additionally carries the actual text —
@@ -8,10 +8,8 @@ the visualizer can render a real local word-diff for historical
 amendments instead of linking out, and so per-§ change granularity (incl.
 future-dated versions = gestaffeltes Inkrafttreten) becomes queryable.
 
-Scope: the practice corpus, recent versions only (fetching every synopse
-since 2006 would be thousands of pages). Non-authoritative, like all buzer
-data. Polite crawl (0.9 s), robots-respected (only version pages, never
-/s2.htm search).
+This private database is not licensed for systematic public redistribution.
+The fetcher is quarantined and requires ``LEXGRAPH_ENABLE_BUZER=1``.
 
 Output (data/snapshots/buzer_synopse/<date>/synopse.jsonl):
     {jurabk, act_id, date, url, changes:[{para, old, new}]}
@@ -19,6 +17,7 @@ Output (data/snapshots/buzer_synopse/<date>/synopse.jsonl):
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 import time
@@ -98,6 +97,11 @@ def main() -> int:
     ap.add_argument("--no-resume", action="store_true",
                     help="ignore rows already fetched by this parser version")
     args = ap.parse_args()
+
+    if os.environ.get("LEXGRAPH_ENABLE_BUZER") != "1":
+        print("buzer synopse fetch quarantined: explicit authorised "
+              "LEXGRAPH_ENABLE_BUZER=1 required", file=sys.stderr)
+        return 2
 
     bz = latest_snapshot("buzer")
     if not bz:

@@ -32,6 +32,9 @@ SNAPSHOT_FILES: dict[str, tuple[str, str, str]] = {
         "legislative PatchInstructions with lifecycle and provenance"),
     "federal_acts.jsonl": (
         "gii", "acts.jsonl", "federal acts in the curated deep corpus"),
+    "federal_catalog.jsonl": (
+        "gii", "catalog.jsonl",
+        "complete official GII table of contents, metadata only"),
     "federal_norms.jsonl": (
         "gii", "norms.jsonl", "current federal sections and full text"),
     "bayern_acts.jsonl": (
@@ -40,10 +43,6 @@ SNAPSHOT_FILES: dict[str, tuple[str, str, str]] = {
         "bayern_recht", "norms.jsonl", "current Bavarian articles and full text"),
     "bayern_recht_versions.jsonl": (
         "bayern_recht", "versions.jsonl", "official Bavarian amendment metadata"),
-    "buzer_versions.jsonl": (
-        "buzer", "versions.jsonl", "federal amendment versions since 2006"),
-    "buzer_synopse.jsonl": (
-        "buzer_synopse", "synopse.jsonl", "retrieved old/new federal section text"),
     "eu_instruments.jsonl": (
         "eu_layer", "instruments.jsonl", "curated EU instruments with deep links"),
     "eu_transpositions.jsonl": (
@@ -53,8 +52,6 @@ SNAPSHOT_FILES: dict[str, tuple[str, str, str]] = {
         "all in-force directives and basic regulations, metadata only"),
     "bayern_landtag_bills.jsonl": (
         "bay_landtag", "bills.jsonl", "Bavarian Landtag bills and lifecycle"),
-    "laender_bills.jsonl": (
-        "laender_bills", "bills.jsonl", "bills from all 16 Landtage"),
     "bundestag_procedures.jsonl": (
         "dip", "vorgaenge.jsonl",
         "official DIP legislative procedures and current stages"),
@@ -68,9 +65,9 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
     "bayern_word_diffs.jsonl": (
         ROOT / "data" / "by_diffs.jsonl",
         "verified archived-state and forward daily Bavarian text changes"),
-    "git.json": (
+    "chronology.json": (
         ROOT / "web" / "data" / "git.json",
-        "event-sourced legislative commit graph"),
+        "dated legislative-event chronology (legacy API filename: git.json)"),
     "graph.json": (
         ROOT / "web" / "data" / "graph.json",
         "QFS arena graph export"),
@@ -80,6 +77,9 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
     "amendment_fates.json": (
         ROOT / "web" / "data" / "amendment_fates.json",
         "reviewed parliamentary document chains and current-law checks"),
+    "data_policy.json": (
+        ROOT / "web" / "data" / "data_policy.json",
+        "machine-readable exclusions for third-party database rights"),
 }
 
 # Raw lifecycle files do not exist before the first watch update.  Export them
@@ -157,7 +157,7 @@ def write_jsonl(path: Path, rows: Iterable[dict]) -> int:
 
 
 CARD = """---
-license: cc-by-nc-sa-4.0
+license: other
 language:
   - de
 tags:
@@ -166,8 +166,8 @@ tags:
   - legislation
   - eu-law
   - court-decisions
-  - event-sourced
-pretty_name: Lexgraph — German and EU law as event-sourced data
+  - temporal-data
+pretty_name: Lexgraph — German and EU legal chronology
 configs:
 {configs}
 ---
@@ -175,12 +175,15 @@ configs:
 # Lexgraph dataset
 
 The data plane of **[Lexgraph](https://github.com/SNTIQ-Team/lexgraph)** —
-German legislation modelled as a temporal, multi-authority patch history
-(Bund / Bayern / EU / 16 Länder). Built **{today}**.
+German legislation modelled as a temporal, multi-authority change history
+(Bund / Bayern / EU; Länder records only after verification at the originating
+Landtag). Built **{today}**.
 
 Lexgraph is deliberately two-layered. The German migration, asylum, social-law
 and related practice corpus has current full text and change history where the
-official/retrieval sources support it. `eu_index.jsonl` provides breadth: all
+official/retrieval sources support it. `federal_catalog.jsonl` provides every
+act listed in the official GII table of contents as discovery metadata only;
+`eu_index.jsonl` provides EU breadth: all
 in-force directives (including implementing/delegated directives) and basic
 regulations exposed by CELLAR, as metadata only. It is not presented as deep
 coverage of every EU instrument.
@@ -218,10 +221,12 @@ active polling set. `amendment_fates.json` separates reviewed roles in a
 parliamentary document chain from the mechanical checks performed against the
 current consolidated corpus.
 
-Every source is documented in the repository's `docs/SOURCES.md`; reproduce
+Every source and file-level rights regime is documented in the repository's
+`docs/SOURCES.md` and `docs/RIGHTS.md`; reproduce
 the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts
-are official works under § 5 UrhG. Governed by the SNTIQ licensing set; public
-dataset under CC BY-NC-SA 4.0.
+are official works under § 5 UrhG. The dataset is intentionally marked
+`license: other`: SNTIQ's licence covers its original annotations and software,
+not third-party or official source material. See `RIGHTS.md` before reuse.
 
 Built by **[SNTIQ](https://sntiq.com/)**.
 """
@@ -233,6 +238,14 @@ def main() -> int:
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+
+    policy_path = require_file(
+        ROOT / "web" / "data" / "data_policy.json", "public data policy")
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    if policy.get("includes_quarantined_sources") or not policy.get(
+            "public_build"):
+        raise RuntimeError(
+            "refusing HF export: rebuild web data without quarantined sources")
 
     # Avoid stale files surviving when the exported schema changes.
     for path in out.iterdir():
@@ -282,6 +295,8 @@ def main() -> int:
     (out / "README.md").write_text(CARD.format(
         today=date.today().isoformat(), configs=configs,
         rows_table=rows_table), encoding="utf-8")
+    copy_file(require_file(ROOT / "docs" / "RIGHTS.md", "rights matrix"),
+              out / "RIGHTS.md")
 
     for name in ordered:
         print(f"  {name}: {counts[name]:,}")
