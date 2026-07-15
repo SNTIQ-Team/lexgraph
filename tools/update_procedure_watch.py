@@ -39,7 +39,38 @@ def _read_rows(source: str, filename: str) -> list[dict]:
     return list(read_jsonl(path)) if path and path.is_file() else []
 
 
-def _dip_row(watch_key: str, config: dict, row: dict) -> dict:
+def _compact_dip_position(position: dict) -> dict:
+    fundstelle = position.get("fundstelle") or {}
+    return {
+        "id": str(position.get("id") or ""),
+        "date": position.get("datum"),
+        "updated": position.get("aktualisiert"),
+        "stage": position.get("vorgangsposition"),
+        "chamber": position.get("zuordnung"),
+        "document_type": position.get("dokumentart"),
+        "abstract": position.get("abstract"),
+        "document": {
+            "id": fundstelle.get("id"),
+            "number": fundstelle.get("dokumentnummer"),
+            "type": fundstelle.get("drucksachetyp") or
+                    fundstelle.get("dokumentart"),
+            "url": fundstelle.get("pdf_url"),
+        },
+        "initiators": [item.get("titel") for item in position.get("urheber") or []
+                       if isinstance(item, dict) and item.get("titel")],
+        "committees": [
+            {"name": item.get("ausschuss"),
+             "lead": bool(item.get("federfuehrung"))}
+            for item in position.get("ueberweisung") or []
+            if isinstance(item, dict) and item.get("ausschuss")
+        ],
+        "decisions": position.get("beschlussfassung") or [],
+        "content_validations": position.get("content_validations") or [],
+    }
+
+
+def _dip_row(watch_key: str, config: dict, row: dict,
+             positions: list[dict] | None = None) -> dict:
     status = str(row.get("beratungsstand") or "?")
     return {
         "id": watch_key,
@@ -53,6 +84,15 @@ def _dip_row(watch_key: str, config: dict, row: dict) -> dict:
         "stage": status,
         "date": row.get("datum"),
         "updated": row.get("aktualisiert"),
+        "abstract": row.get("abstract"),
+        "initiators": list(row.get("initiative") or []),
+        "approval_requirements": list(
+            row.get("zustimmungsbeduerftigkeit") or []),
+        "topics": list(row.get("sachgebiet") or []),
+        "positions": sorted(
+            [_compact_dip_position(position) for position in positions or []],
+            key=lambda item: (str(item.get("date") or ""),
+                              str(item.get("id") or ""))),
         "url": f"https://dip.bundestag.de/vorgang/_/{watch_key}",
         "promulgation": row.get("verkuendung") or [],
         "entry_into_force": row.get("inkrafttreten") or [],
@@ -85,6 +125,9 @@ def _eu_row(watch_key: str, config: dict, row: dict) -> dict:
         "publication_detected": bool(row.get("publication_detected")),
         "awaiting_final_review": bool(row.get("awaiting_final_review")),
         "final_text_review": row.get("final_text_review"),
+        "retrieval_status": row.get("retrieval_status") or "fresh",
+        "source_stale": bool(row.get("source_stale")),
+        "retrieval_warning": row.get("retrieval_warning"),
         "terminal": bool(row.get("terminal")),
     }
 
@@ -96,6 +139,8 @@ def _fingerprint(row: dict) -> str:
         "last_observed_stage", "last_observed_updated",
         "promulgation", "entry_into_force", "adopted_celexes",
         "official_journal", "events",
+        "abstract", "initiators", "approval_requirements", "topics",
+        "positions",
         "council_development",
         "publication_detected", "awaiting_final_review", "final_text_review",
     )}
@@ -133,7 +178,8 @@ def _write_json_atomic(path: Path, payload: object) -> None:
 
 def update_watch_state(watchlist_path: Path, state_path: Path,
                        history_path: Path, dip_rows: list[dict],
-                       eu_rows: list[dict], now: str) -> dict:
+                       eu_rows: list[dict], now: str,
+                       dip_positions: list[dict] | None = None) -> dict:
     watchlist = json.loads(watchlist_path.read_text(encoding="utf-8"))
     configs = watchlist.get("procedures") or {}
     previous = json.loads(state_path.read_text(encoding="utf-8")) \
@@ -141,6 +187,11 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
     previous_rows = previous.get("procedures") or {}
     dip = {str(row.get("id")): row for row in dip_rows}
     eu = {str(row.get("id")): row for row in eu_rows}
+    positions_by_procedure: dict[str, list[dict]] = {}
+    for position in dip_positions or []:
+        key = str(position.get("watch_key") or position.get("vorgang_id") or "")
+        if key:
+            positions_by_procedure.setdefault(key, []).append(position)
     state_rows: dict[str, dict] = {}
     history_additions: list[dict] = []
     existing_history = (list(read_jsonl(history_path))
@@ -176,6 +227,12 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
                 "stage": "source_missing",
                 "date": (old or {}).get("date"),
                 "updated": None,
+                "abstract": (old or {}).get("abstract"),
+                "initiators": list((old or {}).get("initiators") or []),
+                "approval_requirements": list(
+                    (old or {}).get("approval_requirements") or []),
+                "topics": list((old or {}).get("topics") or []),
+                "positions": list((old or {}).get("positions") or []),
                 "url": (old or {}).get("url") or config.get("official_url"),
                 "terminal": False,
                 "first_seen": (old or {}).get("first_seen") or now,
@@ -206,7 +263,8 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
             current["last_checked"] = now
         else:
             current = (_eu_row(key, config, raw) if source == "eur-lex"
-                       else _dip_row(key, config, raw))
+                       else _dip_row(key, config, raw,
+                                     positions_by_procedure.get(key)))
             monitor = bool(config.get("monitor", True))
             current["active"] = monitor and not current["terminal"]
             current["tracking_state"] = (
@@ -219,7 +277,17 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
             current["last_observed_status"] = current.get("status")
             current["last_observed_stage"] = current.get("stage")
             current["last_observed_updated"] = current.get("updated")
-            current["last_observed_at"] = now
+            if current.get("source_stale") and old:
+                current["last_observed_status"] = old.get(
+                    "last_observed_status") or old.get("status")
+                current["last_observed_stage"] = old.get(
+                    "last_observed_stage") or old.get("stage")
+                current["last_observed_updated"] = old.get(
+                    "last_observed_updated") or old.get("updated")
+                current["last_observed_at"] = old.get(
+                    "last_observed_at") or old.get("last_checked")
+            else:
+                current["last_observed_at"] = now
             if not current["active"]:
                 current["monitoring_stopped_at"] = now
 
@@ -242,7 +310,10 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
                     "source_restored"
                     if old.get("tracking_state") == "source_missing" else
                     "terminal" if current.get("terminal") else
-                    "status_changed"),
+                    "status_changed"
+                    if (old.get("status"), old.get("stage")) !=
+                       (current.get("status"), current.get("stage")) else
+                    "evidence_changed"),
                 "from_status": old.get("status") if old else None,
                 "to_status": current.get("status"),
                 "from_stage": old.get("stage") if old else None,
@@ -283,7 +354,8 @@ def main() -> int:
     result = update_watch_state(
         WATCHLIST, STATE, HISTORY,
         _read_rows("dip", "vorgaenge.jsonl"),
-        _read_rows("eu_watch", "procedures.jsonl"), now)
+        _read_rows("eu_watch", "procedures.jsonl"), now,
+        _read_rows("dip", "positions.jsonl"))
     active = sum(bool(row.get("active"))
                  for row in result["state"]["procedures"].values())
     print(f"procedure-watch: {len(result['state']['procedures'])} total / "

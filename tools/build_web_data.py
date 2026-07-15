@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
 from api.search_engine import build_search_database       # noqa: E402
+from procedure_analysis import analyse_procedure           # noqa: E402
 
 WEB = ROOT / "web" / "data"
 
@@ -669,7 +670,9 @@ def _read_json_object(path: Path, fallback: dict) -> dict:
     return value if isinstance(value, dict) else fallback
 
 
-def build_watched_procedures(hierarchy: dict) -> dict:
+def build_watched_procedures(hierarchy: dict,
+                             amendment_fates: dict | None = None,
+                             analysed_at: str | None = None) -> dict:
     """Merge persistent observations, configuration and change history.
 
     ``update_procedure_watch.py`` owns state transitions.  This exporter only
@@ -756,6 +759,10 @@ def build_watched_procedures(hierarchy: dict) -> dict:
             "history": sorted(history.get(key, []),
                               key=lambda event: event.get("observed_at") or ""),
         })
+        row["analysis"] = analyse_procedure(
+            row, config, row["history"],
+            list((amendment_fates or {}).get("records") or []),
+            analysed_at or state.get("checked_at") or row.get("last_checked"))
         procedures.append(row)
 
     procedures.sort(key=lambda row: str(row.get("id") or ""))
@@ -764,7 +771,7 @@ def build_watched_procedures(hierarchy: dict) -> dict:
     procedures.sort(key=lambda row: (0 if row.get("active") else
                                      1 if row.get("terminal") else 2))
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "checked_at": state.get("checked_at"),
         "active_count": sum(bool(row.get("active")) for row in procedures),
         "terminal_count": sum(bool(row.get("terminal")) for row in procedures),
@@ -1137,8 +1144,8 @@ def main() -> int:
     decisions = load_decisions()
     eu_index = build_eu_index()
     built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    watched = build_watched_procedures(hierarchy)
     amendment_fates = build_amendment_fates(details, built_at)
+    watched = build_watched_procedures(hierarchy, amendment_fates, built_at)
     search_counts = build_search_database(
         details, WEB / "search.sqlite", ROOT / "data" / "search_synonyms.json")
 

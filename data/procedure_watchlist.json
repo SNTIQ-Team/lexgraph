@@ -22,6 +22,34 @@
       "entry_date_is_criterion": false,
       "draft_only": true,
       "scope_source": "https://dserver.bundestag.de/btd/21/035/2103539.pdf",
+      "content_checks": [
+        {
+          "id": "ukraine-cutoff-operative-text",
+          "document_number": "21/3539",
+          "label": "Stichtag im verfügenden Entwurfstext geprüft",
+          "kind": "operative_text",
+          "required_patterns": [
+            "erstmals\\s+nach\\s+dem\\s+31\\.\\s+März\\s+2025\\s+erteilt",
+            "erstmals\\s+nach\\s+dem\\s+31\\.\\s+März\\s+2025\\s+eine\\s+entsprechende\\s+Fiktionsbescheinigung",
+            "Fiktionsbescheinigung[\\s\\S]{0,180}?bis\\s+einschließlich\\s+31\\.\\s+März\\s+2025\\s+ausgestellt"
+          ],
+          "finding": "Der verfügende Entwurf knüpft an die erste Erteilung der Aufenthaltserlaubnis nach § 24 oder die erste entsprechende Fiktionsbescheinigung nach dem 31. März 2025 an; eine bis einschließlich 31. März ausgestellte Fiktionsbescheinigung ist eine Ausnahme. Die verkürzte DIP-Zusammenfassung zur Einreise ist dafür nicht der operative Wortlaut.",
+          "source_url": "https://dserver.bundestag.de/btd/21/035/2103539.pdf"
+        }
+      ],
+      "official_evidence_checks": [
+        {
+          "id": "bundestag-hearing-2026-02-23",
+          "date": "2026-02-23",
+          "label": "Öffentliche Anhörung des Ausschusses für Arbeit und Soziales",
+          "url": "https://www.bundestag.de/ausschuesse/a11_arbeit_soziales/anhoerungen/1145712-1145712",
+          "required_patterns": [
+            "Anhörung\\s+zum\\s+Leistungsrechtsanpassungsgesetz",
+            "23\\.\\s+Februar\\s+2026",
+            "21/3539"
+          ]
+        }
+      ],
       "relevant_norms": [
         "AufenthG § 24",
         "AufenthG § 81",
@@ -46,11 +74,11 @@
       "council_register_url": "https://www.consilium.europa.eu/en/documents/public-register/public-register-search/results/?DocumentNumber=11375%2F26&DocumentLanguage=EN&OrderBy=DOCUMENT_DATE+DESC",
       "council_register_seed": {
         "date": "2026-07-10",
-        "title": "Council Implementing Decision extending temporary protection, as introduced by Council Implementing Decision (EU) 2022/382, until 4 March 2028 - Political agreement",
-        "stage": "Political agreement",
+        "title": "Council Implementing Decision extending temporary protection, as introduced by Council Implementing Decision (EU) 2022/382, until 4 March 2028 - Preparation for a political agreement",
+        "stage": "Preparation for a political agreement",
         "document_type": "NOTE",
         "addressee": "Permanent Representatives Committee (Part 2)",
-        "meeting_date": "2026-07-15",
+        "meeting_date": "2026-07-10",
         "content_accessible": false
       },
       "queries": [

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-15T03:18:37+00:00",
+  "checked_at": "2026-07-15T09:49:50+00:00",
   "procedures": {
     "329468": {
       "id": "329468",
@@ -14,6 +14,276 @@
       "stage": "Überwiesen",
       "date": "2026-02-11",
       "updated": "2026-02-12T10:57:00+01:00",
+      "abstract": "Regelungen zum Rechtskreiswechsel ukrainischer Geflüchteter mit Aufenthaltserlaubnis ab dem 1. April 2025: Gewährung von Asylbewerberleistungen statt Bürgergeld, Übergangsregelungen für von der Stichtagsregelung betroffene Personen sowie für im GKV-Leistungsumfang begonnene medizinische Behandlungen, Anspruch auf Überbrückungsleistungen für vollziehbar ausreisepflichtige Ausländer, Verpflichtung arbeitsfähiger Leistungsberechtigter zur Wahrnehmung einer Arbeitsgelegenheit; Wiederherstellung einer einheitlichen Auslegung des Begriffs des &quot;anderweitigen Anspruchs auf Absicherung im Krankheitsfall&quot; im SGB V und Beendigung von über die obligatorische Anschlussversicherung begründeten freiwilligen Mitgliedschaften in der GKV von Anspruchsberechtigten auf Asylbewerberleistungen bei Krankheit, Schwangerschaft und Geburt zur Vermeidung von Beitragsschulden;<br />\r\nÄnderung verschiedener §§ Asylbewerberleistungsgesetz, Einfügung §§ 66b und 75 und Änderung § 74 Zweites Buch Sozialgesetzbuch, Einfügung § 147 und Änderung § 146 Zwölftes Buch Sozialgesetzbuch, §§ 5 und 411 Fünftes Buch Sozialgesetzbuch sowie § 2 Zweites Gesetz über die Krankenversicherung der Landwirte<br />\r\n<br />\r\nBezug: Richtlinie 2001/55/EG vom 20. Juli 2001 über Mindestnormen für die Gewährung vorübergehenden Schutzes im Falle eines Massenzustroms von Vertriebenen und Maßnahmen zur Förderung einer ausgewogenen Verteilung der Belastungen, die mit der Aufnahme dieser Personen und den Folgen dieser Aufnahme verbunden sind, auf die Mitgliedstaaten (ABl. L 212, 07.08.2001, S. 12)<br />\r\nVereinbarung im Koalitionsvertrag zum Rechtskreiswechsel für nach dem 1. April 2025 eingereiste Flüchtlinge nach der Massenzustrom-Richtlinie<br />\r\nUrteil des Bundessozialgerichts vom 10. März 2022 (Az. B 1 KR 30/20 R)",
+      "initiators": [
+        "Bundesregierung"
+      ],
+      "approval_requirements": [
+        "Ja, laut Gesetzentwurf (Drs 763/25 (bes.eilbed.))"
+      ],
+      "topics": [
+        "Migration und Aufenthaltsrecht",
+        "Soziale Sicherung"
+      ],
+      "positions": [
+        {
+          "id": "683380",
+          "date": "2025-12-19",
+          "updated": "2026-01-21T15:58:39+01:00",
+          "stage": "Gesetzentwurf",
+          "chamber": "BR",
+          "document_type": "Drucksache",
+          "abstract": null,
+          "document": {
+            "id": "283982",
+            "number": "763/25",
+            "type": "Gesetzentwurf",
+            "url": "https://dserver.bundestag.de/brd/2025/0763-25.pdf"
+          },
+          "initiators": [
+            "Bundesregierung"
+          ],
+          "committees": [
+            {
+              "name": "Ausschuss für Arbeit, Integration und Sozialpolitik",
+              "lead": true
+            },
+            {
+              "name": "Ausschuss für Innere Angelegenheiten",
+              "lead": false
+            },
+            {
+              "name": "Finanzausschuss",
+              "lead": false
+            },
+            {
+              "name": "Gesundheitsausschuss",
+              "lead": false
+            }
+          ],
+          "decisions": [],
+          "content_validations": []
+        },
+        {
+          "id": "684318",
+          "date": "2026-01-12",
+          "updated": "2026-01-12T15:13:42+01:00",
+          "stage": "Gesetzentwurf",
+          "chamber": "BT",
+          "document_type": "Drucksache",
+          "abstract": null,
+          "document": {
+            "id": "284310",
+            "number": "21/3539",
+            "type": "Gesetzentwurf",
+            "url": "https://dserver.bundestag.de/btd/21/035/2103539.pdf"
+          },
+          "initiators": [
+            "Bundesregierung"
+          ],
+          "committees": [],
+          "decisions": [],
+          "content_validations": [
+            {
+              "id": "ukraine-cutoff-operative-text",
+              "kind": "operative_text",
+              "label": "Stichtag im verfügenden Entwurfstext geprüft",
+              "finding": "Der verfügende Entwurf knüpft an die erste Erteilung der Aufenthaltserlaubnis nach § 24 oder die erste entsprechende Fiktionsbescheinigung nach dem 31. März 2025 an; eine bis einschließlich 31. März ausgestellte Fiktionsbescheinigung ist eine Ausnahme. Die verkürzte DIP-Zusammenfassung zur Einreise ist dafür nicht der operative Wortlaut.",
+              "document_number": "21/3539",
+              "source_url": "https://dserver.bundestag.de/btd/21/035/2103539.pdf",
+              "passed": true,
+              "retrieval_status": "fetched",
+              "patterns": [
+                {
+                  "pattern": "erstmals\\s+nach\\s+dem\\s+31\\.\\s+März\\s+2025\\s+erteilt",
+                  "matched": true,
+                  "excerpt": "der folgende Buchstabe b eingefügt: b) „ nach § 24 Absatz 1 des Aufenthaltsgesetzes, sofern diese erstmals nach dem 31. März 2025 erteilt worden ist, es sei denn, dem Ausländer wurde über die Beantragung gemäß § 24 Absatz 1 des Aufenthaltsgesetzes erstmals eine entsprechende Fiktionsbescheinigung nach § 81 Absatz 5"
+                },
+                {
+                  "pattern": "erstmals\\s+nach\\s+dem\\s+31\\.\\s+März\\s+2025\\s+eine\\s+entsprechende\\s+Fiktionsbescheinigung",
+                  "matched": true,
+                  "excerpt": ". „ eine Aufenthaltserlaubnis nach § 24 Absatz 1 des Aufenthaltsgesetzes beantragt haben und denen erstmals nach dem 31. März 2025 eine entsprechende Fiktionsbescheinigung nach § 81 Absatz 5 in Verbindung mit Absatz 3 des Aufenthaltsgesetzes ausgestellt worden ist.“ b) Absatz 3a wird durch den folgenden Absatz 3a ersetzt: „(3a) Personen, die unte"
+                },
+                {
+                  "pattern": "Fiktionsbescheinigung[\\s\\S]{0,180}?bis\\s+einschließlich\\s+31\\.\\s+März\\s+2025\\s+ausgestellt",
+                  "matched": true,
+                  "excerpt": "wurde über die Beantragung gemäß § 24 Absatz 1 des Aufenthaltsgesetzes erstmals eine entsprechende Fiktionsbescheinigung nach § 81 Absatz 5 in Verbindung mit Absatz 3 des Aufenthaltsgesetzes bis einschließlich 31. März 2025 ausgestellt oder im Zeitraum vom 4. März 2022 bis zum 31. März 2025 erstmals ein anderweitiger Aufenthaltstitel erteilt,“. bbb) Die bisherigen Buchstaben b und c werden zu den Buchstaben c"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "684696",
+          "date": "2026-01-15",
+          "updated": "2026-02-25T10:55:59+01:00",
+          "stage": "1. Beratung",
+          "chamber": "BT",
+          "document_type": "Plenarprotokoll",
+          "abstract": null,
+          "document": {
+            "id": "5764",
+            "number": "21/53",
+            "type": "Plenarprotokoll",
+            "url": "https://dserver.bundestag.de/btp/21/21053.pdf#P.6267"
+          },
+          "initiators": [],
+          "committees": [
+            {
+              "name": "Ausschuss für Arbeit und Soziales",
+              "lead": true
+            },
+            {
+              "name": "Innenausschuss",
+              "lead": true
+            },
+            {
+              "name": "Haushaltsausschuss",
+              "lead": false
+            },
+            {
+              "name": "Haushaltsausschuss",
+              "lead": false
+            }
+          ],
+          "decisions": [
+            {
+              "beschlusstenor": "Überweisung",
+              "dokumentnummer": "21/3539",
+              "seite": "6282D"
+            }
+          ],
+          "content_validations": []
+        },
+        {
+          "id": "684959",
+          "date": "2026-01-19",
+          "updated": "2026-01-20T10:52:34+01:00",
+          "stage": "Empfehlungen der Ausschüsse",
+          "chamber": "BR",
+          "document_type": "Drucksache",
+          "abstract": "Stellungnahme - AIS, In: zus. Änderungsvorschläge",
+          "document": {
+            "id": "284510",
+            "number": "763/1/25",
+            "type": "Empfehlungen",
+            "url": "https://dserver.bundestag.de/brd/2025/0763-1-25.pdf"
+          },
+          "initiators": [],
+          "committees": [],
+          "decisions": [],
+          "content_validations": []
+        },
+        {
+          "id": "685638",
+          "date": "2026-01-30",
+          "updated": "2026-02-24T09:29:54+01:00",
+          "stage": "1. Durchgang",
+          "chamber": "BR",
+          "document_type": "Plenarprotokoll",
+          "abstract": null,
+          "document": {
+            "id": "5768",
+            "number": "1061",
+            "type": "Plenarprotokoll",
+            "url": "https://dserver.bundestag.de/brp/1061.pdf#P.36"
+          },
+          "initiators": [],
+          "committees": [],
+          "decisions": [
+            {
+              "beschlusstenor": "Stellungnahme",
+              "grundlage": "Art. 76 Abs. 2 GG",
+              "dokumentnummer": "763/25",
+              "seite": "37"
+            }
+          ],
+          "content_validations": []
+        },
+        {
+          "id": "685677",
+          "date": "2026-01-30",
+          "updated": "2026-01-30T15:31:13+01:00",
+          "stage": "Beschlussdrucksache",
+          "chamber": "BR",
+          "document_type": "Drucksache",
+          "abstract": null,
+          "document": {
+            "id": "284807",
+            "number": "763/25(B)",
+            "type": "Stellungnahme",
+            "url": "https://dserver.bundestag.de/brd/2025/0763-25B.pdf"
+          },
+          "initiators": [],
+          "committees": [],
+          "decisions": [],
+          "content_validations": []
+        },
+        {
+          "id": "686256",
+          "date": "2026-02-11",
+          "updated": "2026-02-12T10:57:00+01:00",
+          "stage": "Unterrichtung über Stellungnahme des BR und Gegenäußerung der BRg",
+          "chamber": "BT",
+          "document_type": "Drucksache",
+          "abstract": null,
+          "document": {
+            "id": "285074",
+            "number": "21/4086",
+            "type": "Unterrichtung",
+            "url": "https://dserver.bundestag.de/btd/21/040/2104086.pdf"
+          },
+          "initiators": [
+            "Bundesregierung"
+          ],
+          "committees": [],
+          "decisions": [],
+          "content_validations": []
+        },
+        {
+          "id": "evidence-bundestag-hearing-2026-02-23",
+          "date": "2026-02-23",
+          "updated": null,
+          "stage": "Öffentliche Anhörung des Ausschusses für Arbeit und Soziales",
+          "chamber": "BT",
+          "document_type": "Official evidence page",
+          "abstract": null,
+          "document": {
+            "id": null,
+            "number": "bundestag-hearing-2026-02-23",
+            "type": "Official evidence page",
+            "url": "https://www.bundestag.de/ausschuesse/a11_arbeit_soziales/anhoerungen/1145712-1145712"
+          },
+          "initiators": [],
+          "committees": [],
+          "decisions": [],
+          "content_validations": [
+            {
+              "id": "bundestag-hearing-2026-02-23",
+              "kind": "official_event",
+              "label": "Öffentliche Anhörung des Ausschusses für Arbeit und Soziales",
+              "finding": "Öffentliche Anhörung des Ausschusses für Arbeit und Soziales",
+              "source_url": "https://www.bundestag.de/ausschuesse/a11_arbeit_soziales/anhoerungen/1145712-1145712",
+              "passed": true,
+              "retrieval_status": "fetched",
+              "patterns": [
+                {
+                  "pattern": "Anhörung\\s+zum\\s+Leistungsrechtsanpassungsgesetz",
+                  "matched": true
+                },
+                {
+                  "pattern": "23\\.\\s+Februar\\s+2026",
+                  "matched": true
+                },
+                {
+                  "pattern": "21/3539",
+                  "matched": true
+                }
+              ]
+            }
+          ]
+        }
+      ],
       "url": "https://dip.bundestag.de/vorgang/_/329468",
       "promulgation": [],
       "entry_into_force": [],
@@ -23,12 +293,12 @@
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-15T03:18:37+00:00",
+      "last_checked": "2026-07-15T09:49:50+00:00",
       "last_observed_status": "Überwiesen",
       "last_observed_stage": "Überwiesen",
       "last_observed_updated": "2026-02-12T10:57:00+01:00",
-      "last_observed_at": "2026-07-15T03:18:37+00:00",
-      "last_changed": "2026-07-15T02:59:08+00:00"
+      "last_observed_at": "2026-07-15T09:49:50+00:00",
+      "last_changed": "2026-07-15T09:47:02+00:00"
     },
     "eu-2026-0186-nle": {
       "id": "eu-2026-0186-nle",
@@ -39,7 +309,7 @@
       "gesta": null,
       "title": "COM (2026) 345: Proposal for a COUNCIL IMPLEMENTING DECISION extending temporary protection, as introduced by Implementing Decision (EU) 2022/382, until 4 March 2028",
       "status": "Ongoing",
-      "stage": "Political agreement",
+      "stage": "Preparation for a political agreement",
       "date": "2026-07-10",
       "updated": null,
       "url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
@@ -71,15 +341,15 @@
         },
         {
           "date": "2026-07-10",
-          "title": "Political agreement",
+          "title": "Preparation for a political agreement",
           "source": "Council public register",
           "document": "ST 11375/26",
           "url": "https://www.consilium.europa.eu/en/documents/public-register/public-register-search/results/?DocumentNumber=11375%2F26&DocumentLanguage=EN&OrderBy=DOCUMENT_DATE+DESC",
           "document_type": "NOTE",
           "addressee": "Permanent Representatives Committee (Part 2)",
-          "meeting_date": "2026-07-15",
+          "meeting_date": "2026-07-10",
           "content_accessible": false,
-          "retrieval_status": "fetch_unavailable",
+          "retrieval_status": "verified_seed",
           "terminal": false,
           "celexes": [],
           "documents": [
@@ -92,29 +362,32 @@
         "document": "ST 11375/26",
         "url": "https://www.consilium.europa.eu/en/documents/public-register/public-register-search/results/?DocumentNumber=11375%2F26&DocumentLanguage=EN&OrderBy=DOCUMENT_DATE+DESC",
         "date": "2026-07-10",
-        "title": "Council Implementing Decision extending temporary protection, as introduced by Council Implementing Decision (EU) 2022/382, until 4 March 2028 - Political agreement",
-        "stage": "Political agreement",
+        "title": "Council Implementing Decision extending temporary protection, as introduced by Council Implementing Decision (EU) 2022/382, until 4 March 2028 - Preparation for a political agreement",
+        "stage": "Preparation for a political agreement",
         "document_type": "NOTE",
         "addressee": "Permanent Representatives Committee (Part 2)",
-        "meeting_date": "2026-07-15",
+        "meeting_date": "2026-07-10",
         "content_accessible": false,
-        "fetched_at": "2026-07-15T03:17:41+00:00",
-        "retrieval_status": "fetch_unavailable",
+        "fetched_at": "2026-07-15T09:49:50+00:00",
+        "retrieval_status": "verified_seed",
         "terminal": false
       },
       "publication_detected": false,
       "awaiting_final_review": false,
       "final_text_review": null,
+      "retrieval_status": "stale_fallback",
+      "source_stale": true,
+      "retrieval_warning": "EUR-Lex refresh failed; reusing the last persisted official observation (ValueError).",
       "terminal": false,
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-15T03:18:37+00:00",
+      "last_checked": "2026-07-15T09:49:50+00:00",
       "last_observed_status": "Ongoing",
       "last_observed_stage": "Political agreement",
       "last_observed_updated": null,
       "last_observed_at": "2026-07-15T03:18:37+00:00",
-      "last_changed": "2026-07-15T03:17:42+00:00"
+      "last_changed": "2026-07-15T09:47:02+00:00"
     },
     "322125": {
       "id": "322125",

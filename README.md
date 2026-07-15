@@ -32,6 +32,13 @@ combines reviewed manual cases with a forward-cumulative import from the seven
 official federal RII feeds. It is corpus-filtered and is not a catalogue of all
 German courts; lower-court decisions remain curated manually.
 
+Explicitly watched procedures are checked twice daily against DIP, EUR-Lex
+and Council evidence. Each API row carries a deterministic evidence analysis:
+verified facts, document-role and final-text checks, official chronology,
+next milestone, uncertainty factors and a qualitative forecast. Predictions
+are never promoted to facts; recommendations and political preparations are
+kept distinct from adoption and promulgation.
+
 For Bavaria, the 531 official version rows are amendment metadata, not 531
 complete historical texts. Word-level old/new text is available only where
 archived official pages yield an unambiguous state transition (sparse from

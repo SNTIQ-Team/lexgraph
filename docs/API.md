@@ -453,7 +453,8 @@ entry is subordinate to the preceding section.
 
 Persistent presentation of the explicit watchlist. `procedures[]` merges the
 latest official DIP or EUR-Lex observation with reviewed search aliases,
-scope, relevant norms and `history[]`. `active` controls frequent polling;
+scope, relevant norms, `history[]` and deterministic `analysis`. `active`
+controls frequent polling;
 terminal records remain visible as an immutable archive. An EU political
 agreement is not terminal. OJ publication becomes `pending_final_review`;
 polling stops only after a persisted review has compared the final Article 2
@@ -466,6 +467,38 @@ The terminal review is persisted in the watch configuration as
 `final_text_review: {status:"passed", article_2_compared:true,
 reviewed_celexes:["…"], compared_to:"<proposal CELEX>"}`; all four conditions
 must match the published act before the fetcher emits `terminal:true`.
+
+Every active DIP watch additionally fetches its complete official
+`vorgangsposition` chain. Configured content assertions are rerun against DIP's
+official Drucksache plaintext on every refresh; only compact match evidence is
+persisted. This lets the Ukraine cutoff check distinguish the shorthand DIP
+abstract about entry from the operative 21/3539 rules for the first § 24
+permit or corresponding Fiktionsbescheinigung. Official Bundestag evidence
+pages such as a committee hearing are revalidated in the same step.
+
+`analysis` has a stable schema and no LLM or network dependency during build:
+
+```json
+{
+  "as_of": "2026-07-15T08:17:00+00:00",
+  "method": "deterministic_official_evidence",
+  "forecast": {
+    "outcome": "progress_toward_committee_recommendation_likely",
+    "likelihood": {"band": "moderate", "minimum": null, "maximum": null},
+    "confidence": "medium_low",
+    "not_a_fact": true
+  },
+  "facts": [], "inferences": [], "factors": [],
+  "next_milestone": {}, "checks": [], "chronology": [], "warnings": []
+}
+```
+
+Facts, deterministic inferences and forecasts remain separate. Checks use
+`passed`, `failed`, `pending` or `not_applicable` for source availability,
+document roles, procedural transitions, final text and current law. A
+committee recommendation is never treated as law; Council preparation or a
+political agreement is never treated as adoption. Likelihood is deliberately
+qualitative because the rules are not statistically calibrated.
 
 ```json
 {
@@ -583,9 +616,9 @@ The 21 steps are:
 
 | # | Step | Fetcher |
 |---|------|---------|
-| 1 | DIP legislative pipeline (Bund, intraday) | `fetch_dip.py` |
+| 1 | DIP pipeline plus watched official position/document checks (Bund, intraday) | `fetch_dip.py` |
 | 2 | Explicit pending EUR-Lex procedure watches | `fetch_eu_watch.py` |
-| 3 | Persistent watch state + change-only history (only if both official refreshes succeeded) | `tools/update_procedure_watch.py` |
+| 3 | Persistent watch state + change-only history (fresh observations or an explicitly marked persisted fallback) | `tools/update_procedure_watch.py` |
 | 4 | BGBl promulgation events | `fetch_bgbl_events.py` |
 | 5 | GII corpus HEAD | `fetch_gii.py` |
 | 6 | Federal case law from seven official RII feeds | `fetch_rii.py` |
@@ -776,6 +809,13 @@ addressee, access status). Its date/stage can be newer than EUR-Lex while the
 top-level `status` remains `Ongoing`. A register title saying `Political
 agreement` is explicitly non-terminal; only the final-act/OJ review gate can
 end polling.
+
+If EUR-Lex transiently serves a placeholder or an unparsable page, the fetcher
+reuses only the last persisted official observation, marks it
+`source_stale:true` / `retrieval_status:"stale_fallback"`, and lowers analysis
+confidence. It does not fabricate a status transition and does not abort the
+DIP/build/publish cycle. A first observation with no persisted fallback still
+fails closed.
 
 `/amendment-fates` returns all validation records. `procedure_id` filters by
 official DIP id and `validation_id` by the Lexgraph record id; filters can be

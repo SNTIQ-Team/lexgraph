@@ -101,6 +101,33 @@ def test_eu_oj_without_final_review_remains_active(tmp_path: Path) -> None:
     assert current["tracking_state"] == "pending_final_review"
 
 
+def test_stale_eu_fallback_does_not_fabricate_status_transition(
+        tmp_path: Path) -> None:
+    watch = tmp_path / "watch.json"
+    state = tmp_path / "state.json"
+    history = tmp_path / "history.jsonl"
+    _write(watch, {"procedures": {"eu-x": {
+        "id": "eu", "source": "EUR-Lex", "monitor": True}}})
+    fresh = {"id": "eu-x", "procedure": "2026/1/NLE",
+             "status": "Ongoing", "stage": "Council discussions",
+             "terminal": False, "adopted_celexes": [],
+             "official_journal": [], "retrieval_status": "fresh"}
+    update_watch_state(
+        watch, state, history, [], [fresh], "2026-07-15T08:00:00Z")
+    stale = dict(fresh, source_stale=True,
+                 retrieval_status="stale_fallback",
+                 retrieval_warning="temporary placeholder")
+    result = update_watch_state(
+        watch, state, history, [], [stale], "2026-07-15T20:00:00Z")
+
+    assert result["changes"] == []
+    current = result["state"]["procedures"]["eu-x"]
+    assert current["source_stale"] is True
+    assert current["retrieval_status"] == "stale_fallback"
+    assert current["last_observed_at"] == "2026-07-15T08:00:00Z"
+    assert len(history.read_text().splitlines()) == 1
+
+
 def test_missing_source_is_explicit_and_reappearance_is_recorded(
         tmp_path: Path) -> None:
     watch = tmp_path / "watch.json"

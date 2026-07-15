@@ -165,6 +165,12 @@ def parse_council_register(html: str, config: dict,
     inaccessible = bool(re.search(
         r"content of this document is not accessible", text,
         re.IGNORECASE))
+    title_folded = str(title or "").casefold()
+    stage = (
+        "Preparation for a political agreement"
+        if "preparation for a political agreement" in title_folded else
+        "Political agreement"
+        if title_folded.endswith("political agreement") else title)
     return {
         "source": "Council public register",
         "document": document,
@@ -172,8 +178,7 @@ def parse_council_register(html: str, config: dict,
         "date": _iso_eu_date(type_match.group(2) if type_match else
                              date_match.group(0) if date_match else None),
         "title": title,
-        "stage": "Political agreement" if title and
-                 title.casefold().endswith("political agreement") else title,
+        "stage": stage,
         "document_type": (" ".join(type_match.group(1).split()).upper()
                           if type_match else None),
         "addressee": (" ".join(addressee_match.group(1).split())
@@ -262,7 +267,14 @@ def merge_council_development(row: dict,
         "documents": [development.get("document")]
                      if development.get("document") else [],
     }
-    row["events"] = [*(row.get("events") or []), event]
+    # A checked, corrected seed for the same Council document replaces the
+    # older representation instead of manufacturing a duplicate event.
+    row["events"] = [
+        old for old in row.get("events") or []
+        if not (development.get("document") and
+                old.get("document") == development.get("document") and
+                old.get("source") == development.get("source"))
+    ] + [event]
     row["events"].sort(key=lambda item: (
         str(item.get("date") or ""), str(item.get("title") or "")))
     latest = row["events"][-1]
@@ -338,6 +350,66 @@ def fetch_watch(http: Http, watch_key: str, config: dict,
     return apply_final_review_gate(row, config, journal)
 
 
+def stale_fallback(watch_key: str, config: dict, previous: dict | None,
+                   fetched_at: str, error: Exception) -> dict:
+    """Preserve the last official observation after a transient fetch failure.
+
+    The fallback is intentionally *not* a new official observation.  Status,
+    stage and evidence are copied unchanged, while explicit stale metadata lets
+    the exporter/UI lower confidence without inventing a transition.
+    """
+    if not previous:
+        raise error
+    row = {
+        "id": watch_key,
+        "procedure": previous.get("procedure") or config.get("procedure"),
+        "proposal_celex": previous.get("proposal_celex") or
+                          config.get("celex_proposal"),
+        "title": previous.get("title") or config.get("procedure") or watch_key,
+        "status": previous.get("status") or "?",
+        "stage": previous.get("stage") or previous.get("status") or "?",
+        "date": previous.get("date"),
+        "updated": previous.get("updated"),
+        "url": previous.get("url") or config.get("official_url"),
+        "events": previous.get("events") or [],
+        "council_development": previous.get("council_development"),
+        "adopted_celexes": previous.get("adopted_celexes") or [],
+        "official_journal": previous.get("official_journal") or [],
+        "publication_detected": bool(previous.get("publication_detected")),
+        "awaiting_final_review": bool(previous.get("awaiting_final_review")),
+        "final_text_review": previous.get("final_text_review"),
+        "terminal": bool(previous.get("terminal")),
+        "fetched_at": fetched_at,
+        "retrieval_status": "stale_fallback",
+        "source_stale": True,
+        "retrieval_warning": (
+            "EUR-Lex refresh failed; reusing the last persisted official "
+            f"observation ({type(error).__name__})."),
+    }
+    seed = _council_seed(config, fetched_at, "verified_seed")
+    previous_council = previous.get("council_development") or {}
+    if seed and str(seed.get("date") or "") >= str(
+            previous_council.get("date") or ""):
+        row = merge_council_development(row, seed)
+        # merge_council_development correctly refuses to infer terminality.
+        row["source_stale"] = True
+        row["retrieval_status"] = "stale_fallback"
+    return row
+
+
+def fetch_watch_resilient(http: Http, watch_key: str, config: dict,
+                          fetched_at: str,
+                          previous: dict | None) -> dict:
+    try:
+        row = fetch_watch(http, watch_key, config, fetched_at)
+    except (requests.RequestException, ValueError, KeyError) as exc:
+        return stale_fallback(watch_key, config, previous, fetched_at, exc)
+    row["retrieval_status"] = "fresh"
+    row["source_stale"] = False
+    row["retrieval_warning"] = None
+    return row
+
+
 def active_eu_watches(watchlist: dict, state: dict | None) -> tuple[
         list[tuple[str, dict]], list[str]]:
     """Return only EU watches that still require an official-source poll.
@@ -372,13 +444,16 @@ def main() -> int:
     watches, skipped = active_eu_watches(payload, state)
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     http = Http(delay=0.6)
-    rows = [fetch_watch(http, str(key), config, fetched_at)
-            for key, config in watches]
+    state_rows = (state or {}).get("procedures") or {}
+    rows = [fetch_watch_resilient(
+        http, str(key), config, fetched_at, state_rows.get(str(key)))
+        for key, config in watches]
     out = snapshot_dir("eu_watch")
     write_jsonl(out / "procedures.jsonl", rows)
     for row in rows:
         print(f"  {row['procedure']}: {row['status']} / {row['stage']}"
-              f" — terminal={row['terminal']}")
+              f" — terminal={row['terminal']}"
+              f" stale={bool(row.get('source_stale'))}")
     print(f"eu-watch: {len(rows)} polled / {len(skipped)} archived -> {out}")
     return 0
 

@@ -12,6 +12,7 @@ from fetch_eu_watch import (  # noqa: E402
     active_eu_watches,
     apply_final_review_gate,
     fetch_council_development,
+    fetch_watch_resilient,
     merge_council_development,
     parse_council_register,
     parse_eurlex_procedure,
@@ -168,6 +169,20 @@ def test_council_register_is_newer_evidence_but_not_enactment() -> None:
     assert merged["events"][-1]["document"] == "ST 11375/26"
 
 
+def test_council_preparation_is_not_upgraded_to_completed_agreement() -> None:
+    config = {
+        "council_register_document": "ST 11375/26",
+        "council_register_url": "https://example.test/council-register",
+    }
+    html = COUNCIL_HTML.replace(
+        " - Political agreement</p>",
+        " - Preparation for a political agreement</p>")
+    development = parse_council_register(
+        html, config, "2026-07-15T04:00:00Z")
+    assert development["stage"] == "Preparation for a political agreement"
+    assert development["terminal"] is False
+
+
 def test_council_register_browser_block_preserves_verified_seed() -> None:
     class BlockedResponse:
         def raise_for_status(self) -> None:
@@ -191,3 +206,59 @@ def test_council_register_browser_block_preserves_verified_seed() -> None:
     assert development["retrieval_status"] == "fetch_unavailable"
     assert development["stage"] == "Political agreement"
     assert development["terminal"] is False
+
+
+def test_transient_eurlex_parse_failure_reuses_previous_without_transition() -> None:
+    class PlaceholderResponse:
+        text = "<html><body>temporary placeholder</body></html>"
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class PlaceholderHttp:
+        def get(self, _url: str, **_kwargs):
+            return PlaceholderResponse()
+
+    previous = {
+        "procedure": "2026/0186/NLE", "title": "Tracked proposal",
+        "status": "Ongoing", "stage": "Discussions within the Council",
+        "date": "2026-06-26", "url": "https://example.test/procedure",
+        "events": [{"date": "2026-06-26", "title": "Council discussion"}],
+        "adopted_celexes": [], "official_journal": [], "terminal": False,
+        "last_observed_at": "2026-07-14T20:17:00Z",
+    }
+    row = fetch_watch_resilient(
+        PlaceholderHttp(), "eu-x",
+        {"official_url": "https://example.test/procedure",
+         "procedure": "2026/0186/NLE", "celex_proposal": "52026PC0345",
+         "council_register_document": "ST 11375/26",
+         "council_register_url": "https://example.test/register",
+         "council_register_seed": {
+             "date": "2026-07-10",
+             "stage": "Preparation for a political agreement",
+             "meeting_date": "2026-07-10",
+         }},
+        "2026-07-15T08:17:00Z", previous)
+
+    assert row["status"] == previous["status"]
+    assert row["stage"] == "Preparation for a political agreement"
+    assert row["source_stale"] is True
+    assert row["retrieval_status"] == "stale_fallback"
+    assert row["terminal"] is False
+    assert row["council_development"]["meeting_date"] == "2026-07-10"
+    again = fetch_watch_resilient(
+        PlaceholderHttp(), "eu-x",
+        {"official_url": "https://example.test/procedure",
+         "procedure": "2026/0186/NLE", "celex_proposal": "52026PC0345",
+         "council_register_document": "ST 11375/26",
+         "council_register_url": "https://example.test/register",
+         "council_register_seed": {
+             "date": "2026-07-10",
+             "stage": "Preparation for a political agreement",
+             "meeting_date": "2026-07-10",
+         }},
+        "2026-07-15T20:17:00Z", row)
+    council_events = [event for event in again["events"]
+                      if event.get("document") == "ST 11375/26"]
+    assert len(council_events) == 1
+    assert again["events"] == row["events"]
