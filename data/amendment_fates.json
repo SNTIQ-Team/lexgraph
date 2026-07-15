@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "records": [
+    {
+      "id": "stag6-untaetigkeitsklage-12-months",
+      "procedure_id": "322125",
+      "jurisdiction": "DE",
+      "title": "Vorgeschlagene Zwölfmonatsfrist für die Untätigkeitsklage im Staatsangehörigkeitsrecht",
+      "claim": "Der in der Stellungnahme des Bundesrates vorgeschlagene § 43 StAG mit einer vorübergehenden Zwölfmonatsfrist wurde nicht Gesetz.",
+      "result": "not_taken_up",
+      "conclusion": "Der Bundestag nahm den Regierungsentwurf in der Fassung der Beschlussempfehlung des Innenausschusses an. Diese Ausschussfassung enthielt den vom Bundesrat vorgeschlagenen § 43 StAG nicht. Das verkündete Gesetz enthält ihn ebenfalls nicht; § 75 VwGO nennt weiterhin grundsätzlich drei Monate als frühesten Zeitpunkt für die Untätigkeitsklage. Das ist eine Zulässigkeitsschwelle, keine Garantie einer Sachentscheidung binnen drei Monaten.",
+      "review_method": "Die Rollen und Übergänge der Dokumente sind anhand der verlinkten amtlichen Dokumente redaktionell geprüft. Beim Daten-Build werden zusätzlich die zwei Aussagen zum aktuell konsolidierten StAG und zur VwGO mechanisch gegen den Lexgraph-Korpus geprüft.",
+      "document_chain": [
+        {
+          "role": "government_draft",
+          "document": "BT-Drs. 21/537",
+          "date": "2025-06-24",
+          "disposition": "introduced",
+          "finding": "Der Regierungsentwurf sah im Staatsangehörigkeitsgesetz die Aufhebung von § 10 Absatz 3 vor; eine Änderung des § 75 VwGO oder ein § 43 StAG waren nicht Teil dieses Entwurfs.",
+          "url": "https://dserver.bundestag.de/btd/21/005/2100537.pdf"
+        },
+        {
+          "role": "bundesrat_recommendation",
+          "document": "BT-Drs. 21/1373",
+          "date": "2025-09-04",
+          "disposition": "recommended_not_adopted",
+          "finding": "Die wiedergegebene Stellungnahme des Bundesrates empfahl einen befristeten § 43 StAG: abweichend von § 75 Satz 2 VwGO sollte die Klage grundsätzlich nicht vor Ablauf von zwölf Monaten erhoben werden können. Die Bundesregierung sagte lediglich eine Prüfung im weiteren Verfahren zu.",
+          "url": "https://dserver.bundestag.de/btd/21/013/2101373.pdf"
+        },
+        {
+          "role": "committee_recommendation",
+          "document": "BT-Drs. 21/1634",
+          "date": "2025-10-15",
+          "disposition": "omitted",
+          "finding": "Die Beschlussempfehlung des Innenausschusses enthielt den vorgeschlagenen § 43 StAG und die Zwölfmonatsfrist nicht. Sie ist eine Beschlussempfehlung und nicht selbst das verkündete Gesetz.",
+          "url": "https://dserver.bundestag.de/btd/21/016/2101634.pdf"
+        },
+        {
+          "role": "plenary_resolution",
+          "document": "Plenarprotokoll 21/30 und namentliche Abstimmung",
+          "date": "2025-10-16",
+          "disposition": "adopted_in_committee_version",
+          "finding": "Der Bundestag nahm den Gesetzentwurf in der Ausschussfassung an; die Schlussabstimmung endete mit 450 Ja-, 134 Nein-Stimmen und zwei Enthaltungen.",
+          "url": "https://dipbt.bundestag.de/dip21/btp/21/21030.pdf",
+          "vote_url": "https://www.bundestag.de/parlament/plenum/abstimmung/abstimmung?id=962"
+        },
+        {
+          "role": "promulgated_law",
+          "document": "BGBl. 2025 I Nr. 256",
+          "date": "2025-10-29",
+          "disposition": "promulgated_without_proposal",
+          "finding": "Das verkündete Gesetz enthält keinen § 43 StAG und keine besondere Zwölfmonatsfrist für die Untätigkeitsklage.",
+          "url": "https://www.recht.bund.de/bgbl/1/2025/256/regelungstext.pdf?__blob=publicationFile&v=2"
+        }
+      ],
+      "current_law_checks": [
+        {
+          "type": "norm_absent",
+          "act_id": "fed_rustag",
+          "norm": "§ 43",
+          "meaning": "Im aktuell konsolidierten Staatsangehörigkeitsgesetz existiert kein § 43."
+        },
+        {
+          "type": "norm_text_contains",
+          "act_id": "fed_vwgo",
+          "norm": "§ 75",
+          "text": "nicht vor Ablauf von drei Monaten",
+          "meaning": "§ 75 Satz 2 VwGO enthält weiterhin den allgemeinen Dreimonatsschwellenwert."
+        }
+      ],
+      "current_sources": [
+        {
+          "label": "§ 75 VwGO",
+          "url": "https://www.gesetze-im-internet.de/vwgo/__75.html"
+        },
+        {
+          "label": "StAG, aktuelle Gesamtausgabe",
+          "url": "https://www.gesetze-im-internet.de/stag/BJNR005830913.html"
+        }
+      ],
+      "case_law_context": [
+        {
+          "court": "VG Weimar",
+          "date": "2024-06-11",
+          "docket": "1 K 135/24 We",
+          "finding": "Eine strukturelle Überlastung, der organisatorisch nicht ausreichend begegnet wurde, war in diesem Fall kein zureichender Grund im Sinne des § 75 VwGO.",
+          "limit": "Einzelfallentscheidung; daraus folgt weder eine allgemeine Erfolgsgarantie noch eine feste Verfahrensdauer.",
+          "url": "https://landesrecht.thueringen.de/bsth/document/NJRE001102535"
+        },
+        {
+          "court": "BayVGH",
+          "date": "2025-02-24",
+          "docket": "5 C 25.41",
+          "finding": "Der BayVGH hielt in diesem Verfahren eine Frist von 18 Monaten für angemessen.",
+          "limit": "Keine gesetzliche oder bundesweit allgemeine Mindestwartefrist; die Angemessenheit ist fallbezogen.",
+          "url": "https://www.gesetze-bayern.de/Content/Document/Y-300-Z-BECKRS-B-2025-N-4277"
+        },
+        {
+          "court": "Hessischer VGH",
+          "finding": "Das hessische zweistufige Behördenverfahren ist für § 75 VwGO als ein Verwaltungsverfahren zu betrachten; maßgeblich ist grundsätzlich der Antragseingang bei der unteren Behörde.",
+          "limit": "Die Quelle belegt keine generelle Pflicht, sich anwaltlich vertreten zu lassen.",
+          "url": "https://www.rv.hessenrecht.hessen.de/bshe/document/LARE240000330"
+        }
+      ]
+    }
+  ]
+}

@@ -10,6 +10,8 @@ Outputs:
     web/data/acts/<id>.json    per-act article: head, patches, versions, norms
     web/data/decisions.json    merged manual/RII decisions, newest first
     web/data/eu_index.json     in-force EU breadth metadata
+    web/data/watched_procedures.json  persistent DIP/EUR-Lex watch state
+    web/data/amendment_fates.json     reviewed document-chain validations
     web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
@@ -45,6 +47,9 @@ HUBS = {"WIRD_GESETZ", "BGBl (verkündet)", "Gesetzgebungsverfahren",
 # archived states can be tied unambiguously to one official FFN event.
 BY_DIFF_LEDGER = ROOT / "data" / "by_diffs.jsonl"
 PROCEDURE_WATCHLIST = ROOT / "data" / "procedure_watchlist.json"
+PROCEDURE_WATCH_STATE = ROOT / "data" / "procedure_watch_state.json"
+PROCEDURE_WATCH_HISTORY = ROOT / "data" / "procedure_watch_history.jsonl"
+AMENDMENT_FATES = ROOT / "data" / "amendment_fates.json"
 
 
 def _update_by_diff_ledger() -> None:
@@ -579,6 +584,9 @@ def _procedure_row(vg: dict, watchlist: dict[str, dict]) -> dict:
                           if isinstance(item, dict) and item.get("name")})
     row = {
         "id": procedure_id,
+        "source": "DIP",
+        "jurisdiction": "DE",
+        "procedure": procedure_id,
         "title": str(vg.get("titel") or ""),
         "date": vg.get("datum"),
         "updated": vg.get("aktualisiert"),
@@ -597,6 +605,170 @@ def _procedure_row(vg: dict, watchlist: dict[str, dict]) -> dict:
     return row
 
 
+def _eu_procedure_row(source: dict,
+                      watchlist: dict[str, dict]) -> dict:
+    """Project an official EUR-Lex watch snapshot into hierarchy/search.
+
+    Unlike the broad EU instrument index, these rows are pending procedures.
+    They therefore retain their official stage and never imply that a proposal
+    is already law.
+    """
+    procedure_id = str(source.get("id") or source.get("procedure") or "")
+    watch = watchlist.get(procedure_id)
+    row = {
+        "id": procedure_id,
+        "source": "EUR-Lex",
+        "jurisdiction": "EU",
+        "procedure": source.get("procedure"),
+        "proposal_celex": source.get("proposal_celex"),
+        "title": str(source.get("title") or ""),
+        "date": source.get("date"),
+        "updated": source.get("updated") or source.get("fetched_at"),
+        "status": source.get("status") or "?",
+        "stage": source.get("stage") or source.get("status") or "?",
+        "gesta": None,
+        "topics": [],
+        "initiators": ([str(watch.get("initiated_by"))]
+                       if watch and watch.get("initiated_by") else []),
+        "descriptors": [],
+        "summary": str((watch or {}).get("scope") or ""),
+        "events": source.get("events") or [],
+        "adopted_celexes": source.get("adopted_celexes") or [],
+        "official_journal": source.get("official_journal") or [],
+        "publication_detected": bool(source.get("publication_detected")),
+        "awaiting_final_review": bool(source.get("awaiting_final_review")),
+        "final_text_review": source.get("final_text_review"),
+        "terminal": bool(source.get("terminal")),
+        "url": source.get("url") or (watch or {}).get("official_url"),
+        "watched": watch is not None,
+    }
+    if watch is not None:
+        row["watch"] = watch
+    return row
+
+
+def _pipeline_rows(hierarchy: dict) -> list[dict]:
+    """Flatten the two official procedure lanes without schema assumptions."""
+    rows: list[dict] = []
+    for jurisdiction in ("bund", "eu"):
+        pipeline = (hierarchy.get(jurisdiction) or {}).get("pipeline") or {}
+        groups = pipeline.values() if isinstance(pipeline, dict) else [pipeline]
+        rows.extend(row for group in groups if isinstance(group, list)
+                    for row in group if isinstance(row, dict))
+    return rows
+
+
+def _read_json_object(path: Path, fallback: dict) -> dict:
+    if not path.is_file():
+        return fallback
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return fallback
+    return value if isinstance(value, dict) else fallback
+
+
+def build_watched_procedures(hierarchy: dict) -> dict:
+    """Merge persistent observations, configuration and change history.
+
+    ``update_procedure_watch.py`` owns state transitions.  This exporter only
+    presents that ledger.  A fallback from the latest hierarchy snapshot keeps
+    local builds usable before the updater has run for the first time.
+    """
+    configs = _procedure_watchlist()
+    state = _read_json_object(
+        PROCEDURE_WATCH_STATE, {"schema_version": 1, "procedures": {}})
+    state_rows = state.get("procedures") or {}
+    official = {str(row.get("id") or ""): row
+                for row in _pipeline_rows(hierarchy) if row.get("id")}
+    history_rows = (list(read_jsonl(PROCEDURE_WATCH_HISTORY))
+                    if PROCEDURE_WATCH_HISTORY.is_file() else [])
+    history: dict[str, list[dict]] = {}
+    for event in history_rows:
+        history.setdefault(str(event.get("id") or ""), []).append(event)
+
+    terminal_statuses = {
+        "Verkündet", "Abgelehnt", "Für erledigt erklärt",
+        "Einbringung abgelehnt",
+    }
+    procedures: list[dict] = []
+    for key, config in configs.items():
+        observed = state_rows.get(key)
+        if not isinstance(observed, dict):
+            source = official.get(key) or {}
+            terminal = (bool(source.get("terminal")) or
+                        source.get("status") in terminal_statuses)
+            monitor = bool(config.get("monitor", True))
+            active = monitor and not terminal
+            awaiting_review = bool(source.get("awaiting_final_review"))
+            observed = {
+                "id": key,
+                "watch_id": config.get("id") or key,
+                "source": config.get("source") or source.get("source") or "DIP",
+                "jurisdiction": config.get("jurisdiction") or
+                                source.get("jurisdiction"),
+                "procedure": source.get("procedure") or
+                             config.get("procedure") or key,
+                "gesta": source.get("gesta"),
+                "title": source.get("title") or
+                         config.get("procedure") or key,
+                "status": source.get("status") or
+                          "Not found in latest official snapshot",
+                "stage": source.get("stage") or source.get("status") or
+                         "source_missing",
+                "date": source.get("date"),
+                "updated": source.get("updated"),
+                "url": source.get("url") or config.get("official_url"),
+                "terminal": terminal,
+                "active": active,
+                "publication_detected": bool(source.get("publication_detected")),
+                "awaiting_final_review": awaiting_review,
+                "final_text_review": source.get("final_text_review"),
+                "tracking_state": ("pending_final_review"
+                                   if active and awaiting_review else
+                                   "active" if active else
+                                   "terminal" if terminal else "archived"),
+            }
+        row = dict(observed)
+        # Reviewed watch metadata is deliberately explicit at the API layer:
+        # callers should not need to reverse-engineer aliases or scope from
+        # search results.
+        row.update({
+            "queries": list(config.get("queries") or []),
+            "scope": config.get("scope"),
+            "scope_source": config.get("scope_source"),
+            "draft_only": bool(config.get("draft_only", False)),
+            "cutoff": config.get("cutoff"),
+            "entry_date_is_criterion": config.get("entry_date_is_criterion"),
+            "initiated_by": config.get("initiated_by"),
+            "decided_by": config.get("decided_by"),
+            "proposal_url": config.get("proposal_url"),
+            "council_documents": list(config.get("council_documents") or []),
+            "relevant_norms": list(config.get("relevant_norms") or []),
+            "validation_ids": list(config.get("validation_ids") or []),
+            "terminal_rule": config.get("terminal_rule"),
+            "official_url": config.get("official_url") or row.get("url"),
+            "history": sorted(history.get(key, []),
+                              key=lambda event: event.get("observed_at") or ""),
+        })
+        procedures.append(row)
+
+    procedures.sort(key=lambda row: str(row.get("id") or ""))
+    procedures.sort(key=lambda row: str(row.get("date") or ""),
+                    reverse=True)
+    procedures.sort(key=lambda row: (0 if row.get("active") else
+                                     1 if row.get("terminal") else 2))
+    return {
+        "schema_version": 1,
+        "checked_at": state.get("checked_at"),
+        "active_count": sum(bool(row.get("active")) for row in procedures),
+        "terminal_count": sum(bool(row.get("terminal")) for row in procedures),
+        "archived_count": sum(not row.get("active") and
+                              not row.get("terminal") for row in procedures),
+        "procedures": procedures,
+    }
+
+
 def build_hierarchy(wiki_idx: list[dict]) -> dict:
     vorgaenge = load("dip", "vorgaenge.jsonl")
     watchlist = _procedure_watchlist()
@@ -605,6 +777,11 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
         status = vg.get("beratungsstand") or "?"
         by_stand.setdefault(status, []).append(
             _procedure_row(vg, watchlist))
+    eu_by_status: dict[str, list] = {}
+    for source in load("eu_watch", "procedures.jsonl"):
+        row = _eu_procedure_row(source, watchlist)
+        status = str(row.get("status") or "?")
+        eu_by_status.setdefault(status, []).append(row)
     bills = load("bay_landtag", "bills.jsonl")
     by_status: dict[str, list] = {}
     for b in bills:
@@ -657,6 +834,14 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
                 "other": [i for i in eu_instruments
                           if i["kind"] not in {"directive", "regulation"}],
             },
+            # Explicitly watched pending EU procedures.  These remain
+            # separate from instruments in force and preserve the official
+            # EUR-Lex stage verbatim.
+            "pipeline": {
+                key: sorted(rows, key=lambda row: row.get("date") or "",
+                            reverse=True)
+                for key, rows in sorted(eu_by_status.items())
+            },
         },
         "bund": {
             "acts": bund_acts,
@@ -671,6 +856,92 @@ def build_hierarchy(wiki_idx: list[dict]) -> dict:
             "pipeline": {k: v for k, v in sorted(by_status.items())},
         },
         "laender": {k: v for k, v in sorted(laender.items())},
+    }
+
+
+# ------------------------------------------------------- amendment fates
+def _norm_key(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+
+
+def _check_current_law(details: dict[str, dict], check: dict) -> dict:
+    """Evaluate one deliberately small, auditable current-law assertion."""
+    act_id = str(check.get("act_id") or "")
+    designator = _norm_key(check.get("norm"))
+    act = details.get(act_id)
+    result = dict(check)
+    if not act:
+        result.update({"passed": False, "reason": "act_not_in_corpus"})
+        return result
+    norm = next((row for row in act.get("norms") or []
+                 if _norm_key(row.get("enbez")) == designator), None)
+    check_type = check.get("type")
+    if check_type == "norm_absent":
+        result.update({
+            "passed": norm is None,
+            "reason": "norm_absent" if norm is None else "norm_present",
+            "observed_norm": norm.get("enbez") if norm else None,
+        })
+        return result
+    if check_type == "norm_text_contains":
+        if norm is None:
+            result.update({"passed": False, "reason": "norm_not_found"})
+            return result
+        needle = _norm_key(check.get("text"))
+        text = " ".join(str(norm.get("text") or "").split())
+        folded = text.casefold()
+        passed = bool(needle) and needle in folded
+        excerpt = None
+        if passed:
+            start = max(0, folded.index(needle) - 90)
+            end = min(len(text), folded.index(needle) + len(needle) + 140)
+            excerpt = text[start:end]
+        result.update({
+            "passed": passed,
+            "reason": "text_found" if passed else "text_not_found",
+            "observed_norm": norm.get("enbez"),
+            "evidence_excerpt": excerpt,
+        })
+        return result
+    result.update({"passed": False, "reason": "unknown_check_type"})
+    return result
+
+
+def build_amendment_fates(details: dict[str, dict],
+                          checked_at: str | None = None) -> dict:
+    """Publish reviewed document chains plus mechanical current-law checks.
+
+    The exporter does *not* pretend to derive the parliamentary document
+    chain from current statutory text.  Those roles are curated with official
+    links; only the declared ``current_law_checks`` are machine-evaluated.
+    """
+    source = _read_json_object(
+        AMENDMENT_FATES, {"schema_version": 1, "records": []})
+    timestamp = checked_at or datetime.now(timezone.utc).isoformat(
+        timespec="seconds")
+    records: list[dict] = []
+    for original in source.get("records") or []:
+        if not isinstance(original, dict):
+            continue
+        row = dict(original)
+        checks = [_check_current_law(details, check)
+                  for check in original.get("current_law_checks") or []
+                  if isinstance(check, dict)]
+        row["validation"] = {
+            "checked_at": timestamp,
+            "method": "current Lexgraph corpus checks",
+            "passed": bool(checks) and all(check.get("passed")
+                                           for check in checks),
+            "checks": checks,
+        }
+        records.append(row)
+    return {
+        "schema_version": int(source.get("schema_version") or 1),
+        "built_at": timestamp,
+        "total": len(records),
+        "validated": sum(bool((row.get("validation") or {}).get("passed"))
+                         for row in records),
+        "records": records,
     }
 
 
@@ -860,6 +1131,9 @@ def main() -> int:
     git = build_git()
     decisions = load_decisions()
     eu_index = build_eu_index()
+    built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    watched = build_watched_procedures(hierarchy)
+    amendment_fates = build_amendment_fates(details, built_at)
     search_counts = build_search_database(
         details, WEB / "search.sqlite", ROOT / "data" / "search_synonyms.json")
 
@@ -869,19 +1143,25 @@ def main() -> int:
         sts[p_["status"]] = sts.get(p_["status"], 0) + 1
     bills = load("bay_landtag", "bills.jsonl")
     watched_procedures = [
-        {key: row.get(key) for key in
-         ("id", "title", "status", "date", "updated", "gesta", "url")}
-        for group in hierarchy["bund"]["pipeline"].values()
-        for row in group if row.get("watched")
+        {key: row.get(key) for key in (
+            "id", "watch_id", "source", "jurisdiction", "procedure",
+            "title", "status", "stage", "date", "updated", "gesta", "url",
+            "active", "terminal", "tracking_state", "last_checked",
+            "last_changed", "validation_ids",
+        )}
+        for row in watched["procedures"]
     ]
     summary = {
-        "built_at": datetime.now(timezone.utc).isoformat(
-            timespec="seconds"),
+        "built_at": built_at,
         "acts_fed": sum(1 for a in wiki_idx if a["juris"] == "DE"),
         "acts_by": sum(1 for a in wiki_idx if a["juris"] == "DE-BY"),
         "patches": sts,
         "vorgaenge": len(load("dip", "vorgaenge.jsonl")),
         "watched_procedures": watched_procedures,
+        "watched_active": watched["active_count"],
+        "watched_terminal": watched["terminal_count"],
+        "amendment_fates": amendment_fates["total"],
+        "amendment_fates_validated": amendment_fates["validated"],
         "bay_bills": len(bills),
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),
@@ -906,6 +1186,8 @@ def main() -> int:
         "feed.json": dump("feed.json", feed),
         "wiki.json": dump("wiki.json", wiki_idx),
         "decisions.json": dump("decisions.json", decisions),
+        "watched_procedures.json": dump("watched_procedures.json", watched),
+        "amendment_fates.json": dump("amendment_fates.json", amendment_fates),
         "hierarchy.json": dump("hierarchy.json", hierarchy),
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),

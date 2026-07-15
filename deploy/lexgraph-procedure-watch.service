@@ -1,0 +1,29 @@
+[Unit]
+Description=Lexgraph watched-procedure refresh and API publish
+Documentation=https://github.com/SNTIQ-Team/lexgraph
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=1h
+StartLimitBurst=2
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/sntiq-lexgraph
+EnvironmentFile=-/etc/sntiq/lexgraph.env
+ExecStart=/srv/sntiq-lexgraph/deploy/refresh-procedure-watch.sh
+TimeoutStartSec=35min
+
+# Keep this status-only job subordinate to the public API on the 1 GB VPS.
+Nice=15
+CPUWeight=20
+CPUQuota=60%
+IOWeight=20
+IOSchedulingClass=idle
+MemoryHigh=300M
+MemoryMax=420M
+MemorySwapMax=128M
+TasksMax=64
+OOMPolicy=stop
+
+[Install]
+WantedBy=multi-user.target

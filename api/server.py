@@ -29,7 +29,8 @@ SERVICE_INDEX = {
         "/health", "/version", "/stats", "/feed",
         "/acts", "/acts/{id}", "/acts/{id}/archive",
         "/acts/{id}/markdown", "/decisions", "/decisions/{id}",
-        "/git", "/graph", "/hierarchy", "/eu-index", "/search", "/digest",
+        "/git", "/graph", "/hierarchy", "/eu-index",
+        "/procedures/watched", "/amendment-fates", "/search", "/digest",
     ],
 }
 
@@ -104,8 +105,8 @@ INDEX_HTML = """<!doctype html>
     <img src="favicon.svg" width="40" height="40" alt="SNTIQ mark">
     <h1>Lexgraph API</h1>
   </div>
-  <p class="tagline">German &amp; EU legislation as event-sourced git —
-     every law a repository, every amendment a commit.</p>
+  <p class="tagline">German &amp; EU law as a temporal, searchable legal graph —
+     current texts, amendment history and official procedure stages.</p>
   <table>
     <tr><td class="ep"><a href="health">/health</a></td><td class="what">liveness + data-plane check</td></tr>
     <tr><td class="ep"><a href="version">/version</a></td><td class="what">dataset + build timestamp</td></tr>
@@ -121,6 +122,8 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="graph">/graph</a></td><td class="what">the QFS arena export</td></tr>
     <tr><td class="ep"><a href="hierarchy">/hierarchy</a></td><td class="what">jurisdiction tree (EU / Bund / Bayern / Länder)</td></tr>
     <tr><td class="ep"><a href="eu-index">/eu-index</a></td><td class="what">all in-force EU directives + basic regulations</td></tr>
+    <tr><td class="ep"><a href="procedures/watched">/procedures/watched</a></td><td class="what">tracked DIP + EUR-Lex procedures and status history</td></tr>
+    <tr><td class="ep"><a href="amendment-fates">/amendment-fates</a></td><td class="what">reviewed amendment chains + current-law checks</td></tr>
     <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>
   </table>

@@ -1,4 +1,4 @@
-"""Lexgraph — legislation API (event-sourced git over German law).
+"""Lexgraph — temporal legislation and procedure API.
 
 Serves the pre-built web data plane (`web/data/*.json`) as a small, honest
 REST API. It does NOT recompute anything: `tools/build_web_data.py` is the
@@ -20,6 +20,8 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
   GET /eu-index               all in-force EU directives + basic regulations
+  GET /procedures/watched     persistent DIP/EUR-Lex watch state + history
+  GET /amendment-fates        reviewed amendment document-chain validations
   GET /search?q=              ranked full-text search over acts + current norms
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
@@ -265,6 +267,46 @@ def eu_index(q: str | None = Query(None, min_length=1),
     return {"built_at": data["built_at"], "total": data["total"],
             "matched": len(rows), "offset": offset, "limit": limit,
             "instruments": rows[offset:offset + limit]}
+
+
+@app.get("/procedures/watched")
+def watched_procedures():
+    """Persistent tracked procedures, including immutable terminal history.
+
+    DIP and EUR-Lex stages are reported as observed.  In particular, an EU
+    political agreement remains active. Even OJ publication stays active as
+    ``pending_final_review`` until the final Article 2 has been compared with
+    the tracked proposal and that review is persisted.
+    """
+    return _cached(_load("watched_procedures"))
+
+
+@app.get("/amendment-fates")
+def amendment_fates(
+        procedure_id: str | None = Query(
+            None, description="official DIP procedure id"),
+        validation_id: str | None = Query(
+            None, description="Lexgraph validation record id"),
+):
+    """Reviewed parliamentary document chains and current-law checks."""
+    data = _load("amendment_fates")
+    if not procedure_id and not validation_id:
+        return _cached(data)
+    rows = data.get("records") or []
+    if procedure_id:
+        rows = [row for row in rows
+                if str(row.get("procedure_id")) == procedure_id]
+    if validation_id:
+        rows = [row for row in rows
+                if str(row.get("id")) == validation_id]
+    return _cached({
+        "schema_version": data.get("schema_version"),
+        "built_at": data.get("built_at"),
+        "total": len(rows),
+        "validated": sum(bool((row.get("validation") or {}).get("passed"))
+                         for row in rows),
+        "records": rows,
+    })
 
 
 @app.get("/search")

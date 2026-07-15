@@ -1,10 +1,9 @@
 # Lexgraph API & Data Interface
 
-Lexgraph models German legislation as **event-sourced git**: every legislative
-change — federal (Bund), Bavarian (Bayern), EU, and the other Länder — is a
-commit on a jurisdiction lane, HEAD is the consolidated text in force, pending
-bills are open branches, and an EU directive transposed into German law is a
-*merge*.
+Lexgraph models German and EU law as a temporal legal graph: consolidated text,
+dated amendments, official legislative stages, court decisions and explicit
+links between them. The optional `git.json` projection is one visualization of
+that history; it is not the product name or a claim about legal hierarchy.
 
 Lexgraph's "API" is four things:
 
@@ -52,6 +51,8 @@ Files written:
 | `eu_index.json` | In-force EU directives + basic regulations, metadata only. |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
 | `hierarchy.json` | Competence-aware legal layers (EU / Bund / Bayern / Länder). |
+| `watched_procedures.json` | Persistent DIP/EUR-Lex watch state and change history. |
+| `amendment_fates.json` | Reviewed document chains plus mechanical current-law checks. |
 | `graph.json` | The QFS arena export (nodes / edges / beliefs / ticks / worlds). |
 | `git.json` | The commit-graph of lawmaking. |
 
@@ -70,8 +71,13 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
   "patches": { "proposed": 607, "adopted": 9, "rejected": 23, "published": 841, "not_merged": 4 },
   "vorgaenge": 362,
   "watched_procedures": [
-    { "id": "329468", "status": "Überwiesen", "gesta": "G013", "updated": "2026-02-12T10:57:00+01:00", "url": "https://dip.bundestag.de/vorgang/_/329468", "…": "…" }
+    { "id": "329468", "source": "DIP", "status": "Überwiesen", "active": true, "terminal": false, "…": "…" },
+    { "id": "eu-2026-0186-nle", "source": "EUR-Lex", "status": "Ongoing", "active": true, "terminal": false, "…": "…" }
   ],
+  "watched_active": 2,
+  "watched_terminal": 1,
+  "amendment_fates": 1,
+  "amendment_fates_validated": 1,
   "bay_bills": 123,
   "bay_verkuendet": 60,
   "eu_instruments": 47,
@@ -90,7 +96,9 @@ ISO `YYYY-MM-DD`; the frontend formats to `dd.mm.yyyy`.
 | `acts_fed` / `acts_by` | Federal / Bavarian acts in the index. |
 | `patches` | Federal patch-command counts by status ladder. |
 | `vorgaenge` | DIP legislative procedures. |
-| `watched_procedures` | Data-driven watchlist rows with the latest official DIP stage; an entry can still be a non-enacted bill. |
+| `watched_procedures` | Compact rows from the persistent DIP/EUR-Lex watch ledger. An active entry can still be a non-enacted proposal. |
+| `watched_active` / `watched_terminal` | Active polling set / terminal records retained as an archive. |
+| `amendment_fates` / `amendment_fates_validated` | Reviewed document-chain records / records whose declared current-law checks passed. |
 | `bay_bills` / `bay_verkuendet` | Bavarian Landtag bills / of those, promulgated. |
 | `eu_instruments` / `transpositions` | Curated EU instruments / DEU transposition mentions in the deep layer. |
 | `eu_index_total` | Metadata rows in the EU breadth index; `0` until it has been fetched. |
@@ -419,7 +427,8 @@ entry is subordinate to the preceding section.
   "eu": {
     "instruments": [ { "celex": "32001L0055", "kind": "directive", "title": "…", "in_force": true, "geas": true, "deu_mnes": 3 } ],
     "primary": { "indexed": false, "references": [ { "celex": "12016M/TXT", "kind": "treaty", "title": "…", "in_corpus": false } ] },
-    "secondary": { "directives": [ … ], "regulations": [ … ], "other": [] }
+    "secondary": { "directives": [ … ], "regulations": [ … ], "other": [] },
+    "pipeline": { "Ongoing": [ { "id": "eu-2026-0186-nle", "source": "EUR-Lex", "stage": "…", "terminal": false } ] }
   },
   "bund":   { "acts": [ … ], "layers": { "constitution": [ … ], "statutes": [ … ], "ordinances": [ … ] }, "pipeline": { "<beratungsstand>": [ … ] } },
   "bayern": { "acts": [ … ], "layers": { "constitution": [ … ], "statutes": [ … ], "ordinances": [ … ] }, "pipeline": { "<status>": [ … ] } },
@@ -430,10 +439,56 @@ entry is subordinate to the preceding section.
 - `eu.instruments[]` is the schema-v1-compatible flat list. `eu.primary`
   contains official external references because primary EU law is not part of
   the deep corpus; `eu.secondary` groups the indexed list by legal form.
+- `eu.pipeline` contains explicitly watched pending EUR-Lex procedures. It is
+  separate from instruments in force and preserves the official stage without
+  inferring adoption.
 - `bund` / `bayern` retain their flat `acts` arrays and additionally partition
   every act exactly once into `constitution`, `statutes`, or `ordinances`.
   Their `pipeline` remains bucketed by parliamentary status.
 - `laender`: bills/activity per Land, keyed by `DE-<code>`.
+
+---
+
+## `watched_procedures.json`
+
+Persistent presentation of the explicit watchlist. `procedures[]` merges the
+latest official DIP or EUR-Lex observation with reviewed search aliases,
+scope, relevant norms and `history[]`. `active` controls frequent polling;
+terminal records remain visible as an immutable archive. An EU political
+agreement is not terminal. OJ publication becomes `pending_final_review`;
+polling stops only after a persisted review has compared the final Article 2
+with the tracked Commission proposal and records a pass for that adopted CELEX.
+If an official snapshot temporarily omits a watched id, the row becomes
+`source_missing` and retains separate `last_observed_*` fields; stale status is
+never presented as a fresh observation. History events carry stable `event_id`
+values so a retry after a process crash cannot duplicate a transition.
+The terminal review is persisted in the watch configuration as
+`final_text_review: {status:"passed", article_2_compared:true,
+reviewed_celexes:["…"], compared_to:"<proposal CELEX>"}`; all four conditions
+must match the published act before the fetcher emits `terminal:true`.
+
+```json
+{
+  "schema_version": 1,
+  "checked_at": "2026-07-15T08:17:00+00:00",
+  "active_count": 2,
+  "terminal_count": 1,
+  "archived_count": 0,
+  "procedures": [
+    { "id": "eu-2026-0186-nle", "source": "EUR-Lex",
+      "status": "Ongoing", "stage": "Discussions within the Council",
+      "active": true, "terminal": false, "history": [ … ] }
+  ]
+}
+```
+
+## `amendment_fates.json`
+
+Reviewed document chains for proposals whose fate cannot be inferred from a
+single Drucksache. `document_chain[]` states each document's procedural role;
+`validation.checks[]` reports the separately declared checks performed against
+the current consolidated corpus. The data never labels a committee
+recommendation itself as the final law.
 
 ---
 
@@ -524,36 +579,38 @@ fetchers refuse to overwrite a good same-day snapshot with empty output.
 ./refresh.sh
 ```
 
-The 19 steps are:
+The 21 steps are:
 
 | # | Step | Fetcher |
 |---|------|---------|
 | 1 | DIP legislative pipeline (Bund, intraday) | `fetch_dip.py` |
-| 2 | BGBl promulgation events | `fetch_bgbl_events.py` |
-| 3 | GII corpus HEAD | `fetch_gii.py` |
-| 4 | Federal case law from seven official RII feeds | `fetch_rii.py` |
-| 5 | NeuRIS changelog (append-only) | `fetch_neuris_changelog.py` |
-| 6 | buzer back-history (max once/day; skipped if today's snapshot exists) | `fetch_buzer.py` |
-| 7 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
-| 8 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
-| 9 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
-| 10 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
-| 11 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
-| 12 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
-| 13 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
-| 14 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
-| 15 | Länder monitor (Parlamentsspiegel, Asyl/Sozial) | `fetch_parlamentsspiegel.py` |
-| 16 | Länder-Gesetzentwürfe (all 16 Landtage) | `fetch_laender_bills.py` |
-| 17 | Build the QFS arena | `tools/build_qfs.py` |
-| 18 | Export web data | `tools/build_web_data.py` |
-| 19 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
+| 2 | Explicit pending EUR-Lex procedure watches | `fetch_eu_watch.py` |
+| 3 | Persistent watch state + change-only history (only if both official refreshes succeeded) | `tools/update_procedure_watch.py` |
+| 4 | BGBl promulgation events | `fetch_bgbl_events.py` |
+| 5 | GII corpus HEAD | `fetch_gii.py` |
+| 6 | Federal case law from seven official RII feeds | `fetch_rii.py` |
+| 7 | NeuRIS changelog (append-only) | `fetch_neuris_changelog.py` |
+| 8 | buzer back-history (max once/day; skipped if today's snapshot exists) | `fetch_buzer.py` |
+| 9 | PatchInstruction extraction (writes the DIP text cache) | `extract_patches.py` |
+| 10 | Bundesrat texts (cache-first, 30 s crawl-delay) | `fetch_br_texts.py` |
+| 11 | PatchInstruction **re-extraction** (only if new BR texts arrived) | `extract_patches.py` |
+| 12 | BAYERN.RECHT corpus HEAD + BayRS chains | `fetch_bayern_recht.py` |
+| 13 | GVBl/BayMBl promulgation events (RSS) | `fetch_gvbl_events.py` |
+| 14 | Bayerischer Landtag pipeline | `fetch_bay_landtag.py` |
+| 15 | Curated EU layer (CELLAR + DEU transpositions + OJ-L) | `fetch_eu_layer.py` |
+| 16 | EU breadth index (all directives + basic regulations) | `fetch_eu_index.py` |
+| 17 | Länder monitor (Parlamentsspiegel, Asyl/Sozial) | `fetch_parlamentsspiegel.py` |
+| 18 | Länder-Gesetzentwürfe (all 16 Landtage) | `fetch_laender_bills.py` |
+| 19 | Build the QFS arena | `tools/build_qfs.py` |
+| 20 | Export web data | `tools/build_web_data.py` |
+| 21 | LLM digest (skips without `OPENROUTER_API_KEY`) | `tools/build_digest.py` |
 
 Snapshots land in `data/snapshots/<source>/<date>/*.jsonl`; each build reads the
 newest snapshot per source. **Each fetcher documents its own source, cadence,
 and quirks in its module docstring** — read the top of any
 `pipeline/fetch_*.py` for the authoritative behavior of that step.
 
-Step 17 also deploys the arena to a local `qfs_visualizer` checkout if present.
+Step 19 also deploys the arena to a local `qfs_visualizer` checkout if present.
 
 ---
 
@@ -604,7 +661,9 @@ database.
 | `GET /graph` | `graph.json` | the QFS arena export |
 | `GET /hierarchy` | `hierarchy.json` | competence-aware legal layers |
 | `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
-| `GET /search?q=&limit=&norm_limit=&procedure_limit=` | `search.sqlite` + `wiki.json` + `hierarchy.json` | ranked search over acts, current norms and official DIP procedures |
+| `GET /procedures/watched` | `watched_procedures.json` | active and archived DIP/EUR-Lex watches with change history |
+| `GET /amendment-fates?procedure_id=&validation_id=` | `amendment_fates.json` | reviewed document chains and current-law validation checks |
+| `GET /search?q=&limit=&norm_limit=&procedure_limit=` | `search.sqlite` + `wiki.json` + `hierarchy.json` | ranked search over acts, current norms and official DIP/EUR-Lex procedures |
 | `GET /digest` | `digest.json` | **experimental, LLM-generated** activity digest; **404** if none generated |
 
 `/stats`, `/acts`, `/acts/{id}`, `/decisions/{id}`, `/graph`, `/hierarchy`
@@ -704,6 +763,22 @@ curl 'http://127.0.0.1:8010/eu-index?q=internationalen%20Schutz&kind=DIR&limit=2
 
 `total` is the unfiltered file total; `matched` is the count after `q` and
 `kind`, before pagination. Returns **404** until `eu_index.json` has been built.
+
+## `GET /procedures/watched` and `GET /amendment-fates`
+
+`/procedures/watched` returns `watched_procedures.json` unchanged. This is the
+stable endpoint for a persistent “tracked projects” panel; clients do not have
+to discover watched rows by searching the full hierarchy.
+
+`/amendment-fates` returns all validation records. `procedure_id` filters by
+official DIP id and `validation_id` by the Lexgraph record id; filters can be
+combined. Each record keeps reviewed document roles separate from mechanical
+checks of the current consolidated law.
+
+```bash
+curl 'http://127.0.0.1:8010/procedures/watched'
+curl 'http://127.0.0.1:8010/amendment-fates?procedure_id=322125'
+```
 
 ## Dated act archive and Markdown
 
@@ -808,8 +883,9 @@ ranking metadata; `norm_matches` contains
 `{act_id,jurabk,juris,act_title,enbez,norm_title,snippet,score,matched_fields,
 source,url}`. Snippets are plain text, `source` is `gii` or `bayern_recht`, and
 `url` is the API-relative act detail path. `procedure_matches` contains the
-official DIP id, title, stage, dates, GESTA id, topics, initiators, descriptors,
-abstract, source link and optional watch metadata. `result_total` is
+official DIP or EUR-Lex id, title, stage, dates, source-specific identifiers,
+topics, initiators, descriptors, abstract/scope, source link and optional watch
+metadata. `result_total` is
 `act_total + norm_total + procedure_total` before the three result limits.
 
 ```bash
@@ -872,7 +948,7 @@ curl 'http://127.0.0.1:8010/decisions?act=fed_asylblg&limit=1'
 ## `GET /digest`
 
 **Experimental.** A short multilingual digest of legislative activity —
-`web/data/digest.json`, written by `tools/build_digest.py` (refresh step 19)
+`web/data/digest.json`, written by `tools/build_digest.py` (refresh step 21)
 when `OPENROUTER_API_KEY` is set. The facts are computed deterministically
 from the section-A data; the phrasing is **LLM-generated** (the winning
 model id is in `model`). Informational only, not legal advice.

@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-07-15T02:59:13+00:00",
+  "procedures": {
+    "329468": {
+      "id": "329468",
+      "watch_id": "ukraine-rechtskreiswechsel",
+      "source": "DIP",
+      "jurisdiction": "DE",
+      "procedure": "329468",
+      "gesta": "G013",
+      "title": "Gesetz zur Änderung der Gewährung von Leistungen für Personen, die in Anwendung der Richtlinie 2001/55/EG eine Aufenthaltserlaubnis zur Aufenthaltsgewährung zum vorübergehenden Schutz erhalten oder beantragt haben (Leistungsrechtsanpassungsgesetz)",
+      "status": "Überwiesen",
+      "stage": "Überwiesen",
+      "date": "2026-02-11",
+      "updated": "2026-02-12T10:57:00+01:00",
+      "url": "https://dip.bundestag.de/vorgang/_/329468",
+      "promulgation": [],
+      "entry_into_force": [],
+      "adopted_celexes": [],
+      "official_journal": [],
+      "terminal": false,
+      "active": true,
+      "tracking_state": "active",
+      "first_seen": "2026-07-15T02:59:08+00:00",
+      "last_checked": "2026-07-15T02:59:13+00:00",
+      "last_observed_status": "Überwiesen",
+      "last_observed_stage": "Überwiesen",
+      "last_observed_updated": "2026-02-12T10:57:00+01:00",
+      "last_observed_at": "2026-07-15T02:59:13+00:00",
+      "last_changed": "2026-07-15T02:59:08+00:00"
+    },
+    "eu-2026-0186-nle": {
+      "id": "eu-2026-0186-nle",
+      "watch_id": "ukraine-military-obligations-temporary-protection",
+      "source": "EUR-Lex",
+      "jurisdiction": "EU",
+      "procedure": "2026/0186/NLE",
+      "gesta": null,
+      "title": "COM (2026) 345: Proposal for a COUNCIL IMPLEMENTING DECISION extending temporary protection, as introduced by Implementing Decision (EU) 2022/382, until 4 March 2028",
+      "status": "Ongoing",
+      "stage": "Discussions within the Council or its preparatory bodies",
+      "date": "2026-06-26",
+      "updated": null,
+      "url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
+      "promulgation": [],
+      "entry_into_force": [],
+      "adopted_celexes": [],
+      "official_journal": [],
+      "events": [
+        {
+          "date": "2026-06-26",
+          "title": "Adoption by Commission",
+          "celexes": [
+            "52026PC0345"
+          ],
+          "documents": [
+            "12010E/TXT",
+            "32001L0055",
+            "52026PC0345",
+            "COM/2026/345/FINAL"
+          ]
+        },
+        {
+          "date": "2026-06-26",
+          "title": "Discussions within the Council or its preparatory bodies",
+          "celexes": [],
+          "documents": [
+            "ST 11011 2026 INIT"
+          ]
+        }
+      ],
+      "publication_detected": false,
+      "awaiting_final_review": false,
+      "final_text_review": null,
+      "terminal": false,
+      "active": true,
+      "tracking_state": "active",
+      "first_seen": "2026-07-15T02:59:08+00:00",
+      "last_checked": "2026-07-15T02:59:13+00:00",
+      "last_observed_status": "Ongoing",
+      "last_observed_stage": "Discussions within the Council or its preparatory bodies",
+      "last_observed_updated": null,
+      "last_observed_at": "2026-07-15T02:59:13+00:00",
+      "last_changed": "2026-07-15T02:59:08+00:00"
+    },
+    "322125": {
+      "id": "322125",
+      "watch_id": "stag-untaetigkeitsklage-amendment-fate",
+      "source": "DIP",
+      "jurisdiction": "DE",
+      "procedure": "322125",
+      "gesta": "B002",
+      "title": "Gesetz zur Änderung des Staatsangehörigkeitsgesetzes sowie weiterer Vorschriften",
+      "status": "Verkündet",
+      "stage": "Verkündet",
+      "date": "2025-10-17",
+      "updated": "2026-01-09T09:58:41+01:00",
+      "url": "https://dip.bundestag.de/vorgang/_/322125",
+      "promulgation": [
+        {
+          "jahrgang": "2025",
+          "heftnummer": "256",
+          "ausfertigungsdatum": "2025-10-27",
+          "verkuendungsdatum": "2025-10-29",
+          "einleitungstext": "Gesetz",
+          "pdf_url": "https://www.recht.bund.de/eli/bund/BGBl_1/2025/256",
+          "verkuendungsblatt_bezeichnung": "Bundesgesetzblatt Teil I",
+          "verkuendungsblatt_kuerzel": "BGBl I",
+          "fundstelle": "BGBl I 2025, 256"
+        }
+      ],
+      "entry_into_force": [
+        {
+          "datum": "2025-10-30"
+        }
+      ],
+      "adopted_celexes": [],
+      "official_journal": [],
+      "terminal": true,
+      "active": false,
+      "tracking_state": "terminal",
+      "first_seen": "2026-07-15T02:59:08+00:00",
+      "last_checked": "2026-07-15T02:59:08+00:00",
+      "last_observed_status": "Verkündet",
+      "last_observed_stage": "Verkündet",
+      "last_observed_updated": "2026-01-09T09:58:41+01:00",
+      "last_observed_at": "2026-07-15T02:59:08+00:00",
+      "monitoring_stopped_at": "2026-07-15T02:59:08+00:00",
+      "last_changed": "2026-07-15T02:59:08+00:00"
+    }
+  }
+}

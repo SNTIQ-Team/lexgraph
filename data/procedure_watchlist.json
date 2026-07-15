@@ -2,6 +2,8 @@
   "procedures": {
     "329468": {
       "id": "ukraine-rechtskreiswechsel",
+      "source": "DIP",
+      "jurisdiction": "DE",
       "queries": [
         "Ukraine",
         "ukrainisch",
@@ -27,6 +29,77 @@
         "SGB II § 74, §§ 66b, 75",
         "SGB XII § 146, § 147",
         "SGB V §§ 5, 411"
+      ]
+    },
+    "eu-2026-0186-nle": {
+      "id": "ukraine-military-obligations-temporary-protection",
+      "source": "EUR-Lex",
+      "jurisdiction": "EU",
+      "procedure": "2026/0186/NLE",
+      "celex_proposal": "52026PC0345",
+      "com": "COM(2026) 345 final",
+      "initiated_by": "European Commission / DG HOME",
+      "decided_by": "Council of the European Union by qualified majority",
+      "official_url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
+      "proposal_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:52026PC0345",
+      "queries": [
+        "2026/0186/NLE",
+        "COM(2026) 345",
+        "52026PC0345",
+        "ST 11011/26",
+        "ST 11375/26",
+        "Ukraine",
+        "ukrainische Männer",
+        "Ukrainian men",
+        "Wehrpflicht",
+        "wehrpflichtig",
+        "military obligations",
+        "Ausreisegenehmigung",
+        "Ausreiseerlaubnis",
+        "temporary protection",
+        "vorübergehender Schutz",
+        "§ 24 AufenthG"
+      ],
+      "scope": "Entwurfsstand: Der operative Artikel 2 ist geschlechtsneutral und gilt nicht nur für Männer. Aus der kollektiven vorübergehenden Schutzregelung soll eine Person ausgeschlossen werden, die militärische Verpflichtungen nach ukrainischem Recht nicht erfüllt und gerade deshalb von den ukrainischen Behörden nicht zur Ausreise berechtigt ist. Personen, die beim Inkrafttreten bereits vorübergehenden Schutz genießen, sollen ausgenommen bleiben. Individuelles Asyl und andere Aufenthaltstitel werden nicht pauschal ausgeschlossen.",
+      "draft_only": true,
+      "scope_source": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:52026PC0345",
+      "relevant_norms": [
+        "Directive 2001/55/EC Art. 4(2)",
+        "Implementing Decision (EU) 2022/382 Art. 2",
+        "Implementing Decision (EU) 2025/1460",
+        "COM(2026) 345 Arts. 2–3",
+        "AufenthG § 24"
+      ],
+      "council_documents": [
+        "ST 11011/26 INIT",
+        "WK 9955/2026 INIT (not public)",
+        "ST 11375/26 (not public at time of listing)"
+      ],
+      "terminal_rule": "Stop frequent polling only after the adopted act is published in the Official Journal, its final CELEX is captured and the final Article 2 is compared with COM(2026) 345; political agreement alone is not terminal."
+    },
+    "322125": {
+      "id": "stag-untaetigkeitsklage-amendment-fate",
+      "source": "DIP",
+      "jurisdiction": "DE",
+      "monitor": false,
+      "validation_ids": [
+        "stag6-untaetigkeitsklage-12-months"
+      ],
+      "queries": [
+        "21/537",
+        "21/1373",
+        "21/1634",
+        "Untätigkeitsklage",
+        "§ 75 VwGO",
+        "§ 43 StAG",
+        "Turboeinbürgerung"
+      ],
+      "scope": "Validierte, abgeschlossene Dokumentkette: Die Zwölfmonatsfrist für eine Untätigkeitsklage war nur eine Empfehlung des Bundesrates in BT-Drs. 21/1373. Der Innenausschuss übernahm sie nicht in BT-Drs. 21/1634; der Bundestag beschloss den Regierungsentwurf in dieser Ausschussfassung. BGBl. 2025 I Nr. 256 enthält keinen § 43 StAG. Der allgemeine Dreimonatsschwellenwert des § 75 VwGO blieb bestehen.",
+      "draft_only": false,
+      "relevant_norms": [
+        "StAG § 10 Abs. 3 (aufgehoben)",
+        "vorgeschlagener StAG § 43 (nicht übernommen)",
+        "VwGO § 75 (weiterhin drei Monate)"
       ]
     }
   }

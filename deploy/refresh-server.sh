@@ -9,14 +9,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The full daily refresh and the twice-daily watched-procedure refresh both
+# rebuild/publish web/data.  A shared non-blocking lock keeps a delayed timer
+# or manual run from racing the other job.  The timer will try again at its
+# next scheduled observation; no half-built data plane is published.
+LOCK_FILE="${LEXGRAPH_REFRESH_LOCK:-/run/lock/lexgraph-refresh.lock}"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "full refresh: another Lexgraph refresh holds $LOCK_FILE; skipping"
+    exit 0
+fi
+
 ./refresh.sh
 
 echo "==> publish web data -> /srv/sntiq-lexapi/data/web-data"
-rsync -a --delete web/data/ /srv/sntiq-lexapi/data/web-data/
-chown -R http:http /srv/sntiq-lexapi/data/web-data
-systemctl restart sntiq-lexapi
-sleep 3
-systemctl is-active sntiq-lexapi
+deploy/publish-web-data.sh web/data
 
 built=$(curl -fsS http://127.0.0.1:8002/health \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["built_at"])')

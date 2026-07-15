@@ -9,11 +9,34 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Serialize manual/user-timer runs on this host.  Publication also takes the
+# production /run/lock lock below; a local lock alone cannot serialize with a
+# timer running on the VPS.
+LOCK_FILE="${LEXGRAPH_REFRESH_LOCK:-${XDG_RUNTIME_DIR:-/tmp}/lexgraph-refresh.lock}"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "refresh-and-push: another Lexgraph refresh holds $LOCK_FILE; skipping"
+    exit 0
+fi
+
 ./refresh.sh
 
-echo "==> push web data -> sntiq:/srv/sntiq-lexapi/data/web-data"
-rsync -az --delete web/data/ sntiq:/srv/sntiq-lexapi/data/web-data/
-ssh sntiq 'chown -R http:http /srv/sntiq-lexapi/data/web-data && systemctl restart sntiq-lexapi && sleep 3 && systemctl is-active sntiq-lexapi'
+stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+remote_stage="/srv/sntiq-lexapi/data/web-data.incoming-$stamp"
+cleanup_remote() {
+    ssh sntiq "rm -rf -- '$remote_stage'" >/dev/null 2>&1 || true
+}
+trap cleanup_remote EXIT
+
+echo "==> upload complete generation -> sntiq:$remote_stage"
+rsync -az --delete web/data/ "sntiq:$remote_stage/"
+
+echo "==> acquire production lock + atomic publish"
+ssh sntiq "flock -w 1800 /run/lock/lexgraph-refresh.lock \
+  /srv/sntiq-lexgraph/deploy/publish-web-data.sh '$remote_stage'"
+cleanup_remote
+trap - EXIT
 
 built=$(curl -fsS https://api.sntiq.com/lex/health \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["built_at"])')

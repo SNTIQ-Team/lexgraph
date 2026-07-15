@@ -74,6 +74,24 @@ DERIVED_FILES: dict[str, tuple[Path, str]] = {
     "graph.json": (
         ROOT / "web" / "data" / "graph.json",
         "QFS arena graph export"),
+    "watched_procedures.json": (
+        ROOT / "web" / "data" / "watched_procedures.json",
+        "persistent DIP/EUR-Lex watch state with embedded change history"),
+    "amendment_fates.json": (
+        ROOT / "web" / "data" / "amendment_fates.json",
+        "reviewed parliamentary document chains and current-law checks"),
+}
+
+# Raw lifecycle files do not exist before the first watch update.  Export them
+# when present, while the required watched_procedures.json above always carries
+# the complete API-facing state and embedded history.
+OPTIONAL_DERIVED_FILES: dict[str, tuple[Path, str]] = {
+    "procedure_watch_state.json": (
+        ROOT / "data" / "procedure_watch_state.json",
+        "raw persistent state used to stop terminal watch polling"),
+    "procedure_watch_history.jsonl": (
+        ROOT / "data" / "procedure_watch_history.jsonl",
+        "append-only official procedure status-change ledger"),
 }
 
 
@@ -191,6 +209,12 @@ available source only supplies amendment excerpts rather than a lossless
 consolidated snapshot; the dataset does not imply exact historical text where
 the source archive cannot prove it.
 
+`watched_procedures.json` preserves the current DIP/EUR-Lex observations and
+their embedded status-change history. Terminal procedures remain archived but
+leave the active polling set. `amendment_fates.json` separates reviewed roles
+in a parliamentary document chain from the mechanical checks performed against
+the current consolidated corpus.
+
 Every source is documented in the repository's `docs/SOURCES.md`; reproduce
 the current outputs with `refresh.sh` and `tools/export_hf.py`. Statutory texts
 are official works under § 5 UrhG. Governed by the SNTIQ licensing set; public
@@ -229,12 +253,23 @@ def main() -> int:
         counts[name] = line_count(dst) if dst.suffix == ".jsonl" else 1
         descriptions[name] = description
 
+    optional_exported: list[str] = []
+    for name, (src, description) in OPTIONAL_DERIVED_FILES.items():
+        if not src.is_file() or src.stat().st_size == 0:
+            continue
+        dst = out / name
+        copy_file(src, dst)
+        counts[name] = line_count(dst) if dst.suffix == ".jsonl" else 1
+        descriptions[name] = description
+        optional_exported.append(name)
+
     counts["decisions.jsonl"] = write_jsonl(
         out / "decisions.jsonl", merged_decisions())
     descriptions["decisions.jsonl"] = (
         "reviewed and official federal decisions affecting the deep corpus")
 
-    ordered = list(SNAPSHOT_FILES) + list(DERIVED_FILES) + ["decisions.jsonl"]
+    ordered = (list(SNAPSHOT_FILES) + list(DERIVED_FILES)
+               + optional_exported + ["decisions.jsonl"])
     rows_table = "\n".join(
         f"| `{name}` | {counts[name]:,} | {descriptions[name]} |"
         for name in ordered)

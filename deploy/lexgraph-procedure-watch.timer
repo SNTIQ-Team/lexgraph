@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh Lexgraph watched procedures twice daily
+Documentation=https://github.com/SNTIQ-Team/lexgraph
+
+[Timer]
+OnCalendar=*-*-* 08:17:00 UTC
+OnCalendar=*-*-* 20:17:00 UTC
+Persistent=true
+RandomizedDelaySec=5min
+AccuracySec=1min
+Unit=lexgraph-procedure-watch.service
+
+[Install]
+WantedBy=timers.target

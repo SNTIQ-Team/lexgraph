@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 
 import pytest
@@ -112,3 +113,36 @@ def test_hierarchy_keeps_full_searchable_dip_procedure_and_watch_metadata(
     assert row["watched"] is True
     assert row["watch"]["queries"] == ["Fiktion"]
     assert row["url"].endswith("/329468")
+
+
+def test_hierarchy_keeps_watched_eu_procedure_separate_from_law_in_force(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    eu_watch = {
+        "id": "eu-2026-0186-nle", "procedure": "2026/0186/NLE",
+        "proposal_celex": "52026PC0345", "title": "Proposal extending temporary protection",
+        "date": "2026-06-26", "fetched_at": "2026-07-15T02:00:00Z",
+        "status": "Ongoing", "stage": "Discussions within the Council",
+        "terminal": False, "events": [],
+        "url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
+    }
+
+    def fake_load(source: str, name: str) -> list[dict]:
+        return [eu_watch] if (source, name) == (
+            "eu_watch", "procedures.jsonl") else []
+
+    watch = tmp_path / "watch.json"
+    watch.write_text(json.dumps({"procedures": {"eu-2026-0186-nle": {
+        "source": "EUR-Lex", "queries": ["military obligations"],
+        "scope": "Draft scope",
+    }}}), encoding="utf-8")
+    monkeypatch.setattr(web_data, "load", fake_load)
+    monkeypatch.setattr(web_data, "PROCEDURE_WATCHLIST", watch)
+
+    hierarchy = web_data.build_hierarchy([])
+    row = hierarchy["eu"]["pipeline"]["Ongoing"][0]
+    assert row["source"] == "EUR-Lex"
+    assert row["procedure"] == "2026/0186/NLE"
+    assert row["stage"] == "Discussions within the Council"
+    assert row["watched"] is True
+    assert row["terminal"] is False
+    assert hierarchy["eu"]["instruments"] == []

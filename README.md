@@ -1,6 +1,6 @@
 # ⟠ Lexgraph
 
-**German legislation as event-sourced git.**
+**Lexgraph — a temporal graph of German and EU law.**
 
 Lexgraph models the whole normative process — federal (Bund), Bavarian
 (Bayern), EU, and the other 15 Länder — as a signed, temporal, multi-authority
