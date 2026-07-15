@@ -11,6 +11,15 @@ from collections.abc import Iterable
 from api.search_engine import normalize_search_text
 
 
+# A few statutes are overwhelmingly searched by their established short
+# title, while GII's table of contents exposes only the formal long title.
+# Keep these aliases deliberately small and reviewable; they improve discovery
+# without pretending that the alias came from the official TOC metadata.
+COMMON_TITLE_ALIASES = {
+    "burlg": ("Bundesurlaubsgesetz",),
+}
+
+
 def _words(value: object) -> tuple[str, ...]:
     return tuple(normalize_search_text(value).split())
 
@@ -38,17 +47,24 @@ def _title_phrase_matches(title: str, needle: str) -> bool:
     return needle in title.split()
 
 
-def _score(row: dict, query: str) -> tuple[int, list[str]]:
-    needle = normalize_search_text(query)
-    if not needle:
-        return 0, []
-    tokens = tuple(needle.split())
+def _normalized_values(row: dict) -> dict[str, str]:
     values = {
         "id": normalize_search_text(row.get("id")),
         "abbrev": normalize_search_text(row.get("abbrev")),
         "jurabk": normalize_search_text(row.get("jurabk")),
         "title": normalize_search_text(row.get("title")),
     }
+    aliases = COMMON_TITLE_ALIASES.get(values["abbrev"], ())
+    values["alias"] = " ".join(
+        normalize_search_text(alias) for alias in aliases)
+    return values
+
+
+def _score_values(row: dict, values: dict[str, str],
+                  needle: str) -> tuple[int, list[str]]:
+    if not needle:
+        return 0, []
+    tokens = tuple(needle.split())
     aliases = tuple(value for key, value in values.items()
                     if key != "title" and value)
     title = values["title"]
@@ -92,26 +108,53 @@ def _score(row: dict, query: str) -> tuple[int, list[str]]:
     return score, matched
 
 
+def _score(row: dict, query: str) -> tuple[int, list[str]]:
+    return _score_values(
+        row, _normalized_values(row), normalize_search_text(query))
+
+
+class GiiCatalogIndex:
+    """Pre-normalized in-memory index for the official 6k-row GII TOC.
+
+    Unicode folding every title for every keystroke cost several seconds on
+    the small production VPS.  The catalogue is immutable for one API process,
+    so doing that work once at startup makes each search a cheap deterministic
+    scan while preserving the exact ranking contract.
+    """
+
+    def __init__(self, rows: Iterable[dict]):
+        self.source_rows = rows
+        self.rows = tuple(
+            (source, _normalized_values(source)) for source in rows)
+
+    def search(self, query: str, limit: int = 25,
+               exclude_act_ids: set[str] | None = None
+               ) -> tuple[list[dict], int]:
+        needle = normalize_search_text(query)
+        excluded = exclude_act_ids or set()
+        hits: list[tuple[dict, str]] = []
+        for source, values in self.rows:
+            if str(source.get("act_id") or "") in excluded:
+                continue
+            score, fields = _score_values(source, values, needle)
+            if not score:
+                continue
+            row = dict(source)
+            row.update({"score": score, "matched_fields": fields,
+                        "source": "gii_catalog"})
+            hits.append((row, values["title"]))
+        hits.sort(key=lambda item: (
+            -int(item[0]["score"]),
+            len(str(item[0].get("title") or "")),
+            item[1],
+            str(item[0].get("id") or ""),
+        ))
+        return [row for row, _ in hits[:max(0, limit)]], len(hits)
+
+
 def search_gii_catalog(rows: Iterable[dict], query: str, limit: int = 25,
                        exclude_act_ids: set[str] | None = None
                        ) -> tuple[list[dict], int]:
     """Return ranked GII metadata matches and the unpaginated match count."""
-    excluded = exclude_act_ids or set()
-    hits: list[dict] = []
-    for source in rows:
-        if str(source.get("act_id") or "") in excluded:
-            continue
-        score, fields = _score(source, query)
-        if not score:
-            continue
-        row = dict(source)
-        row.update({"score": score, "matched_fields": fields,
-                    "source": "gii_catalog"})
-        hits.append(row)
-    hits.sort(key=lambda row: (
-        -int(row["score"]),
-        len(str(row.get("title") or "")),
-        normalize_search_text(row.get("title")),
-        str(row.get("id") or ""),
-    ))
-    return hits[:max(0, limit)], len(hits)
+    return GiiCatalogIndex(rows).search(
+        query, limit=limit, exclude_act_ids=exclude_act_ids)

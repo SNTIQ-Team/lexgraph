@@ -48,7 +48,7 @@ from api.act_archive import (
     markdown_filename,
     render_markdown_snapshot,
 )
-from api.gii_catalog import search_gii_catalog
+from api.gii_catalog import GiiCatalogIndex
 from api.search_engine import SearchEngine, normalize_search_text
 from api.procedure_search import search_procedures
 
@@ -66,6 +66,8 @@ LANES = ["EU", "Bund", "Bayern", "Länder"]
 _CACHE: dict[str, object] = {}
 _SEARCH_ENGINE: SearchEngine | None = None
 _SEARCH_LOCK = threading.RLock()
+_GII_CATALOG_INDEX: GiiCatalogIndex | None = None
+_GII_CATALOG_LOCK = threading.RLock()
 
 
 def _load(name: str) -> object:
@@ -84,6 +86,30 @@ def _load(name: str) -> object:
 def _cached(payload: object) -> JSONResponse:
     """The data plane is static per deploy, so let clients cache it too."""
     return JSONResponse(payload, headers={"Cache-Control": "public, max-age=3600"})
+
+
+def _gii_catalog_index(rows: list[dict]) -> GiiCatalogIndex:
+    """Return the process-wide normalized GII discovery index."""
+    global _GII_CATALOG_INDEX
+    with _GII_CATALOG_LOCK:
+        if (_GII_CATALOG_INDEX is None
+                or _GII_CATALOG_INDEX.source_rows is not rows):
+            _GII_CATALOG_INDEX = GiiCatalogIndex(rows)
+        return _GII_CATALOG_INDEX
+
+
+def warm_search_indexes() -> None:
+    """Pay immutable index setup costs during startup, not on first input."""
+    try:
+        payload = _load("gii_catalog")
+    except HTTPException:
+        return
+    rows = payload.get("acts") if isinstance(payload, dict) else []
+    if isinstance(rows, list):
+        _gii_catalog_index(rows)
+
+
+app.add_event_handler("startup", warm_search_indexes)
 
 
 # --------------------------------------------------------------- service
@@ -337,8 +363,8 @@ def _append_gii_catalog(result: dict, query: str, limit: int) -> dict:
     # deep act, including deep hits beyond the current result-page limit.
     deep_act_ids.update(str(row.get("act_id")) for row in rows or []
                         if row.get("act_id"))
-    matches, total = search_gii_catalog(
-        rows or [], query, limit=limit, exclude_act_ids=deep_act_ids)
+    matches, total = _gii_catalog_index(rows or []).search(
+        query, limit=limit, exclude_act_ids=deep_act_ids)
     result["catalog_total"] = total
     result["catalog_matches"] = matches
     result["result_total"] = int(result.get("result_total") or 0) + total

@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import build_web_data as web_data  # noqa: E402
-from api.gii_catalog import search_gii_catalog  # noqa: E402
+from api.gii_catalog import GiiCatalogIndex, search_gii_catalog  # noqa: E402
 from fetch_gii import parse_toc  # noqa: E402
 
 
@@ -98,6 +98,21 @@ def test_catalog_ranking_normalizes_and_prefers_exact_abbreviation() -> None:
     hits, total = search_gii_catalog(rows, "burgerliches gesetz")
     assert total == 1
     assert hits[0]["id"] == "gii:bgb"
+
+
+def test_catalog_index_supports_reviewed_common_title_aliases() -> None:
+    rows = [{
+        "id": "gii:burlg", "abbrev": "burlg",
+        "title": "Mindesturlaubsgesetz für Arbeitnehmer",
+        "url": "https://www.gesetze-im-internet.de/burlg/",
+    }]
+    index = GiiCatalogIndex(rows)
+
+    hits, total = index.search("Bundesurlaubsgesetz")
+
+    assert total == 1
+    assert hits[0]["id"] == "gii:burlg"
+    assert "alias" in hits[0]["matched_fields"]
 
 
 def test_api_search_appends_only_non_deep_catalog_matches(
