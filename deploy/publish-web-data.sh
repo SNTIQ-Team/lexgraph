@@ -40,6 +40,7 @@ fi
 
 "$PYTHON" - "$RELEASE" <<'PY'
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -48,7 +49,8 @@ root = Path(sys.argv[1])
 required = (
     "summary.json", "wiki.json", "hierarchy.json", "graph.json",
     "git.json", "watched_procedures.json", "amendment_fates.json",
-    "gii_catalog.json", "data_policy.json", "search.sqlite",
+    "verified_federal_events.json", "gii_catalog.json", "data_policy.json",
+    "search.sqlite",
 )
 for name in required:
     path = root / name
@@ -75,8 +77,28 @@ graph_policy = graph.get("source_policy") or {}
 if graph_policy.get("includes_quarantined_sources") or not graph_policy.get(
         "public_build"):
     raise SystemExit("publish validation: graph source policy is not public")
-for path in [root / "feed.json", root / "graph.json", *(root / "acts").glob("*.json")]:
+for path in (root / "feed.json", root / "graph.json",
+             root / "verified_federal_events.json"):
     folded = path.read_text(encoding="utf-8").casefold()
+    if any(marker in folded for marker in (
+            '"source":"buzer"', "buzer.de", '"source":"parlamentsspiegel"',
+            "länder-monitor")):
+        raise SystemExit(
+            f"publish validation: quarantined source leaked into {path.name}")
+for path in (root / "acts").glob("*.json"):
+    act = json.loads(path.read_text(encoding="utf-8"))
+    cross_checks = act.pop("cross_checks", [])
+    for row in cross_checks:
+        if (not isinstance(row, dict)
+                or row.get("source") != "buzer"
+                or row.get("authoritative") is not False
+                or not re.fullmatch(
+                    r"https://www\.buzer\.de/gesetz/[1-9][0-9]*/l\.htm",
+                    str(row.get("url") or ""))):
+            raise SystemExit(
+                f"publish validation: invalid external cross-check in {path.name}")
+    folded = json.dumps(act, ensure_ascii=False,
+                        separators=(",", ":")).casefold()
     if any(marker in folded for marker in (
             '"source":"buzer"', "buzer.de", '"source":"parlamentsspiegel"',
             "länder-monitor")):
