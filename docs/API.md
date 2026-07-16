@@ -9,8 +9,8 @@ The metaphor never overrides the legal status stated by the official source.
 
 Lexgraph's "API" is four things:
 
-- **A) A set of pre-built static JSON files** (`web/data/*.json`) consumed by
-  the local web visualizer.
+- **A) Pre-built static data artifacts** (`web/data/*.json` plus immutable
+  SQLite indexes) consumed by the API and local visualizer.
 - **B) The pipeline** (`refresh.sh` + `pipeline/fetch_*.py`) that produces the
   snapshots and the QFS arena from which everything else is built.
 - **C) A REST API** (`api/`, FastAPI) that serves those static JSON files as
@@ -54,10 +54,13 @@ Files written:
 | `gii_catalog.json` | Complete official GII TOC, metadata only; deep fields exist only for curated acts. |
 | `official_federal_states.json` | Cumulative public GII observation manifest: canonical state hashes, retrieval provenance and counts. |
 | `federal_states/manifest.json` + `federal_states/objects/sha256/…` | The same manifest beside its verified deterministic-gzip full-state CAS. |
+| `verified_reconstructions.json` | Reviewed, body-complete historical states derived by inverse amendment replay and proven by canonical forward replay; always `source_exact:false`. |
 | `official_transition_reviews.json` | Federal state changes whose legal date passed final BGBl command + DIP commencement review. |
 | `retrospective_history.json` | Bitemporal federal history: separate legal-validity and Lexgraph-knowledge intervals, 2023+ BGBl events, GII observations and explicit gaps. |
 | `retrospective_history.sqlite` | Portable relational form of the same history (`acts`, `state_objects`, `state_observations`, `legal_intervals`, `amendment_events`). |
 | `search.sqlite` | Read-only FTS5 index over act metadata and complete current norm text. |
+| `citations.json` | Small citation manifest: counts, source snapshots and extraction policy; **no citation rows**. |
+| `citations.sqlite` | Read-only exact index of current statutory citations, unresolved mentions and reverse backlinks. |
 | `hierarchy.json` | Competence-aware legal layers (EU / Bund / Bayern / Länder). |
 | `watched_procedures.json` | Persistent DIP/EUR-Lex watch state and change history. |
 | `amendment_fates.json` | Reviewed document chains plus mechanical current-law checks. |
@@ -103,6 +106,9 @@ formats calendar dates to `dd.mm.yyyy`.
   "transpositions": 136,
   "feed_events": 600,
   "decisions": 82,
+  "citations": {"total":35822,"resolved":29937,"unresolved":5885,
+    "self":30315,"cross_act":5507,"acts_scanned":63,
+    "source_norms_scanned":11846},
   "search": { "acts": 63, "norms": 11852 },
   "graph": { "nodes": 745, "edges": 1471, "beliefs": 2588, "ticks": 264, "worlds": 3 }
 }
@@ -128,6 +134,7 @@ formats calendar dates to `dd.mm.yyyy`.
 | `gii_catalog_total` | Official federal acts discoverable through the metadata-only GII catalogue; `0` for older snapshots. |
 | `feed_events` | Rows in `feed.json`. |
 | `decisions` | Merged manual + official RII decisions in `decisions.json`. |
+| `citations` | Current-text citation index counts. Rows are in `citations.sqlite`; unresolved means no exact target was invented. |
 | `search` | Acts and current norms indexed in `search.sqlite`. |
 | `graph` | Element counts of the arena export (`nodes`, `edges`, `beliefs`, `ticks`, `worlds`). |
 
@@ -741,6 +748,7 @@ database.
 | `GET /data-policy` | `data_policy.json` | public-build mode and excluded source families |
 | `GET /federal-history?act=&tier=&limit=&offset=` | `verified_federal_events.json` | official-only state pairs and current-text-verified DIP patches |
 | `GET /official-states?act=&limit=&offset=` | `official_federal_states.json` | exact GII retrieval observations and immutable state hashes |
+| `GET /verified-reconstructions?act=` | `verified_reconstructions.json` | complete replay-verified derived states; never labelled source-exact |
 | `GET /official-transition-reviews?act=&procedure_id=&limit=&offset=` | `official_transition_reviews.json` | legal dates accepted by the final BGBl + DIP + complete-state gate |
 | `GET /feed?limit=` | `feed.json` | newest first; `limit` 1–600 (default 100) |
 | `GET /acts` | `wiki.json` | the act index |
@@ -749,12 +757,16 @@ database.
 | `GET /acts/{id}/history?as_of=` | `retrospective_history.json` | one act's events, observations and intervals at an RFC3339 knowledge-time slice |
 | `GET /acts/{id}/diff?from=&to=&as_of=&norm=` | retrospective manifest + state CAS | exact full-state or norm diff at two legal dates and one knowledge time |
 | `GET /acts/{id}/markdown?at=&as_of=&norm=&download=` | act data + retrospective state CAS | raw Markdown for the whole act or one norm; omit `at` for HEAD |
+| `GET /changes?q=&act=&norm=&from=&to=&future=&as_of=` | `retrospective_history.json` | official amendment commands across acts, with separate publication/effective dates |
+| `GET /amending-acts/{document_id}?as_of=` | `retrospective_history.json` | one final BGBl document grouped by article and affected act |
+| `GET /changes.atom` | retrospective events | global Atom monitor; `/acts/{id}/changes.atom` is the per-act variant |
 | `GET /retrospective-history.sqlite` | `retrospective_history.sqlite` | downloadable portable bitemporal database |
 | `GET /decisions?q=&act=` | `decisions.json` | court decisions, newest first; `limit` 1–200 (default 50) |
 | `GET /decisions/{id}` | one `decisions.json` row | full exported row; **404** if unknown |
 | `GET /git?lane=&limit=` | `git.json` | optional `lane` 0–3; `limit` 1–1000 |
 | `GET /graph` | `graph.json` | the QFS arena export |
 | `GET /hierarchy` | `hierarchy.json` | competence-aware legal layers |
+| `GET /citations?act=&norm=&direction=&kind=&limit=&offset=` | `citations.sqlite` + metadata-only `citations.json` | indexed exact current-text citations (`out`) or reverse backlinks (`in`); unresolved mentions retained |
 | `GET /eu-index?q=&kind=&limit=&offset=` | `eu_index.json` | filter and paginate the EU breadth index; **404** until built |
 | `GET /procedures/watched` | `watched_procedures.json` | active and archived DIP/EUR-Lex watches with change history |
 | `GET /amendment-fates?procedure_id=&validation_id=` | `amendment_fates.json` | reviewed document chains and current-law validation checks |
@@ -777,7 +789,7 @@ Returns **503** if `summary.json` is missing (run `tools/build_web_data.py`).
 ## `GET /version`
 
 ```json
-{ "dataset": "Lexgraph", "version": "1.2",
+{ "dataset": "Lexgraph", "version": "1.5",
   "built_at": "2026-07-06T17:43:26+00:00",
   "source": "https://github.com/SNTIQ-Team/lexgraph" }
 ```
@@ -907,6 +919,27 @@ full state or one norm through `/acts/{id}/markdown?at=...`. It never substitute
 the nearest observation. `/official-transition-reviews` may legitimately be
 small: a row exists only when every strict acceptance check passes.
 
+### Replay-verified derived states
+
+`GET /verified-reconstructions?act=` exposes the deliberately separate
+`verified_reconstructions.json` review artifact. Each row is a complete act
+body derived from a later official GII anchor by reversing the reviewed final
+BGBl commands for one bounded legal interval. Acceptance requires canonical
+forward replay to reproduce the official anchor byte-for-byte.
+
+```bash
+curl 'http://127.0.0.1:8010/verified-reconstructions?act=SGB%20VIII'
+```
+
+The evidence boundary is machine-readable and must survive every consumer:
+`text_status:"derived_verified"`, `body_complete:true`,
+`reverse_replay_verified:true`, and `source_exact:false`. This proves a
+complete, reproducible reconstruction; it does **not** claim that Lexgraph
+retrieved those historical bytes from GII on that date. Consequently UI/API
+clients may call it a *verified reconstruction*, but never an *exact official
+snapshot*. The derived state and its later official anchor remain separate
+SHA-256 CAS objects with their own provenance.
+
 ### Bitemporal retrospective store
 
 `retrospective_history.json` and `retrospective_history.sqlite` describe the
@@ -924,9 +957,12 @@ collapsed:
 - genuine official retroactivity (`effective_from < published_at`) is retained
   with `retroactive:true`.
 
-The 2023+ event layer currently contains 484 amendment articles from 144
-checksum-verified final BGBl documents. Of those, 399 have one unambiguous
-article-wide effective date; 85 retain `effective_at:null` plus a structured
+The 2023+ event layer currently contains 460 current act-scoped amendment
+articles from 144 checksum-verified final BGBl documents. Older parser
+assertions remain closed on the knowledge-time axis instead of being erased;
+there are 944 assertion rows in the portable audit database. Of the 460
+current events, 379 have one
+unambiguous article-wide effective date; 81 retain `effective_at:null` plus a structured
 gap. Event rows have `text_status:event_only` and
 `historical_text_reconstructed:false`: an amendment command is not a complete
 old consolidated state.
@@ -949,10 +985,101 @@ curl --get 'http://127.0.0.1:8010/acts/fed_asylvfg_1992/diff' \
 curl -OJ 'http://127.0.0.1:8010/retrospective-history.sqlite'
 ```
 
+### Amendment commands, change laws and monitoring
+
+`GET /changes` searches the final BGBl event layer rather than only the
+current consolidated text. `act` accepts an exact corpus id or abbreviation;
+`norm` accepts `§`/`Art.` designators; `from` and `to` filter the legal-effect
+date when known and otherwise the publication date. `future=true` selects
+events whose verified effect lies after the API's reference date. `q` searches
+procedure titles, article headings, affected norms and full parsed commands.
+
+```bash
+curl --get 'http://127.0.0.1:8010/changes' \
+  --data-urlencode 'act=fed_aufenthg_2004' \
+  --data-urlencode 'norm=§ 24'
+curl 'http://127.0.0.1:8010/changes?future=true'
+curl 'http://127.0.0.1:8010/amending-acts/bgbl-1-2024-323'
+```
+
+`GET /amending-acts/{document_id}` folds all per-act joins back into the one
+promulgated document: procedure, official HTML/PDF, SHA-256, articles,
+affected acts/norms and commands. This is still an evidence view, not a claim
+that an old consolidated body was recovered.
+
+The global `GET /changes.atom` and per-act
+`GET /acts/{id}/changes.atom` endpoints expose the same verified events to a
+feed reader. Polling twice daily is safe; entries have stable assertion ids
+and the feed is cached for 30 minutes.
+
 The SQLite database contains `acts`, `state_objects`, `state_observations`,
 `legal_intervals`, `amendment_events` and `metadata`, with indexes for both
 time axes. Full act bodies remain in the SHA-256 CAS and are joined by
 `state_sha256`, so the database does not duplicate legal text.
+
+## `GET /citations?act=&norm=&direction=&kind=&limit=&offset=`
+
+Returns machine-extracted citations from the current consolidated GII and
+BAYERN.RECHT norm bodies. `direction=out` (default) applies `act` and `norm` to
+the source; `direction=in` applies them to the target and therefore exposes
+reverse backlinks. `act` is an exact act id or exact `JurAbk`; `norm` is an
+exact `§`/`Art.` designator. `kind` is `self` or `cross_act`. Pagination uses
+stable artifact order, `limit` ∈ [1, 1000] and a non-negative `offset`.
+Rows are selected directly from read-only `citations.sqlite` with indexed
+exact keys and `ORDER BY ordinal`; the API never loads the complete citation
+graph into Python memory. `citations.json` contains only the response metadata,
+counts, source policy and storage descriptor.
+
+```bash
+curl --get 'http://127.0.0.1:8010/citations' \
+  --data-urlencode 'act=fed_sgb_2' \
+  --data-urlencode 'norm=§ 16a' \
+  --data-urlencode 'direction=in' \
+  --data-urlencode 'kind=cross_act'
+```
+
+```json
+{
+  "schema_version": 1,
+  "machine_extracted": true,
+  "current_state_only": true,
+  "legal_interpretation": "not_asserted",
+  "source_snapshots": {"DE": "2026-07-15", "DE-BY": "2026-07-15"},
+  "direction": "in",
+  "total": 35713,
+  "matched": 1,
+  "offset": 0,
+  "limit": 100,
+  "citations": [{
+    "id": "cite:…",
+    "status": "resolved",
+    "unresolved_reason": null,
+    "kind": "cross_act",
+    "source_act": "by_agsg",
+    "source_jurabk": "AGSG",
+    "source_norm": "Art. 2",
+    "source_excerpt": "…gemäß § 16a Nr. 4 SGB II angeboten…",
+    "citation_text": "§ 16a Nr. 4 SGB II",
+    "target_act": "fed_sgb_2",
+    "target_jurabk": "SGB 2",
+    "target_norm": "§ 16a",
+    "target_pinpoint": "§ 16a Nr. 4",
+    "source_snapshot": "2026-07-15",
+    "date_basis": "current_consolidated_snapshot_observation_not_legal_effect",
+    "occurrence_count": 1
+  }]
+}
+```
+
+Only explicit `§`, `§§`, `Art.` or `Artikel` heads are extracted. Bare
+`Absatz`/`Satz` mentions are deliberately excluded. Unqualified designators
+are tested against the source act; cross-act links require an exact entry in
+the closed alias registry. Ambiguous aliases, acts outside the curated corpus,
+missing norms and unsupported ranges remain rows with `status: "unresolved"`
+instead of receiving a fuzzy link. Range expansion follows the official norm
+order between two exact endpoints. Snapshot dates are observations of current
+consolidated text, not asserted dates of legal effect, and an edge is not a
+claim about how either norm should be interpreted.
 
 ## `GET /eu-index?q=&kind=&limit=&offset=`
 
@@ -1095,6 +1222,9 @@ X-Lexgraph-Resolved-Date: 2024-03-02
 X-Lexgraph-Head-Date: 2026-07-15
 X-Lexgraph-Exact: false
 X-Lexgraph-Archive-Status: partial
+X-Lexgraph-Complete: false
+X-Lexgraph-Source-Exact: false
+X-Lexgraph-Verified-Reconstruction: false
 X-Lexgraph-Missing-Transitions: 3
 X-Lexgraph-Archive-Gaps: [{"reason":"…","label":"…"}]
 X-Lexgraph-Date-Basis: retrieval_observation_not_effective_date
@@ -1118,7 +1248,12 @@ Content-Disposition: attachment; filename="…md"   # download=true only
 The truth boundary is strict: HEAD and a date backed by a verified complete GII
 CAS object are exact source snapshots. An exact observation says what GII
 served on that day; the header and Markdown front matter explicitly state that
-the date is a retrieval observation, not commencement. Other historical output
+the date is a retrieval observation, not commencement. A replay-proven derived
+body instead returns `X-Lexgraph-Archive-Status: verified_reconstruction`,
+`X-Lexgraph-Complete: true`, `X-Lexgraph-Source-Exact: false`, and
+`X-Lexgraph-Verified-Reconstruction: true`; its Markdown front matter repeats the same
+four-way boundary. It is complete and checkoutable, but never presented as an
+exact historical source capture. Other historical output
 uses dated complete norm states from verified Bavarian Wayback/daily snapshots
 where available, then conservatively reverses only reconcilable recorded
 `old/new` bodies; it is labelled `partial`.

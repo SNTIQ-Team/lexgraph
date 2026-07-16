@@ -42,6 +42,9 @@ else
     echo "    skipped by data policy (use NeuRIS; legacy RII is explicit opt-in)"
 fi
 step "10/24" "NeuRIS changelog + expiring ZIP capture"     python3 pipeline/fetch_neuris_changelog.py
+step "10b/24" "bounded resumable NeuRIS archive backfill" \
+    python3 pipeline/fetch_neuris_changelog.py --backfill-archive \
+        --limit 25 --max-downloads 25 --max-bytes 134217728 --delay 0.75
 
 echo "==> [11/24] private back-history source"
 if [ "${LEXGRAPH_ENABLE_BUZER:-0}" != "1" ]; then

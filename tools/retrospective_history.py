@@ -1129,6 +1129,8 @@ def _public_event(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "procedure_title": candidate.get("procedure_title"),
         "amending_article": candidate.get("amending_article"),
         "article_heading": candidate.get("article_heading"),
+        "command_scope_status": candidate.get("command_scope_status"),
+        "collective_subsection": candidate.get("collective_subsection"),
         "affected_norms": list(candidate.get("affected_norms") or []),
         "commands": copy.deepcopy(candidate.get("commands") or []),
         "command_count": int(candidate.get("command_count") or 0),
@@ -1158,6 +1160,7 @@ def build_public_manifest(
         history: Mapping[str, Any], states: Mapping[str, Any],
         objects: Mapping[str, Any], candidates: Iterable[dict[str, Any]], *,
         built_at: str, previous: Mapping[str, Any] | None = None,
+        verified_reconstructions: Mapping[str, Any] | None = None,
         ) -> dict[str, Any]:
     """Materialize the API/HF manifest with RFC3339 knowledge assertions.
 
@@ -1184,11 +1187,121 @@ def build_public_manifest(
                      if previous is not None else {})
     if not isinstance(objects, Mapping):
         raise RetrospectiveHistoryError("public CAS objects must be a mapping")
+    public_objects = copy.deepcopy(dict(
+        previous.get("objects") or {} if previous is not None else {}))
     for digest, metadata in objects.items():
         _valid_digest(digest, "public object SHA-256")
         if not isinstance(metadata, Mapping):
             raise RetrospectiveHistoryError(
                 f"public object metadata is invalid for {digest}")
+        prior = public_objects.get(digest)
+        if prior is not None and prior != metadata:
+            raise RetrospectiveHistoryError(
+                f"public object metadata changed for {digest}")
+        public_objects[digest] = copy.deepcopy(dict(metadata))
+
+    reconstructed_by_act: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    if verified_reconstructions is not None:
+        if not isinstance(verified_reconstructions, Mapping) or \
+                verified_reconstructions.get("schema_version") != 1 or \
+                verified_reconstructions.get("kind") != \
+                "lexgraph-reviewed-verified-reconstructions":
+            raise RetrospectiveHistoryError(
+                "verified reconstruction artifact has an unsupported schema")
+        recon_objects = verified_reconstructions.get("object_metadata") or {}
+        if not isinstance(recon_objects, Mapping):
+            raise RetrospectiveHistoryError(
+                "verified reconstruction object metadata is invalid")
+        for digest, metadata in recon_objects.items():
+            _valid_digest(digest, "derived state SHA-256")
+            if not isinstance(metadata, Mapping):
+                raise RetrospectiveHistoryError(
+                    "derived state object metadata is invalid")
+            prior = public_objects.get(digest)
+            if prior is not None and prior != metadata:
+                raise RetrospectiveHistoryError(
+                    f"derived object metadata changed for {digest}")
+            public_objects[digest] = copy.deepcopy(dict(metadata))
+        for row in verified_reconstructions.get("reconstructions") or []:
+            if not isinstance(row, Mapping):
+                raise RetrospectiveHistoryError(
+                    "verified reconstruction row is invalid")
+            act_id = str(row.get("act_id") or "")
+            digest = _valid_digest(row.get("state_sha256"),
+                                   "derived state SHA-256")
+            anchor = _valid_digest(row.get("anchor_state_sha256"),
+                                   "derived anchor SHA-256")
+            if digest not in public_objects or anchor not in public_objects or \
+                    digest not in states or anchor not in states:
+                raise RetrospectiveHistoryError(
+                    f"{act_id} reconstruction references an absent CAS state")
+            for state_digest in (digest, anchor):
+                state = _validate_state(state_digest, states[state_digest])
+                if state.get("id") != act_id or \
+                        state.get("jurabk") != row.get("jurabk"):
+                    raise RetrospectiveHistoryError(
+                        f"{act_id} reconstruction state identity mismatch")
+            if row.get("text_status") != "derived_verified" or \
+                    row.get("body_complete") is not True or \
+                    row.get("source_exact") is not False or \
+                    row.get("reverse_replay_verified") is not True:
+                raise RetrospectiveHistoryError(
+                    f"{act_id} reconstruction crossed its evidence boundary")
+            common = {
+                "act_id": act_id,
+                "knowledge_from": row.get("knowledge_from"),
+                "knowledge_to": row.get("knowledge_to"),
+                "date_status": row.get("date_status"),
+                "date_basis": row.get("date_basis"),
+                "verification": row.get("verification"),
+                "confidence": "verified_replay",
+                "observed_at": row.get("observed_at"),
+                "verified_through_observed_at": row.get("observed_at"),
+                "retroactive": bool(row.get("retroactive")),
+                "gaps": copy.deepcopy(row.get("gaps") or []),
+                "evidence": copy.deepcopy(row.get("evidence") or []),
+                "body_complete": True,
+                "reverse_replay_verified": True,
+            }
+            reconstructed_by_act[act_id].append({
+                **common,
+                "segment_id": row.get("id"),
+                "state_sha256": digest,
+                "previous_state_sha256": None,
+                "effective_from": row.get("effective_from"),
+                "effective_to": row.get("effective_to"),
+                "published_at": row.get("published_at"),
+                "text_status": "derived_verified",
+                "source_exact": False,
+                "provenance": {
+                    "method": "reviewed_inverse_then_canonical_forward_replay",
+                    "anchor_state_sha256": anchor,
+                    "incoming_event": copy.deepcopy(row.get("incoming_event")),
+                    "outgoing_event": copy.deepcopy(row.get("outgoing_event")),
+                    "changes_reversed": copy.deepcopy(
+                        row.get("changes_reversed") or []),
+                },
+            })
+            outgoing = row.get("outgoing_event") or {}
+            reconstructed_by_act[act_id].append({
+                **common,
+                "segment_id": f"{row.get('id')}:anchor",
+                "state_sha256": anchor,
+                "previous_state_sha256": digest,
+                "effective_from": row.get("effective_to"),
+                "effective_to": None,
+                "published_at": outgoing.get("published_at"),
+                "text_status": "official_exact",
+                "source_exact": True,
+                "retroactive": bool(
+                    outgoing.get("published_at") and row.get("effective_to")
+                    and row["effective_to"] < outgoing["published_at"]),
+                "provenance": {
+                    "method": "official_anchor_with_verified_forward_boundary",
+                    "anchor_state_sha256": anchor,
+                    "outgoing_event": copy.deepcopy(outgoing),
+                },
+            })
     by_act_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for candidate in candidates:
         if not isinstance(candidate, dict) or not candidate.get("act_id"):
@@ -1205,6 +1318,7 @@ def build_public_manifest(
                 public = _public_interval(row)
                 if public:
                     current_intervals.append(public)
+        current_intervals.extend(reconstructed_by_act.get(act_id, []))
         previous_act = previous_acts.get(act_id) \
             if isinstance(previous_acts.get(act_id), dict) else {}
         intervals = _merge_assertions(
@@ -1217,7 +1331,7 @@ def build_public_manifest(
         observation_digests = {
             str(row.get("state_sha256") or "")
             for row in internal.get("observations") or []}
-        if not observation_digests <= set(objects) or \
+        if not observation_digests <= set(public_objects) or \
                 not observation_digests <= set(states):
             raise RetrospectiveHistoryError(
                 f"{act_id} references state objects absent from public CAS")
@@ -1280,9 +1394,14 @@ def build_public_manifest(
             "effective_dates_inferred": False,
             "buzer_input": False,
             "event_gate": "exact act name in integrity-checked final BGBl article",
-            "state_gate": "complete GII state pair plus final BGBl and DIP review",
+            "state_gate": (
+                "either a complete official GII state pair with final BGBl/DIP "
+                "review, or a body-complete reviewed inverse replay whose "
+                "canonical forward replay exactly reproduces an official GII "
+                "anchor; derived bytes remain source_exact=false"
+            ),
         },
-        "objects": copy.deepcopy(dict(objects)),
+        "objects": public_objects,
         "acts": public_acts,
     }
     result["counts"] = {
@@ -1293,13 +1412,16 @@ def build_public_manifest(
             interval.get("knowledge_to") is None
             for row in public_acts.values() for interval in row["intervals"]),
         "events": sum(len(row["events"]) for row in public_acts.values()),
+        "current_events": sum(
+            event.get("knowledge_to") is None
+            for row in public_acts.values() for event in row["events"]),
         "events_with_effective_date": sum(
             bool(event.get("effective_at"))
             for row in public_acts.values() for event in row["events"]
             if event.get("knowledge_to") is None),
         "observations": sum(len(row["observations"])
                             for row in public_acts.values()),
-        "state_objects": len(objects),
+        "state_objects": len(public_objects),
     }
     canonical_json_bytes(result)
     return result

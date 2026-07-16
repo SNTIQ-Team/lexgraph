@@ -16,6 +16,9 @@ that the latter is a complete temporal database:
 * an official retrieval observation is never treated as an effective date.
   When the API supplies the matching content-addressed GII object, that
   observed parsed state is exact for the retrieval day and rendered directly.
+* a bounded body proven by reviewed inverse and canonical forward replay is
+  complete and checkoutable, but remains a ``verified_reconstruction`` with
+  ``source_exact:false`` rather than an exact historical source capture.
 
 The result is useful as a Wayback/git-style reader while keeping its evidence
 boundary visible in both response metadata and the Markdown itself.
@@ -611,11 +614,13 @@ def _yaml_string(value: Any) -> str:
 
 def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
               target: str, head_date: str, norm_ref: _NormRef | None,
-              exact: bool, gaps: list[dict[str, Any]],
+              exact: bool, complete: bool, source_exact: bool,
+              verified_reconstruction: bool, archive_status: str,
+              gaps: list[dict[str, Any]],
               state_meta: dict[str, Any] | None = None,
               legal_meta: dict[str, Any] | None = None,
               retrospective_meta: dict[str, Any] | None = None) -> str:
-    status = "exact" if exact else "partial"
+    status = archive_status
     scope = norm_ref.label if norm_ref is not None else "entire act"
     lines = [
         "---",
@@ -626,6 +631,10 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         f"resolved_at: {target}",
         f"head_date: {head_date}",
         f"archive_status: {status}",
+        f"complete: {str(complete).lower()}",
+        f"source_exact: {str(source_exact).lower()}",
+        "verified_reconstruction: "
+        f"{str(verified_reconstruction).lower()}",
         f"scope: {_yaml_string(scope)}",
         f"coverage_gaps: {len(gaps)}",
     ]
@@ -675,10 +684,17 @@ def _markdown(act: dict[str, Any], norms: list[dict[str, Any]], *,
         f"> Archive status: **{status}** · requested/resolved {target} · HEAD {head_date}.",
     ])
     if retrospective_meta:
-        lines.append(
-            "> The body is an integrity-checked complete GII state selected "
-            "by a verified legal-validity interval. Legal validity and the "
-            "time at which Lexgraph knew the assertion are separate axes.")
+        if verified_reconstruction:
+            lines.append(
+                "> The body is a complete verified reconstruction derived "
+                "from reviewed final BGBl commands and proven by canonical "
+                "forward replay to a later official GII anchor. It is not an "
+                "exact historical source capture.")
+        else:
+            lines.append(
+                "> The body is an integrity-checked complete GII state selected "
+                "by a verified legal-validity interval. Legal validity and the "
+                "time at which Lexgraph knew the assertion are separate axes.")
         if retrospective_meta.get("retroactive"):
             lines.append(
                 "> This official commencement date precedes publication; the "
@@ -835,9 +851,24 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
     else:
         norms, gaps, _ = _reconstruct(act, target, head_date, norm_ref)
         exact = not gaps
+    verified_reconstruction = bool(
+        retrospective_meta
+        and retrospective_meta.get("text_status") == "derived_verified"
+        and retrospective_meta.get("body_complete") is True
+        and retrospective_meta.get("source_exact") is False
+        and retrospective_meta.get("reverse_replay_verified") is True)
+    source_exact = exact and not verified_reconstruction
+    complete = exact or verified_reconstruction
+    partial = not complete
+    archive_status = ("verified_reconstruction"
+                      if verified_reconstruction else
+                      "exact" if source_exact else "partial")
     markdown = _markdown(
         act, norms, target=target, head_date=head_date, norm_ref=norm_ref,
-        exact=exact, gaps=gaps, state_meta=state_meta, legal_meta=legal_meta,
+        exact=exact, complete=complete, source_exact=source_exact,
+        verified_reconstruction=verified_reconstruction,
+        archive_status=archive_status, gaps=gaps,
+        state_meta=state_meta, legal_meta=legal_meta,
         retrospective_meta=retrospective_meta)
     result = {
         "act_id": act.get("id"),
@@ -846,7 +877,11 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
         "head_date": head_date,
         "norm": norm_ref.label if norm_ref is not None else None,
         "exact": exact,
-        "partial": not exact,
+        "partial": partial,
+        "complete": complete,
+        "source_exact": source_exact,
+        "verified_reconstruction": verified_reconstruction,
+        "archive_status": archive_status,
         "markdown": markdown,
         "gaps": gaps,
     }
@@ -856,6 +891,7 @@ def render_markdown_snapshot(act: dict[str, Any], *, requested_at: Any = None,
             "knowledge_to", "published_at", "observed_at",
             "verified_through_observed_at", "text_status", "date_status",
             "date_basis", "verification", "retroactive", "state_sha256",
+            "body_complete", "reverse_replay_verified",
         )})
         result["source_url"] = next((
             str(row.get("url")) for row in retrospective_meta.get("evidence") or []

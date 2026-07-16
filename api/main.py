@@ -19,29 +19,36 @@ Endpoints (see docs/API.md → "C) REST API"):
   GET /acts/{id}/history      bitemporal legal/knowledge-time assertions
   GET /acts/{id}/diff         exact state diff at one knowledge-time slice
   GET /acts/{id}/markdown     full act or one norm as dated Markdown
+  GET /changes                official amendment-command history
+  GET /amending-acts/{id}     one BGBl change law across affected acts
   GET /retrospective-history.sqlite  portable retrospective database
   GET /git?lane=&limit=       Laws-as-Git event log, optionally by lane
   GET /graph                  the QFS arena export (nodes/edges/beliefs/…)
   GET /hierarchy              competence-aware legal layers (EU/Bund/Länder)
+  GET /citations              current statutory citations and backlinks
   GET /eu-index               all in-force EU directives + basic regulations
   GET /procedures/watched     persistent DIP/EUR-Lex watch state + history
   GET /amendment-fates        reviewed amendment document-chain validations
   GET /federal-history        official-only verified federal state/patch events
   GET /official-states        exact GII retrieval observations + state hashes
   GET /official-transition-reviews  BGBl/DIP accepted legal transitions
+  GET /verified-reconstructions  replay-proven complete derived states
   GET /search?q=              deep search + complete GII metadata discovery
   GET /decisions?q=&act=      court decisions (decisions.json), filterable
   GET /decisions/{id}         one decision; 404 if unknown
   GET /digest                 LLM digest of legislative activity; 404 if none
 
-Data is loaded once at startup and cached in-process; the dataset is static
-per deploy. Override the data directory with LEXGRAPH_DATA=/path/to/web/data.
+Small JSON metadata is loaded lazily and cached in-process; large search and
+citation indexes are queried read-only in SQLite. The dataset is static per
+deploy. Override the data directory with LEXGRAPH_DATA=/path/to/web/data.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import threading
+import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from pathlib import Path
 
@@ -56,6 +63,7 @@ from api.act_archive import (
     render_markdown_snapshot,
 )
 from api.gii_catalog import GiiCatalogIndex
+from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text
 from api.procedure_search import ProcedureSearchIndex
 from api.official_state_store import OfficialStateError, load_observed_state
@@ -64,7 +72,9 @@ from api.retrospective_store import (
     RetrospectiveIntegrityError,
     RetrospectiveNotFound,
     act_history as resolve_act_history,
+    amending_act as resolve_amending_act,
     diff_intervals,
+    list_changes as resolve_changes,
     load_interval_state,
     resolve_interval,
     validate_manifest as validate_retrospective_manifest,
@@ -75,10 +85,41 @@ DATA_DIR = Path(os.environ.get(
     "LEXGRAPH_DATA",
     Path(__file__).resolve().parent.parent / "web" / "data"))
 
-app = FastAPI(title="Lexgraph", version="1.3")
+app = FastAPI(title="Lexgraph", version="1.5")
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)
 LANES = ["EU", "Bund", "Bayern", "Länder"]
+
+_SGB_ROMAN = {
+    1: "i", 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii",
+    8: "viii", 9: "ix", 10: "x", 11: "xi", 12: "xii", 13: "xiii",
+    14: "xiv",
+}
+_SGB_ARABIC = {roman: number for number, roman in _SGB_ROMAN.items()}
+
+
+def _exact_act_keys(value: object) -> set[str]:
+    """Return closed exact aliases for an act id/abbreviation.
+
+    The official GII catalogue spells the social codes as ``SGB 8`` while
+    lawyers and readers normally write ``SGB VIII``.  Accept both without
+    opening a fuzzy-match boundary in evidence-bearing endpoints.
+    """
+    key = " ".join(str(value or "").casefold().split())
+    keys = {key}
+    match = re.fullmatch(r"sgb\s+(\d+|[ivx]+)", key)
+    if not match:
+        return keys
+    token = match.group(1)
+    if token.isdigit():
+        roman = _SGB_ROMAN.get(int(token))
+        if roman:
+            keys.add(f"sgb {roman}")
+    else:
+        number = _SGB_ARABIC.get(token)
+        if number:
+            keys.add(f"sgb {number}")
+    return keys
 
 # in-process cache of the (static per deploy) data plane
 _CACHE: dict[str, object] = {}
@@ -314,6 +355,31 @@ def official_states(
     }
 
 
+@app.get("/verified-reconstructions")
+def verified_reconstructions(
+        act: str | None = Query(
+            None, min_length=1, description="exact act id or abbreviation")):
+    """Reviewed full derived states whose inverse/forward replay is proven.
+
+    These rows are body-complete but ``source_exact:false``: the historical
+    bytes were reconstructed from final BGBl commands and an official later
+    GII anchor, then forward-replayed to that anchor byte-for-byte.
+    """
+    data = _load("verified_reconstructions")
+    rows = list(data.get("reconstructions") or [])
+    if act:
+        needles = _exact_act_keys(act)
+        rows = [row for row in rows if needles.intersection(
+            _exact_act_keys(row.get("act_id")) |
+            _exact_act_keys(row.get("jurabk")))]
+    return _cached({
+        **{key: value for key, value in data.items()
+           if key not in {"reconstructions"}},
+        "total": len(rows),
+        "reconstructions": rows,
+    })
+
+
 @app.get("/official-transition-reviews")
 def official_transition_reviews(
         act: str | None = Query(
@@ -390,9 +456,10 @@ def act_archive(
             None, description="RFC3339 knowledge-time slice")):
     """Selectable state dates, norm designators, and known coverage gaps.
 
-    HEAD is the exact consolidated snapshot.  Earlier entries are conservative
-    reconstructions and remain explicitly partial where old/new evidence is
-    absent, truncated, empty-sided, or internally inconsistent.
+    HEAD is the exact consolidated snapshot.  Earlier entries distinguish
+    source-exact official captures, body-complete replay-verified states, and
+    genuinely partial reconstructions; those evidence classes are never
+    collapsed into one generic ``historical`` label.
     """
     try:
         payload = build_archive_index(
@@ -458,6 +525,148 @@ def retrospective_history(
     return _cached(_history_envelope(manifest, history))
 
 
+@app.get("/changes")
+def changes(
+        q: str | None = Query(
+            None, min_length=1,
+            description="text in titles, article headings or commands"),
+        act: str | None = Query(
+            None, min_length=1, description="exact act id or abbreviation"),
+        norm: str | None = Query(
+            None, min_length=1, description="target §/Art. designator"),
+        from_date: date | None = Query(
+            None, alias="from", description="first event/effective date"),
+        to_date: date | None = Query(
+            None, alias="to", description="last event/effective date"),
+        future: bool | None = Query(
+            None, description="only future (true) or non-future (false) effects"),
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge-time slice"),
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0)):
+    """Official BGBl amendment commands across the curated federal corpus.
+
+    Rows preserve publication and effective dates separately.  A command is
+    not presented as a complete historical consolidation unless an exact
+    state interval also exists in ``/acts/{id}/history``.
+    """
+    manifest = _retrospective_manifest()
+    assert manifest is not None
+    try:
+        payload = resolve_changes(
+            manifest, as_of=_knowledge_value(as_of), act=act, norm=norm,
+            from_date=(from_date.isoformat() if from_date else None),
+            to_date=(to_date.isoformat() if to_date else None), future=future,
+            query=q)
+    except RetrospectiveNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    events = payload["events"]
+    return _cached({
+        **payload,
+        "matched": len(events),
+        "offset": offset,
+        "limit": limit,
+        "events": events[offset:offset + limit],
+    })
+
+
+@app.get("/amending-acts/{document_id}")
+def amending_act(
+        document_id: str,
+        as_of: datetime | None = Query(
+            None, description="RFC3339 knowledge-time slice")):
+    """One final BGBl document grouped by article and affected act."""
+    manifest = _retrospective_manifest()
+    assert manifest is not None
+    try:
+        payload = resolve_amending_act(
+            manifest, document_id, as_of=_knowledge_value(as_of))
+    except RetrospectiveNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (RetrospectiveIntegrityError, RetrospectiveAmbiguity) as exc:
+        raise HTTPException(
+            503, f"retrospective history integrity failure: {exc}") from exc
+    return _cached(payload)
+
+
+def _changes_atom(payload: dict, *, act_id: str | None = None,
+                  limit: int = 100) -> Response:
+    """Render a deterministic Atom 1.0 feed from visible change events."""
+    namespace = "http://www.w3.org/2005/Atom"
+    ET.register_namespace("", namespace)
+    tag = lambda name: f"{{{namespace}}}{name}"
+    feed = ET.Element(tag("feed"))
+    title = "Lexgraph — amtliche Änderungen"
+    if act_id:
+        title += f" — {act_id}"
+    canonical = (f"https://api.sntiq.com/lex/acts/{act_id}/changes.atom"
+                 if act_id else "https://api.sntiq.com/lex/changes.atom")
+    ET.SubElement(feed, tag("title")).text = title
+    ET.SubElement(feed, tag("id")).text = canonical
+    ET.SubElement(feed, tag("updated")).text = str(payload["built_at"])
+    ET.SubElement(feed, tag("link"), {
+        "rel": "self", "href": canonical,
+        "type": "application/atom+xml",
+    })
+    ET.SubElement(feed, tag("link"), {
+        "rel": "alternate", "href": "https://sntiq.com/dt/lexgraph",
+        "type": "text/html",
+    })
+    author = ET.SubElement(feed, tag("author"))
+    ET.SubElement(author, tag("name")).text = "SNTIQ Lexgraph"
+    for row in list(payload.get("events") or [])[:limit]:
+        entry = ET.SubElement(feed, tag("entry"))
+        entry_id = str(row.get("id") or row.get("event_id") or "")
+        ET.SubElement(entry, tag("id")).text = f"urn:lexgraph:{entry_id}"
+        heading = str(row.get("article_heading") or "Änderung")
+        ET.SubElement(entry, tag("title")).text = (
+            f"{row.get('jurabk') or row.get('act_id')}: {heading}")
+        ET.SubElement(entry, tag("updated")).text = str(
+            row.get("knowledge_from") or payload["built_at"])
+        ET.SubElement(entry, tag("published")).text = (
+            f"{row['published_at']}T00:00:00Z")
+        document_id = str(row.get("document_id") or "")
+        ET.SubElement(entry, tag("link"), {
+            "rel": "alternate",
+            "href": f"https://api.sntiq.com/lex/amending-acts/{document_id}",
+            "type": "application/json",
+        })
+        if row.get("official_html_url"):
+            ET.SubElement(entry, tag("link"), {
+                "rel": "related", "href": str(row["official_html_url"]),
+                "type": "text/html",
+            })
+        effective = row.get("effective_at") or "Datum noch nicht aufgelöst"
+        norms = ", ".join(row.get("affected_norms") or []) or "Akt-Ebene"
+        ET.SubElement(entry, tag("summary"), {"type": "text"}).text = (
+            f"Verkündet {row['published_at']}; Wirkung {effective}; "
+            f"betroffen: {norms}; Befehle: {len(row.get('commands') or [])}.")
+    xml = ET.tostring(feed, encoding="utf-8", xml_declaration=True)
+    return Response(xml, media_type="application/atom+xml",
+                    headers={"Cache-Control": "public, max-age=1800"})
+
+
+@app.get("/changes.atom", response_class=Response)
+def changes_atom(limit: int = Query(100, ge=1, le=500)):
+    """Atom monitor for the newest official BGBl amendment events."""
+    manifest = _retrospective_manifest()
+    assert manifest is not None
+    return _changes_atom(resolve_changes(manifest), limit=limit)
+
+
+@app.get("/acts/{act_id}/changes.atom", response_class=Response)
+def act_changes_atom(act_id: str, limit: int = Query(100, ge=1, le=500)):
+    """Per-act Atom monitor; suitable for a twice-daily feed reader."""
+    manifest = _retrospective_manifest()
+    assert manifest is not None
+    payload = resolve_changes(manifest, act=act_id)
+    if not payload["events"] and act_id not in manifest.get("acts", {}):
+        raise HTTPException(404, f"no retrospective history for {act_id}")
+    return _changes_atom(payload, act_id=act_id, limit=limit)
+
+
 @app.get("/acts/{act_id}/diff")
 def retrospective_diff(
         act_id: str,
@@ -498,8 +707,9 @@ def act_markdown(
 ):
     """Full act or one §/Art. as raw ``text/markdown``.
 
-    Response headers expose the resolved date and whether it is the exact HEAD
-    snapshot.  Historical gaps are also embedded at the top of the Markdown.
+    Response headers distinguish an exact source snapshot, a complete
+    replay-verified reconstruction, and a partial reconstruction. Historical
+    gaps are also embedded at the top of the Markdown.
     """
     if as_of is not None and at is None:
         raise HTTPException(422, "as_of requires an explicit legal date in at")
@@ -551,8 +761,11 @@ def act_markdown(
         "X-Lexgraph-Resolved-Date": result["resolved_at"],
         "X-Lexgraph-Head-Date": result["head_date"],
         "X-Lexgraph-Exact": str(result["exact"]).lower(),
-        "X-Lexgraph-Archive-Status": (
-            "exact" if result["exact"] else "partial"),
+        "X-Lexgraph-Archive-Status": result["archive_status"],
+        "X-Lexgraph-Complete": str(result["complete"]).lower(),
+        "X-Lexgraph-Source-Exact": str(result["source_exact"]).lower(),
+        "X-Lexgraph-Verified-Reconstruction": str(
+            result["verified_reconstruction"]).lower(),
         "X-Lexgraph-Missing-Transitions": str(len(result["gaps"])),
     }
     if result.get("date_basis"):
@@ -580,6 +793,9 @@ def act_markdown(
         "X-Lexgraph-Observed-Date": "observed_at",
         "X-Lexgraph-Text-Status": "text_status",
         "X-Lexgraph-Date-Status": "date_status",
+        "X-Lexgraph-Verification": "verification",
+        "X-Lexgraph-Verified-Through-Observed-Date":
+            "verified_through_observed_at",
     }
     for header, field in retrospective_headers.items():
         if result.get(field) is not None:
@@ -641,6 +857,50 @@ def graph():
 def hierarchy():
     """Competence-aware legal layers (hierarchy.json), not a total ranking."""
     return _cached(_load("hierarchy"))
+
+
+@app.get("/citations")
+def citations(
+        act: str | None = Query(
+            None, min_length=1, description="exact act id or JurAbk"),
+        norm: str | None = Query(
+            None, min_length=1, description="exact §/Art. designator"),
+        direction: str = Query("out", pattern="^(in|out)$"),
+        kind: str | None = Query(None, pattern="^(self|cross_act)$"),
+        limit: int = Query(100, ge=1, le=1000),
+        offset: int = Query(0, ge=0)):
+    """Current-text statutory citations or reverse backlinks.
+
+    Extraction is mechanical and limited to explicit norm designators.  An
+    unqualified reference stays inside its source act; cross-act resolution
+    uses the closed exact-alias registry only.  Unresolved rows are retained
+    rather than fuzzily linked.  Snapshot dates are observations, not asserted
+    legal-effective dates, and citation edges make no interpretation claim.
+    """
+    data = _load("citations")
+    try:
+        result = query_citations(
+            DATA_DIR / "citations.sqlite", act=act, norm=norm,
+            direction=direction, kind=kind, limit=limit, offset=offset)
+    except CitationStoreError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {
+        "schema_version": data.get("schema_version"),
+        "built_at": data.get("built_at"),
+        "machine_extracted": data.get("machine_extracted"),
+        "current_state_only": data.get("current_state_only"),
+        "legal_interpretation": data.get("legal_interpretation"),
+        "source_policy": data.get("source_policy"),
+        "source_snapshots": data.get("source_snapshots"),
+        "counts": data.get("counts"),
+        "direction": direction,
+        "storage": data.get("storage"),
+        "total": (data.get("counts") or {}).get("total", 0),
+        "matched": result["matched"],
+        "offset": offset,
+        "limit": limit,
+        "citations": result["citations"],
+    }
 
 
 @app.get("/eu-index")
@@ -737,6 +997,46 @@ def _append_gii_catalog(result: dict, query: str, limit: int) -> dict:
     return result
 
 
+def _append_temporal_search(result: dict, query: str,
+                            change_limit: int = 25,
+                            decision_limit: int = 20) -> dict:
+    """Add amendment history and judgments to the unified search envelope."""
+    manifest = _retrospective_manifest(optional=True)
+    if manifest is not None:
+        try:
+            changes = resolve_changes(manifest, query=query)
+        except (RetrospectiveIntegrityError, RetrospectiveNotFound):
+            changes = {"matched": 0, "events": []}
+    else:
+        changes = {"matched": 0, "events": []}
+    result["change_total"] = int(changes.get("matched") or 0)
+    result["change_matches"] = list(
+        changes.get("events") or [])[:change_limit]
+
+    try:
+        decision_rows = list(_load("decisions"))
+    except (HTTPException, KeyError):
+        decision_rows = []
+    needle = query.strip().casefold()
+
+    def decision_hit(row: dict) -> bool:
+        values = [
+            row.get("az"), row.get("court"), row.get("court_short"),
+            row.get("title"), *((row.get("summary") or {}).values()),
+            *(effect.get("jurabk") for effect in row.get("effects") or []),
+            *(effect.get("norm") for effect in row.get("effects") or []),
+        ]
+        return any(needle in str(value).casefold()
+                   for value in values if value)
+
+    decision_matches = [row for row in decision_rows if decision_hit(row)]
+    result["decision_total"] = len(decision_matches)
+    result["decision_matches"] = decision_matches[:decision_limit]
+    result["result_total"] = int(result.get("result_total") or 0) + \
+        result["change_total"] + result["decision_total"]
+    return result
+
+
 @app.get("/search")
 def search(q: str = Query(..., min_length=1),
            limit: int = Query(25, ge=1, le=200),
@@ -772,7 +1072,7 @@ def search(q: str = Query(..., min_length=1),
                        or needle in normalize_search_text(r.get("jurabk"))
                        or needle in normalize_search_text(r.get("title"))]
         matches = all_matches[:limit]
-        return _append_gii_catalog({
+        result = _append_temporal_search({
             "query": q, "total": len(all_matches), "matches": matches,
             "result_total": len(all_matches) + procedure_total,
             "act_total": len(all_matches),
@@ -780,7 +1080,8 @@ def search(q: str = Query(..., min_length=1),
             "norm_matches": [],
             "procedure_total": procedure_total,
             "procedure_matches": procedure_matches,
-        }, q, catalog_limit)
+        }, q)
+        return _append_gii_catalog(result, q, catalog_limit)
 
     global _SEARCH_ENGINE
     with _SEARCH_LOCK:
@@ -830,6 +1131,7 @@ def search(q: str = Query(..., min_length=1),
     result["procedure_matches"] = procedure_matches
     result["result_total"] = (result["act_total"] + result["norm_total"]
                               + result["procedure_total"])
+    result = _append_temporal_search(result, q)
     return _append_gii_catalog(result, q, catalog_limit)
 
 

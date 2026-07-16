@@ -1,9 +1,10 @@
-# Data sources (audit baseline 2026-07-06; official state archive 2026-07-15)
+# Data sources (audit baseline 2026-07-06; archive review 2026-07-16)
 
 The 2026-07-06 baseline was probed live and adversarially re-tested. RII and
 the CELLAR breadth index were added from their current fetcher contracts on
 2026-07-14. The GII CAS, final-command capture and NeuRIS artifact retention
-were verified on 2026-07-15. Baseline audit snippets:
+were verified on 2026-07-15; the reviewed-derived publication gate and
+resumable NeuRIS export were re-verified on 2026-07-16. Baseline audit snippets:
 [source-audit.json](source-audit.json).
 
 ## Verdict map
@@ -15,7 +16,7 @@ were verified on 2026-07-15. Baseline audit snippets:
 | **EUR-Lex / CELLAR** | live | **primary — EU layer** | consolidated versions are first-class dated works (CELEX sector 0) | working-daily |
 | **Rechtsprechung im Internet (RII)** (BMJV/BfJ) | default-off / migration pending | **official — corpus-relevant federal decisions already retrieved** | seven rolling RSS feeds + official ZIP/XML records; retained snapshot is cumulative | no scheduled intake; moving to NeuRIS API |
 | **OLDP** (openlegaldata.io) | live | research — bulk case graph (not in the current export) | 423,944 dated decisions, 18.6M case→§ citation edges | ~1 week ingest lag |
-| **NeuRIS** (testphase.rechtsinformationen.bund.de) | live | **secondary today, primary-designate** | changelog metadata plus immediate content-addressed capture of advertised ZIP artifacts before temporary URLs disappear | continuous (Testphase) |
+| **NeuRIS** (testphase.rechtsinformationen.bund.de) | live | **official archive channel; secondary today, primary-designate** | cumulative changelog ledger plus bounded/resumable content-addressed capture of advertised ZIP/XML/HTML artifacts before temporary URLs disappear | continuous + resumable archive backfill (Testphase) |
 | **buzer.de** | private candidates + public deep links | discovery/manual QA and one-click cross-check only | private version/synopsis database since 2006 is not republished | no scheduled crawl |
 | **GII** (gesetze-im-internet.de) | live | **primary — current HEAD and observed complete states** | source itself exposes current Fassung only; Lexgraph retains each complete retrieval in its own immutable SHA-256 state store | continuous consolidation, days–weeks lag; daily capture |
 | **gesetze-bayern.de** (BAYERN.RECHT) | live | **primary — Bavaria HEAD + back-history** (upgraded 2026-07-06) | ffn register carries per-act Fortführungsnachweis amendment chains; `/Content/Zip/<key>` = structured XML (satz.nr, typed verweis incl. EU) | few working days after GVBl |
@@ -60,6 +61,16 @@ were verified on 2026-07-15. Baseline audit snippets:
   article has one unambiguous commencement clause; sub-article splits remain
   unresolved. The event inventory is not treated as a historical consolidated
   text.
+- **Reviewed derived reconstructions**: a historical full body is emitted only
+  from a checked review in `data/verified_reconstruction_reviews.json`. The
+  builder starts at a complete content-addressed GII anchor, reverses the exact
+  outgoing final-BGBl commands, verifies the incoming command cardinality, and
+  then replays the outgoing commands to reproduce the canonical anchor bytes.
+  The resulting interval has official BGBl/DIP boundaries and a complete body,
+  but remains `text_status: derived_verified` and `source_exact: false` because
+  no source supplied those historical consolidated bytes. Its deterministic
+  gzip object is outside the official GII manifest and has a separate origin,
+  anchor and hash gate in publication and HF export.
 - **EUR-Lex**: use the **CELLAR machine channel only** — the website (and
   even its robots.txt) sits behind a WAF JS-challenge. Formex XML carries
   `ARTICLE/PARAG IDENTIFIER`s; consolidated versions per date
@@ -89,8 +100,15 @@ were verified on 2026-07-15. Baseline audit snippets:
   for an arbitrary window. Changelog artifact URLs are locators, not a durable
   archive: advertised ZIPs may disappear. The fetcher therefore downloads and
   hashes each selected artifact during the changelog pass and retains the
-  original URL plus capture status. Testphase — treat as rising primary, keep
-  GII as HEAD source until coverage is proven.
+  original URL plus capture status. `--backfill-archive` revisits the cumulative
+  ledger in bounded batches, atomically checkpoints each attempt and reuses
+  only hash-verified CAS objects. The public HF archive preserves every logical
+  ledger row, including tombstones, metadata-only observations and failures,
+  but exports bytes only for verified `captured` references; `.part` files,
+  failed payloads and unreferenced cache objects are excluded. `point_in_time`
+  and manifestation dates remain ELI identifiers, not inferred commencement
+  dates. Testphase — treat as rising primary, keep GII as HEAD source until
+  coverage is proven.
 - **buzer.de**: permissive robots and the absence of a scraping clause are not
   a reuse licence. Although individual statutory passages are official works,
   the private consolidation, version segmentation and synopsis alignment may
@@ -139,6 +157,7 @@ Verified federal rows  own diffs between adjacent complete GII states;
                        a legal effective date only after final BGBl command
                        + exact DIP commencement review
 Back history           captured NeuRIS artifacts where still available
+                       + reviewed derived full states, always source_exact=false
                        + BundesGit checkpoints (2013, 2022)
                        + BGBl ELI archive (2023+)
                        + Bavaria ffn Fortführungsnachweis chains

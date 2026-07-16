@@ -30,17 +30,20 @@ SERVICE_INDEX = {
         "/acts", "/acts/{id}", "/acts/{id}/archive",
         "/acts/{id}/history", "/acts/{id}/diff",
         "/acts/{id}/markdown", "/retrospective-history.sqlite",
+        "/changes", "/changes.atom", "/acts/{id}/changes.atom",
+        "/amending-acts/{document_id}",
         "/decisions", "/decisions/{id}",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",
-        "/official-states", "/official-transition-reviews",
+        "/official-states", "/verified-reconstructions",
+        "/official-transition-reviews",
         "/search", "/digest",
     ],
 }
 
 server = FastAPI(
     title="Lexgraph API",
-    version="1.3",
+    version="1.5",
     docs_url="/docs",
     redoc_url=None,
 )
@@ -61,6 +64,9 @@ server.add_middleware(
         "X-Lexgraph-Head-Date",
         "X-Lexgraph-Exact",
         "X-Lexgraph-Archive-Status",
+        "X-Lexgraph-Complete",
+        "X-Lexgraph-Source-Exact",
+        "X-Lexgraph-Verified-Reconstruction",
         "X-Lexgraph-Archive-Gaps",
         "X-Lexgraph-Missing-Transitions",
         "X-Lexgraph-Date-Basis",
@@ -79,6 +85,8 @@ server.add_middleware(
         "X-Lexgraph-Observed-Date",
         "X-Lexgraph-Text-Status",
         "X-Lexgraph-Date-Status",
+        "X-Lexgraph-Verification",
+        "X-Lexgraph-Verified-Through-Observed-Date",
     ],
     max_age=86400,
 )
@@ -139,6 +147,9 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep">/acts/{id}/history</td><td class="what">bitemporal legal-validity and knowledge-time assertions</td></tr>
     <tr><td class="ep">/acts/{id}/diff</td><td class="what">exact CAS state diff by legal date and knowledge time</td></tr>
     <tr><td class="ep">/acts/{id}/markdown</td><td class="what">full act or one §/Art. at a legal date as Markdown</td></tr>
+    <tr><td class="ep"><a href="changes">/changes</a></td><td class="what">official BGBl amendment commands, dates and evidence</td></tr>
+    <tr><td class="ep"><a href="changes.atom">/changes.atom</a></td><td class="what">global Atom monitor; per-act feeds live below /acts/{id}</td></tr>
+    <tr><td class="ep">/amending-acts/{document_id}</td><td class="what">one change law grouped by article and affected acts</td></tr>
     <tr><td class="ep"><a href="retrospective-history.sqlite">/retrospective-history.sqlite</a></td><td class="what">portable bitemporal SQLite database</td></tr>
     <tr><td class="ep"><a href="decisions">/decisions</a></td><td class="what">court decisions (Rechtsprechung)</td></tr>
     <tr><td class="ep">/decisions/{id}</td><td class="what">one complete exported decision row</td></tr>
@@ -150,6 +161,7 @@ INDEX_HTML = """<!doctype html>
     <tr><td class="ep"><a href="amendment-fates">/amendment-fates</a></td><td class="what">reviewed amendment chains + current-law checks</td></tr>
     <tr><td class="ep"><a href="federal-history">/federal-history</a></td><td class="what">official-only verified federal state and patch events</td></tr>
     <tr><td class="ep"><a href="official-states">/official-states</a></td><td class="what">exact GII retrieval observations + immutable state hashes</td></tr>
+    <tr><td class="ep"><a href="verified-reconstructions">/verified-reconstructions</a></td><td class="what">complete replay-verified derived states (never source-exact)</td></tr>
     <tr><td class="ep"><a href="official-transition-reviews">/official-transition-reviews</a></td><td class="what">legal dates accepted by final BGBl + DIP review</td></tr>
     <tr><td class="ep"><a href="search?q=Ukraine">/search?q=</a></td><td class="what">ranked full-text search across acts + current norms</td></tr>
     <tr><td class="ep"><a href="digest">/digest</a></td><td class="what">LLM digest of legislative activity (experimental)</td></tr>

@@ -16,6 +16,7 @@ from backfill_bgbl_history import (  # noqa: E402
     parse_retrospective_article_sections,
     parse_amendment_commands,
     resolve_article_effective_date,
+    scope_section_to_act,
     select_document_candidates,
 )
 
@@ -108,6 +109,40 @@ def test_final_text_match_rejects_name_only_in_replacement_text() -> None:
         ),
     }
     assert exact_final_text_match(sgb_section, asylblg) is None
+
+
+def test_specific_heading_rejects_statute_shaped_replacement_text() -> None:
+    vwgo = {
+        "aliases": ["verwaltungsgerichtsordnung"],
+        "slug": "vwgo",
+        "jurabk": "VwGO",
+        "long_title": "Verwaltungsgerichtsordnung",
+    }
+    section = {
+        "heading": "Änderung des Asylgesetzes",
+        "text": (
+            "Artikel 1\nÄnderung des Asylgesetzes\n"
+            "Das Asylgesetz wird wie folgt geändert:\n"
+            "1. § 10 wird wie folgt gefasst:\n"
+            "„Die Verwaltungsgerichtsordnung wird wie folgt geändert: …“"
+        ),
+    }
+    assert exact_final_text_match(section, vwgo) is None
+
+    zpo = {
+        "aliases": ["zivilprozessordnung"],
+        "slug": "zpo", "jurabk": "ZPO",
+        "long_title": "Zivilprozessordnung",
+    }
+    quoted_old_wording = {
+        "heading": "Änderung der Verwaltungsgerichtsordnung",
+        "text": (
+            "Artikel 19\nÄnderung der Verwaltungsgerichtsordnung\n"
+            "In § 173 der Verwaltungsgerichtsordnung werden die Wörter "
+            "„Buch 6 der Zivilprozessordnung ist nicht anzuwenden“ gestrichen."
+        ),
+    }
+    assert exact_final_text_match(quoted_old_wording, zpo) is None
 
 
 def test_final_text_match_rejects_nested_replacement_article_heading() -> None:
@@ -298,3 +333,106 @@ def test_amendment_commands_keep_norms_not_outer_article_number() -> None:
     assert norms == ["§ 24", "Art. 16a"]
     assert commands[0]["ref"]["article"] == "16a"
     assert all(row.get("ref", {}).get("article") != "4" for row in commands)
+
+
+def test_collective_follow_up_commands_are_scoped_per_act() -> None:
+    bafoeg = {
+        "slug": "baf_g", "jurabk": "BAföG",
+        "long_title": "Bundesausbildungsförderungsgesetz",
+        "aliases": ["bundesausbildungsförderungsgesetz"],
+        "descriptor_aliases": ["bundesausbildungsförderungsgesetz"],
+    }
+    aufenthg = {
+        "slug": "aufenthg_2004", "jurabk": "AufenthG 2004",
+        "long_title": "Aufenthaltsgesetz",
+        "aliases": ["aufenthaltsgesetz"],
+        "descriptor_aliases": ["aufenthaltsgesetz"],
+    }
+    section = {
+        "article": "11",
+        "heading": "Folgeänderungen",
+        "text": (
+            "Artikel 11\nFolgeänderungen\n"
+            "(1) Das Bundesausbildungsförderungsgesetz vom 1. Januar 2000 "
+            "(BGBl. I S. 1) wird wie folgt geändert:\n"
+            "In § 2 Absatz 1 wird die Angabe „alt“ durch die Angabe „neu“ "
+            "ersetzt.\n"
+            "(2) Das Aufenthaltsgesetz vom 1. Januar 2005 "
+            "(BGBl. I S. 2) wird wie folgt geändert:\n"
+            "1. § 44a Absatz 1 wird wie folgt geändert.\n"
+            "2. § 104 Absatz 17 wird durch den folgenden Absatz ersetzt: "
+            "„(17) Neu.“\n"
+        ),
+    }
+    bafoeg_scope = scope_section_to_act(section, bafoeg)
+    aufenthg_scope = scope_section_to_act(section, aufenthg)
+    assert bafoeg_scope["collective_subsection"] == 1
+    assert aufenthg_scope["collective_subsection"] == 2
+    assert "§ 44a" not in bafoeg_scope["text"]
+    assert "§ 2" not in aufenthg_scope["text"]
+
+    document = {
+        "document_id": "bgbl-1-2026-107",
+        "integrity_verified": True,
+        "sha256": "a" * 64,
+        "md5": "b" * 32,
+        "advertised_md5": "b" * 32,
+        "text_sha256": "c" * 64,
+        "execution_date": "2026-04-21",
+        "publication_date": "2026-04-22",
+        "articles": [section],
+        "retrospective_procedures": [{
+            "procedure_id": "321", "wahlperiode": 21,
+            "procedure_title": "Änderungsgesetz",
+            "dip_entry_into_force": [{"datum": "2026-07-01"}],
+            "matched_acts": [bafoeg, aufenthg],
+        }],
+    }
+    rows = {row["jurabk"]: row for row in build_inventory([document])}
+    assert rows["BAföG"]["affected_norms"] == ["§ 2"]
+    assert rows["BAföG"]["command_count"] == 1
+    assert rows["AufenthG 2004"]["affected_norms"] == ["§ 44a", "§ 104"]
+    assert rows["AufenthG 2004"]["command_count"] == 2
+    assert rows["BAföG"]["command_scope_status"] == \
+        "collective_subsection"
+
+
+def test_numbered_leaf_commands_inherit_their_parent_norm() -> None:
+    commands, norms = parse_amendment_commands({
+        "article": "15",
+        "heading": "Weitere Folgeänderungen",
+        "text": (
+            "(12) Das Erste Buch Sozialgesetzbuch (BGBl. I S. 3015) "
+            "wird wie folgt geändert:\n"
+            "§ 36a Absatz 2a wird wie folgt geändert:\n"
+            "1. Nummer 2 Buchstabe d wird gestrichen.\n"
+            "2. Nummer 3 wird durch die folgende Nummer 3 ersetzt: "
+            "„3. neue Fassung.“"
+        ),
+    })
+    assert norms == ["§ 36a"]
+    assert len(commands) == 2
+    assert all(command["ref"]["para"] == "36a" for command in commands)
+    assert all(command["ref"]["absatz"] == "2a" for command in commands)
+    assert commands[0]["ref"]["nummer"] == "2"
+    assert commands[0]["parent_scope"].startswith("§ 36a Absatz 2a")
+
+
+def test_commands_are_complete_hashed_and_free_of_pdf_page_headers() -> None:
+    long_wording = "Amtlicher vollständiger Wortlaut " * 40
+    commands, norms = parse_amendment_commands({
+        "article": "3",
+        "heading": "Änderung des Testgesetzes",
+        "text": (
+            "Artikel 3\nÄnderung des Testgesetzes\n"
+            "Das Testgesetz wird wie folgt geändert:\n"
+            "§ 7 wird wie folgt gefasst: „" + long_wording + "\n"
+            "Seite 8 von 12 Bundesgesetzblatt Jahrgang 2026 Teil I Nr. 99, "
+            "ausgegeben zu Bonn am 1. Juli 2026\n"
+            "Schlusssatz.“"
+        ),
+    })
+    assert norms == ["§ 7"]
+    assert len(commands[0]["raw"]) > 800
+    assert "Seite 8 von 12" not in commands[0]["raw"]
+    assert len(commands[0]["raw_sha256"]) == 64

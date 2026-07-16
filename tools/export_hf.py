@@ -11,10 +11,13 @@ gets the same case set as the public API.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
 import sys
+import xml.etree.ElementTree as ET
+import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Iterable
@@ -28,6 +31,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from common import latest_snapshot, read_jsonl  # noqa: E402
 from official_states import (  # noqa: E402
     DATE_BASIS as OFFICIAL_OBSERVATION_DATE_BASIS,
+    canonical_json_bytes,
     load_manifest as load_official_state_manifest,
     load_state_verified as load_official_state,
     transitions as build_official_state_transitions,
@@ -119,6 +123,20 @@ OPTIONAL_DERIVED_FILES: dict[str, tuple[Path, str]] = {
 OFFICIAL_STATE_STORE = ROOT / "web" / "data" / "federal_states"
 OFFICIAL_REVIEWS = ROOT / "web" / "data" / \
     "official_transition_reviews.json"
+VERIFIED_RECONSTRUCTIONS = ROOT / "web" / "data" / \
+    "verified_reconstructions.json"
+NEURIS_ARCHIVE = ROOT / "data" / "neuris_archive.jsonl"
+NEURIS_OBJECTS = ROOT / "data" / "neuris_objects"
+
+_DIGEST = re.compile(r"[0-9a-f]{64}")
+_NEURIS_OBJECT = re.compile(
+    r"neuris_objects/(?P<sha>[0-9a-f]{64})"
+    r"(?P<suffix>\.zip|\.xml|\.html)")
+_NEURIS_MEDIA = {
+    ".zip": "application/zip",
+    ".xml": "application/xml",
+    ".html": "text/html",
+}
 
 OFFICIAL_HISTORY_FILES: dict[str, str] = {
     "official_federal_state_observations.jsonl": (
@@ -154,9 +172,46 @@ def require_file(path: Path, label: str) -> Path:
 
 
 def copy_file(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(dst.suffix + ".tmp")
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
     shutil.copyfile(src, tmp)
     tmp.replace(dst)
+
+
+def write_bytes_atomic(dst: Path, payload: bytes) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
+    tmp.write_bytes(payload)
+    tmp.replace(dst)
+
+
+def file_sha256(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def copy_verified_file(src: Path, dst: Path, sha256: str, size: int) -> None:
+    """Copy one immutable object atomically, reusing a verified destination."""
+    if src.is_symlink() or not src.is_file():
+        raise RuntimeError(f"missing or unsafe CAS object: {src}")
+    actual_hash, actual_size = file_sha256(src)
+    if actual_hash != sha256 or actual_size != size:
+        raise RuntimeError(f"CAS metadata mismatch: {src}")
+    if dst.is_file() and not dst.is_symlink() and \
+            file_sha256(dst) == (sha256, size):
+        return
+    copy_file(src, dst)
+    if dst.is_symlink() or file_sha256(dst) != (sha256, size):
+        raise RuntimeError(f"copied CAS object failed verification: {dst}")
 
 
 def line_count(path: Path) -> int:
@@ -406,6 +461,251 @@ def _retrospective_rows() -> dict[str, list[dict]]:
     }
 
 
+def _sync_exported_objects(root: Path, expected: set[Path]) -> None:
+    """Remove stale/partial output objects while retaining verified objects."""
+    if root.is_symlink():
+        root.unlink()
+        return
+    if not root.exists():
+        return
+    for path in sorted(root.rglob("*"), key=lambda item: len(item.parts),
+                       reverse=True):
+        if path.is_symlink():
+            path.unlink()
+        elif path.is_file() and path.relative_to(root) not in expected:
+            path.unlink()
+        elif path.is_dir():
+            try:
+                path.rmdir()
+            except OSError:
+                pass
+
+
+def _export_verified_reconstructions(
+        out: Path, artifact_path: Path = VERIFIED_RECONSTRUCTIONS,
+        store: Path = OFFICIAL_STATE_STORE) -> tuple[int, int]:
+    """Export reviewed-derived metadata and only its verified CAS objects."""
+    artifact_path = require_file(
+        Path(artifact_path), "verified reconstructions")
+    try:
+        artifact_bytes = artifact_path.read_bytes()
+        artifact = json.loads(artifact_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("verified reconstructions are invalid JSON") from exc
+    if not isinstance(artifact, dict) or artifact.get("schema_version") != 1 \
+            or artifact.get("kind") != \
+            "lexgraph-reviewed-verified-reconstructions" or \
+            artifact.get("state_identity") != \
+            "sha256-canonical-uncompressed-json":
+        raise RuntimeError("unsupported verified reconstruction artifact")
+    rows = artifact.get("reconstructions")
+    metadata_by_digest = artifact.get("object_metadata")
+    if not isinstance(rows, list) or not isinstance(metadata_by_digest, dict):
+        raise RuntimeError("malformed verified reconstruction artifact")
+
+    store = Path(store)
+    official_manifest = load_official_state_manifest(store)
+    official_objects = official_manifest.get("objects") or {}
+    states_by_digest: dict[str, dict] = {}
+    expected_paths: set[Path] = set()
+    for digest, metadata in metadata_by_digest.items():
+        if not isinstance(digest, str) or not _DIGEST.fullmatch(digest) or \
+                not isinstance(metadata, dict):
+            raise RuntimeError("invalid derived CAS metadata")
+        anchor = str(metadata.get("anchor_state_sha256") or "")
+        expected = Path("objects") / "sha256" / digest[:2] / \
+            f"{digest}.json.gz"
+        if digest in official_objects or anchor not in official_objects or \
+                anchor == digest or metadata.get("path") != \
+                expected.as_posix() or \
+                metadata.get("state_sha256") != digest or \
+                metadata.get("origin") != \
+                "derived_verified_reverse_replay" or \
+                metadata.get("source_exact") is not False or \
+                not _DIGEST.fullmatch(str(metadata.get("gzip_sha256") or "")) \
+                or isinstance(metadata.get("gzip_bytes"), bool) or \
+                not isinstance(metadata.get("gzip_bytes"), int) or \
+                metadata["gzip_bytes"] <= 0 or \
+                isinstance(metadata.get("canonical_bytes"), bool) or \
+                not isinstance(metadata.get("canonical_bytes"), int) or \
+                metadata["canonical_bytes"] <= 0:
+            raise RuntimeError(f"unsafe derived CAS metadata: {digest}")
+        source = store / expected
+        if source.is_symlink() or not source.is_file():
+            raise RuntimeError(f"missing or unsafe derived object: {digest}")
+        compressed_hash, compressed_size = file_sha256(source)
+        if compressed_hash != metadata["gzip_sha256"] or \
+                compressed_size != metadata["gzip_bytes"]:
+            raise RuntimeError(f"derived gzip metadata mismatch: {digest}")
+        state = load_official_state(store, digest)
+        if len(canonical_json_bytes(state)) != metadata["canonical_bytes"]:
+            raise RuntimeError(f"derived canonical size mismatch: {digest}")
+        anchor_state = load_official_state(store, anchor)
+        projection = ("id", "jurabk", "juris", "title", "stand", "build")
+        if any(state[field] != anchor_state[field] for field in projection):
+            raise RuntimeError(f"derived anchor projection drift: {digest}")
+        states_by_digest[digest] = state
+        expected_paths.add(expected)
+
+    seen_ids: set[str] = set()
+    row_digests: set[str] = set()
+    for row in rows:
+        row_id = row.get("id") if isinstance(row, dict) else None
+        digest = str(row.get("state_sha256") or "") \
+            if isinstance(row, dict) else ""
+        if not isinstance(row_id, str) or not row_id or row_id in seen_ids or \
+                digest not in states_by_digest:
+            raise RuntimeError("invalid or duplicate verified reconstruction")
+        seen_ids.add(row_id)
+        row_digests.add(digest)
+        state = states_by_digest[digest]
+        anchor = metadata_by_digest[digest]["anchor_state_sha256"]
+        if row.get("anchor_state_sha256") != anchor or \
+                row.get("act_id") != state["id"] or \
+                row.get("jurabk") != state["jurabk"] or \
+                row.get("text_status") != "derived_verified" or \
+                row.get("body_complete") is not True or \
+                row.get("source_exact") is not False or \
+                row.get("reverse_replay_verified") is not True or \
+                row.get("anchor_projection_metadata_retained") is not True:
+            raise RuntimeError(
+                f"verified reconstruction crossed evidence boundary: {row_id}")
+    if row_digests != set(metadata_by_digest):
+        raise RuntimeError("verified reconstruction object set mismatch")
+
+    target_store = out / "federal_states"
+    _sync_exported_objects(target_store, expected_paths)
+    for digest, metadata in sorted(metadata_by_digest.items()):
+        relative = Path(metadata["path"])
+        copy_verified_file(
+            store / relative, target_store / relative,
+            metadata["gzip_sha256"], metadata["gzip_bytes"])
+    # Publish the manifest only after every referenced byte object is present.
+    write_bytes_atomic(out / "verified_reconstructions.json", artifact_bytes)
+    return len(rows), len(metadata_by_digest)
+
+
+def _official_neuris_url(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value)
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "testphase.rechtsinformationen.bund.de"
+        and parsed.username is None and parsed.password is None
+        and port in (None, 443)
+        and parsed.path.startswith("/v1/legislation/")
+    )
+
+
+def _valid_neuris_payload(path: Path, suffix: str) -> bool:
+    if suffix == ".zip":
+        return zipfile.is_zipfile(path)
+    if suffix == ".xml":
+        try:
+            ET.parse(path)
+        except (ET.ParseError, OSError):
+            return False
+        return True
+    if suffix == ".html":
+        try:
+            prefix = path.read_bytes()[:4096].lstrip().lower()
+        except OSError:
+            return False
+        return bool(prefix) and (
+            b"<html" in prefix or prefix.startswith(b"<!doctype html"))
+    return False
+
+
+def _export_neuris_archive(
+        out: Path, archive_path: Path = NEURIS_ARCHIVE,
+        objects: Path = NEURIS_OBJECTS) -> tuple[int, int]:
+    """Export the exact NeuRIS ledger and each hash-verified captured object."""
+    archive_path = require_file(Path(archive_path), "NeuRIS archive ledger")
+    rows: list[dict] = []
+    try:
+        archive_bytes = archive_path.read_bytes()
+        for number, line in enumerate(
+                archive_bytes.decode("utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise RuntimeError(
+                    f"NeuRIS archive row {number} is not an object")
+            rows.append(row)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("NeuRIS archive is invalid JSONL") from exc
+    if not rows:
+        raise RuntimeError("NeuRIS archive ledger is empty")
+
+    ids: set[str] = set()
+    captured: dict[Path, tuple[str, int, str]] = {}
+    for row in rows:
+        event_id = row.get("event_id")
+        status = row.get("capture_status")
+        content_url = row.get("content_url")
+        if not isinstance(event_id, str) or not event_id or event_id in ids or \
+                row.get("source") != "neuris_changelog" or \
+                row.get("kind") not in {
+                    "consolidation_changed", "consolidation_deleted"} or \
+                row.get("legal_effect") != "not_asserted" or \
+                row.get("date_basis") != \
+                "retrieval_observation_and_eli_identifiers_not_legal_effect" or \
+                not _official_neuris_url(content_url) or \
+                not isinstance(status, str) or not status:
+            raise RuntimeError(f"unsafe NeuRIS archive row: {event_id!r}")
+        ids.add(event_id)
+        if status != "captured":
+            if row.get("content_sha256") is not None or \
+                    row.get("content_bytes") is not None or \
+                    row.get("content_object") is not None:
+                raise RuntimeError(
+                    f"uncaptured NeuRIS row references bytes: {event_id}")
+            continue
+
+        digest = str(row.get("content_sha256") or "")
+        size = row.get("content_bytes")
+        object_name = row.get("content_object")
+        match = _NEURIS_OBJECT.fullmatch(str(object_name or ""))
+        if not match or match.group("sha") != digest or \
+                not _DIGEST.fullmatch(digest) or isinstance(size, bool) or \
+                not isinstance(size, int) or size <= 0 or \
+                row.get("content_media_type") != \
+                _NEURIS_MEDIA[match.group("suffix")] or \
+                row.get("content_source_url") != content_url:
+            raise RuntimeError(
+                f"captured NeuRIS metadata is inconsistent: {event_id}")
+        relative = Path(object_name)
+        source = Path(objects) / relative.name
+        if source.is_symlink() or not source.is_file() or \
+                file_sha256(source) != (digest, size) or \
+                not _valid_neuris_payload(source, match.group("suffix")):
+            raise RuntimeError(
+                f"captured NeuRIS object failed verification: {event_id}")
+        prior = captured.get(relative)
+        details = (digest, size, match.group("suffix"))
+        if prior is not None and prior != details:
+            raise RuntimeError(f"NeuRIS CAS path collision: {relative}")
+        captured[relative] = details
+
+    target_objects = out / "neuris_objects"
+    expected = {Path(path.name) for path in captured}
+    _sync_exported_objects(target_objects, expected)
+    for relative, (digest, size, _suffix) in sorted(
+            captured.items(), key=lambda item: item[0].as_posix()):
+        copy_verified_file(
+            Path(objects) / relative.name, out / relative, digest, size)
+    # Preserve the logical append-only ledger byte-for-byte, including failed
+    # and metadata-only observations; none of them can reference partial bytes.
+    write_bytes_atomic(out / "neuris_archive.jsonl", archive_bytes)
+    return len(rows), len(captured)
+
+
 CARD = """---
 license: other
 language:
@@ -464,6 +764,15 @@ historical consolidated text; unresolved sub-article dates and missing state
 pairs remain explicit in `retrospective_gaps.jsonl`. The complete manifest and
 a portable indexed SQLite representation are included as artifacts.
 
+`verified_reconstructions.json` is a separate, reviewed claim class. Its
+`derived_verified` bodies were computed by reversing cardinality-checked final
+BGBl commands from a complete official GII anchor and then replaying the
+commands forward to reproduce that anchor byte-for-byte. They are complete
+Lexgraph reconstructions. The artifact deliberately keeps `source_exact: false`
+because NeuRIS/GII did not supply those bytes as a historical snapshot.
+The referenced deterministic-gzip objects are retained under
+`federal_states/objects/` and remain separate from the official GII manifest.
+
 Buzer is not an input to these four files and no private Buzer snapshot or
 synopsis is shipped. It may be used outside the export as a non-authoritative
 human QA/deep-link cross-check; all published state bytes, diffs and legal-date
@@ -478,6 +787,14 @@ corpus-filtered import from the seven official federal
 Rechtsprechung-im-Internet feeds. Automated norm links are citations, not
 claims that the court interpreted every cited provision. The table is not a
 catalogue of all German case law.
+
+`neuris_archive.jsonl` is the exact logical NeuRIS changelog ledger. It keeps
+metadata-only, tombstone and failed-capture observations so the archive does
+not hide gaps. Only rows with `capture_status: captured` may reference bytes;
+each referenced official ZIP/XML/HTML artifact is re-hashed and exported under
+`neuris_objects/`. Temporary downloads, failed partials and unreferenced local
+cache files are excluded. ELI point-in-time and manifestation components are
+source identifiers, not silently asserted legal-effective dates.
 
 For Bavaria, official version rows are amendment metadata. Word-level history
 is exported only when archived official pages yield an unambiguous state
@@ -556,6 +873,24 @@ def main() -> int:
         counts[name] = line_count(dst) if dst.suffix == ".jsonl" else 1
         descriptions[name] = description
 
+    reconstruction_count, reconstruction_object_count = \
+        _export_verified_reconstructions(out)
+    counts["verified_reconstructions.json"] = reconstruction_count
+    descriptions["verified_reconstructions.json"] = (
+        "reviewed complete reverse-replay reconstructions, explicitly "
+        "source_exact=false")
+    counts["federal_states/objects/"] = reconstruction_object_count
+    descriptions["federal_states/objects/"] = (
+        "deterministic-gzip CAS bytes referenced by verified reconstructions")
+
+    neuris_event_count, neuris_object_count = _export_neuris_archive(out)
+    counts["neuris_archive.jsonl"] = neuris_event_count
+    descriptions["neuris_archive.jsonl"] = (
+        "resumable official NeuRIS changelog ledger with honest capture status")
+    counts["neuris_objects/"] = neuris_object_count
+    descriptions["neuris_objects/"] = (
+        "hash-verified official NeuRIS source objects referenced by the ledger")
+
     official_rows = _official_history_rows()
     for name, description in OFFICIAL_HISTORY_FILES.items():
         counts[name] = write_jsonl(out / name, official_rows[name])
@@ -584,6 +919,9 @@ def main() -> int:
     ordered = (list(SNAPSHOT_FILES) + list(OFFICIAL_HISTORY_FILES)
                + list(RETROSPECTIVE_FILES)
                + list(DERIVED_FILES)
+               + ["verified_reconstructions.json",
+                  "federal_states/objects/", "neuris_archive.jsonl",
+                  "neuris_objects/"]
                + optional_exported + ["decisions.jsonl"])
     rows_table = "\n".join(
         f"| `{name}` | {counts[name]:,} | {descriptions[name]} |"

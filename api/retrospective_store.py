@@ -148,6 +148,12 @@ def _validate_interval(raw: Any, objects: dict[str, Any],
             "history interval references an unknown previous state")
     if row.get("text_status") not in _TEXT_STATUSES:
         raise RetrospectiveIntegrityError("unsupported text_status")
+    if row.get("text_status") == "derived_verified" and (
+            row.get("body_complete") is not True
+            or row.get("source_exact") is not False
+            or row.get("reverse_replay_verified") is not True):
+        raise RetrospectiveIntegrityError(
+            "derived_verified interval lacks complete replay proof")
     if row.get("date_status") not in _DATE_STATUSES:
         raise RetrospectiveIntegrityError("unsupported date_status")
     if effective_from is not None and row.get("date_basis") == \
@@ -420,6 +426,10 @@ def validate_manifest(raw: Any) -> dict[str, Any]:
                 for row in act["intervals"]),
             "events": sum(
                 len(act["events"]) for act in validated_acts.values()),
+            "current_events": sum(
+                row.get("knowledge_to") is None
+                for act in validated_acts.values()
+                for row in act["events"]),
             "events_with_effective_date": sum(
                 bool(row.get("effective_at"))
                 for act in validated_acts.values()
@@ -474,6 +484,198 @@ def act_history(manifest: dict[str, Any], act_id: str,
     result["events"] = [row for row in raw.get("events") or []
                         if _event_visible(row, knowledge)]
     return result
+
+
+def _event_norm_matches(row: dict[str, Any], norm: str) -> bool:
+    """Return whether an event explicitly targets one norm designator."""
+    requested = _norm_token(norm)
+    for label in row.get("affected_norms") or []:
+        candidate = _norm_token(label)
+        if candidate == requested or (
+                requested[0] is None and candidate[1] == requested[1]):
+            return True
+    for command in row.get("commands") or []:
+        if not isinstance(command, dict):
+            continue
+        reference = command.get("ref") or {}
+        if not isinstance(reference, dict):
+            continue
+        candidates = []
+        if reference.get("para") is not None:
+            candidates.append(("section", str(reference["para"]).casefold()))
+        if reference.get("article") is not None:
+            candidates.append(("article", str(reference["article"]).casefold()))
+        if requested in candidates or (
+                requested[0] is None and any(
+                    candidate[1] == requested[1] for candidate in candidates)):
+            return True
+    return False
+
+
+def list_changes(manifest: dict[str, Any], *, as_of: Any = None,
+                 act: str | None = None, norm: str | None = None,
+                 from_date: Any = None, to_date: Any = None,
+                 future: bool | None = None, reference_date: Any = None,
+                 query: str | None = None) -> dict[str, Any]:
+    """List visible amendment events across acts at one knowledge-time slice.
+
+    These are evidence-bound amendment commands, not reconstructed complete
+    historical states.  Publication and legal-effect dates remain separate.
+    """
+    knowledge = resolve_as_of(manifest, as_of)
+    lower = (_legal_date(from_date, "from", optional=True)
+             if from_date is not None else None)
+    upper = (_legal_date(to_date, "to", optional=True)
+             if to_date is not None else None)
+    if lower and upper and lower > upper:
+        raise RetrospectiveIntegrityError("from must not be after to")
+    today = _legal_date(
+        reference_date if reference_date is not None else date.today(),
+        "reference_date")
+    assert today is not None
+    act_needle = str(act or "").strip().casefold()
+    query_needle = " ".join(str(query or "").casefold().split())
+    rows = []
+    for act_id, history in manifest.get("acts", {}).items():
+        if act_needle and act_needle not in {
+                act_id.casefold(),
+                str(history.get("jurabk") or "").casefold()}:
+            continue
+        for raw in history.get("events") or []:
+            if not _event_visible(raw, knowledge):
+                continue
+            row = {
+                **raw,
+                "act_id": act_id,
+                "jurabk": history.get("jurabk"),
+                "act_title": history.get("title"),
+            }
+            event_date = str(row.get("effective_at") or row["published_at"])
+            if lower and event_date < lower:
+                continue
+            if upper and event_date > upper:
+                continue
+            is_future = bool(
+                row.get("effective_at") and row["effective_at"] > today)
+            if future is not None and is_future is not future:
+                continue
+            if norm and not _event_norm_matches(row, norm):
+                continue
+            if query_needle:
+                haystack = " ".join(str(value or "") for value in (
+                    row.get("document_id"), row.get("procedure_title"),
+                    row.get("article_heading"), row.get("jurabk"),
+                    row.get("act_title"), " ".join(row.get("affected_norms") or []),
+                    " ".join(str(command.get("raw") or "")
+                             for command in row.get("commands") or []
+                             if isinstance(command, dict)),
+                )).casefold()
+                if query_needle not in haystack:
+                    continue
+            row["future"] = is_future
+            rows.append(row)
+    rows.sort(key=lambda row: (
+        str(row.get("effective_at") or row.get("published_at") or ""),
+        str(row.get("published_at") or ""), str(row.get("document_id") or ""),
+        str(row.get("amending_article") or ""), str(row.get("act_id") or ""),
+    ), reverse=True)
+    return {
+        "schema_version": manifest.get("schema_version"),
+        "kind": "lexgraph-amendment-events",
+        "built_at": manifest.get("built_at"),
+        "as_of": knowledge,
+        "reference_date": today,
+        "source_policy": manifest.get("source_policy"),
+        "matched": len(rows),
+        "events": rows,
+    }
+
+
+def amending_act(manifest: dict[str, Any], document_id: str, *,
+                 as_of: Any = None) -> dict[str, Any]:
+    """Aggregate all visible per-act events belonging to one BGBl document."""
+    document = str(document_id or "").strip()
+    if not document:
+        raise RetrospectiveNotFound("amending document id is empty")
+    changes = list_changes(manifest, as_of=as_of)
+    events = [row for row in changes["events"]
+              if str(row.get("document_id") or "") == document]
+    if not events:
+        raise RetrospectiveNotFound(
+            f"no visible amendment events for {document}")
+
+    evidence = _dedupe([
+        item for row in events for item in row.get("evidence") or []])
+    affected_acts = []
+    for act_id in sorted({str(row["act_id"]) for row in events}):
+        act_events = [row for row in events if row["act_id"] == act_id]
+        affected_acts.append({
+            "act_id": act_id,
+            "jurabk": act_events[0].get("jurabk"),
+            "title": act_events[0].get("act_title"),
+            "event_count": len(act_events),
+            "command_count": sum(len(row.get("commands") or [])
+                                 for row in act_events),
+            "affected_norms": sorted({
+                norm for row in act_events
+                for norm in row.get("affected_norms") or []}),
+        })
+
+    articles = []
+    article_keys = sorted({(
+        str(row.get("amending_article") or ""),
+        str(row.get("article_heading") or "")) for row in events},
+        key=lambda key: (int(key[0]) if key[0].isdigit() else 10**9,
+                         key[0], key[1]))
+    for article, heading in article_keys:
+        article_events = [row for row in events if (
+            str(row.get("amending_article") or ""),
+            str(row.get("article_heading") or "")) == (article, heading)]
+        articles.append({
+            "article": article or None,
+            "heading": heading or None,
+            "affected_acts": sorted({row["act_id"] for row in article_events}),
+            "affected_norms": sorted({
+                norm for row in article_events
+                for norm in row.get("affected_norms") or []}),
+            "command_count": sum(len(row.get("commands") or [])
+                                 for row in article_events),
+            "events": article_events,
+        })
+
+    def unique(field: str) -> list[Any]:
+        return sorted({row[field] for row in events if row.get(field)})
+
+    publications = unique("published_at")
+    procedures = unique("procedure_id")
+    procedure_titles = unique("procedure_title")
+    pdf_hashes = unique("pdf_sha256")
+    return {
+        "schema_version": manifest.get("schema_version"),
+        "kind": "lexgraph-amending-act",
+        "built_at": manifest.get("built_at"),
+        "as_of": changes["as_of"],
+        "document_id": document,
+        "published_at": publications[0] if len(publications) == 1 else None,
+        "published_dates": publications,
+        "procedure_id": procedures[0] if len(procedures) == 1 else None,
+        "procedure_ids": procedures,
+        "title": procedure_titles[0] if len(procedure_titles) == 1 else None,
+        "titles": procedure_titles,
+        "official_html_url": next((row.get("official_html_url") for row in events
+                                   if row.get("official_html_url")), None),
+        "official_pdf_url": next((row.get("official_pdf_url") for row in events
+                                  if row.get("official_pdf_url")), None),
+        "pdf_sha256": pdf_hashes[0] if len(pdf_hashes) == 1 else None,
+        "pdf_sha256s": pdf_hashes,
+        "event_count": len(events),
+        "command_count": sum(len(row.get("commands") or []) for row in events),
+        "affected_acts": affected_acts,
+        "articles": articles,
+        "evidence": evidence,
+        "source_policy": manifest.get("source_policy"),
+        "historical_text_reconstructed": False,
+    }
 
 
 def _event_visible(row: Any, as_of: str) -> bool:
@@ -592,8 +794,14 @@ def diff_intervals(manifest: dict[str, Any], act_id: str,
             "new_sha256": new_digest,
         })
     gaps = _dedupe([*(left.get("gaps") or []), *(right.get("gaps") or [])])
-    exact = (left.get("text_status") == "official_exact"
-             and right.get("text_status") == "official_exact" and not gaps)
+    complete = (left.get("text_status") in {
+                    "official_exact", "derived_verified"}
+                and right.get("text_status") in {
+                    "official_exact", "derived_verified"}
+                and not gaps)
+    source_exact = (left.get("text_status") == "official_exact"
+                    and right.get("text_status") == "official_exact"
+                    and not gaps)
     return {
         "schema_version": SCHEMA_VERSION,
         "act_id": act_id,
@@ -601,8 +809,14 @@ def diff_intervals(manifest: dict[str, Any], act_id: str,
         "from": _interval_summary(left),
         "to": _interval_summary(right),
         "norm": norm,
-        "exact": exact,
-        "partial": not exact,
+        # ``exact`` retains its backwards-compatible meaning: both bodies are
+        # exact official source snapshots.  A replay-verified derived body is
+        # nevertheless complete and queryable, but never relabelled as source.
+        "exact": source_exact,
+        "source_exact": source_exact,
+        "complete": complete,
+        "verified_reconstruction": complete and not source_exact,
+        "partial": not complete,
         "gaps": gaps,
         "changes": changes,
     }
@@ -613,7 +827,8 @@ def _interval_summary(row: dict[str, Any]) -> dict[str, Any]:
         "requested_at", "effective_from", "effective_to", "published_at",
         "observed_at", "knowledge_from", "knowledge_to", "state_sha256",
         "text_status", "date_status", "date_basis", "verification",
-        "retroactive",
+        "retroactive", "body_complete", "source_exact",
+        "reverse_replay_verified", "verified_through_observed_at",
     )}
 
 

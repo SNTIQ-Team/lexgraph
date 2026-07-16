@@ -254,6 +254,9 @@ def test_explicit_norm_reference_does_not_use_broad_concept_fallback(
     "Fiktionsbescheinigung",
     "Fiktionswirkung",
     "Aufenthaltsfiktion",
+    "фикцион",
+    "справка о фикции пребывания",
+    "фікційна довідка",
 ])
 def test_fiktionsbescheinigung_concept_prioritizes_transition_norms(
         engine: SearchEngine, query: str) -> None:

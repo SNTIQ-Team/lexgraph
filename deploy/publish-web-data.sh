@@ -55,8 +55,10 @@ required = (
     "git.json", "watched_procedures.json", "amendment_fates.json",
     "verified_federal_events.json", "gii_catalog.json", "data_policy.json",
     "official_federal_states.json", "official_transition_reviews.json",
+    "verified_reconstructions.json",
     "retrospective_history.json", "retrospective_history.sqlite",
     "federal_states/manifest.json", "search.sqlite",
+    "citations.json", "citations.sqlite",
 )
 for name in required:
     path = root / name
@@ -75,6 +77,8 @@ with (root / "data_policy.json").open(encoding="utf-8") as handle:
     policy = json.load(handle)
 with (root / "graph.json").open(encoding="utf-8") as handle:
     graph = json.load(handle)
+with (root / "citations.json").open(encoding="utf-8") as handle:
+    citations = json.load(handle)
 if int(summary.get("gii_catalog_total") or 0) != int(catalog.get("total") or 0):
     raise SystemExit("publish validation: GII catalogue total mismatch")
 if policy.get("includes_quarantined_sources") or not policy.get("public_build"):
@@ -83,6 +87,76 @@ graph_policy = graph.get("source_policy") or {}
 if graph_policy.get("includes_quarantined_sources") or not graph_policy.get(
         "public_build"):
     raise SystemExit("publish validation: graph source policy is not public")
+
+# Citation rows stay in an immutable, exact-indexed SQLite artifact so the API
+# never deserializes a 30+ MB JSON graph on the memory-constrained host.  The
+# JSON sibling is metadata only and must agree with both summary and database.
+citation_counts = citations.get("counts") or {}
+citation_storage = citations.get("storage") or {}
+citation_policy = citations.get("source_policy") or {}
+if citations.get("schema_version") != 1 or \
+        citations.get("machine_extracted") is not True or \
+        citations.get("current_state_only") is not True or \
+        citations.get("legal_interpretation") != "not_asserted" or \
+        "citations" in citations or \
+        citation_storage != {
+            "format": "sqlite3", "file": "citations.sqlite",
+            "table": "citation", "rows": citation_counts.get("total"),
+            "ordering": "ordinal", "read_only": True,
+        } or citation_policy.get("official_current_text_only") is not True or \
+        citation_policy.get("fuzzy_matching") is not False or \
+        citation_policy.get("cross_act_resolution") != \
+        "exact_explicit_alias_only" or summary.get("citations") != \
+        citation_counts:
+    raise SystemExit("publish validation: invalid citation manifest")
+with sqlite3.connect(
+        f"file:{root / 'citations.sqlite'}?mode=ro", uri=True) as db:
+    citation_check = db.execute("PRAGMA quick_check").fetchone()
+    citation_tables = {row[0] for row in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    citation_indexes = {row[1] for row in db.execute(
+        "PRAGMA index_list('citation')")}
+    citation_version = db.execute(
+        "SELECT value FROM citation_meta WHERE key='schema_version'"
+    ).fetchone()
+    citation_meta_counts = db.execute(
+        "SELECT value FROM citation_meta WHERE key='counts'"
+    ).fetchone()
+    citation_db_counts = {
+        "total": db.execute("SELECT COUNT(*) FROM citation").fetchone()[0],
+        "resolved": db.execute(
+            "SELECT COUNT(*) FROM citation WHERE status='resolved'").fetchone()[0],
+        "unresolved": db.execute(
+            "SELECT COUNT(*) FROM citation WHERE status='unresolved'").fetchone()[0],
+        "self": db.execute(
+            "SELECT COUNT(*) FROM citation WHERE kind='self'").fetchone()[0],
+        "cross_act": db.execute(
+            "SELECT COUNT(*) FROM citation WHERE kind='cross_act'").fetchone()[0],
+    }
+    invalid_citations = db.execute("""
+        SELECT COUNT(*) FROM citation
+        WHERE machine_extracted != 1 OR current_state_only != 1
+           OR legal_interpretation != 'not_asserted'
+           OR date_basis !=
+              'current_consolidated_snapshot_observation_not_legal_effect'
+           OR source_snapshot IS NULL
+           OR (status = 'resolved' AND
+               (unresolved_reason IS NOT NULL OR target_act IS NULL))
+           OR (status = 'unresolved' AND unresolved_reason IS NULL)
+    """).fetchone()[0]
+if not citation_check or citation_check[0] != "ok" or not {
+        "citation_meta", "citation"} <= citation_tables or \
+        not {"citation_source_act", "citation_source_jurabk",
+             "citation_target_act", "citation_target_jurabk",
+             "citation_target_pinpoint"} <= citation_indexes or \
+        not citation_version or citation_version[0] != "1" or \
+        not citation_meta_counts or json.loads(citation_meta_counts[0]) != \
+        citation_counts or citation_db_counts != {
+            key: int(citation_counts.get(key) or -1)
+            for key in citation_db_counts
+        } or invalid_citations:
+    raise SystemExit(
+        "publish validation: citation sqlite integrity/count mismatch")
 
 # The official federal archive is a self-contained evidence store.  Validate
 # every referenced blob before making the release visible: gzip integrity,
@@ -118,6 +192,7 @@ if not state_policy.get("official_only") or \
     raise SystemExit("publish validation: invalid federal state source policy")
 digest_re = re.compile(r"[0-9a-f]{64}")
 loaded_states = {}
+official_state_projection = {}
 for digest, metadata in objects.items():
     if not digest_re.fullmatch(str(digest)) or not isinstance(metadata, dict):
         raise SystemExit("publish validation: malformed state object metadata")
@@ -159,7 +234,12 @@ for digest, metadata in objects.items():
             "norm_count", "norms"} or state.get("juris") != "DE" or \
             not str(state.get("id") or "").startswith("fed_") or \
             not isinstance(state.get("norms"), list) or \
-            state.get("norm_count") != len(state["norms"]):
+            state.get("norm_count") != len(state["norms"]) or any(
+                not isinstance(norm, dict) or set(norm) != {
+                    "enbez", "titel", "text", "glied"} or any(
+                        not isinstance(norm.get(field), str)
+                        for field in ("enbez", "titel", "text", "glied"))
+                for norm in state["norms"]):
         raise SystemExit(
             f"publish validation: invalid federal state shape {digest}")
     # Retain only the identity tuple after verification.  Full parsed states
@@ -167,6 +247,9 @@ for digest, metadata in objects.items():
     # pressure the small production host during an otherwise atomic publish.
     loaded_states[digest] = (
         state["id"], state["jurabk"], state["norm_count"])
+    official_state_projection[digest] = tuple(
+        state[field] for field in (
+            "id", "jurabk", "juris", "title", "stand", "build"))
 
 observation_keys = set()
 for observation in observations:
@@ -273,6 +356,207 @@ for review in reviews:
 if int(summary.get("official_federal_legal_reviews") or 0) != len(reviews):
     raise SystemExit("publish validation: transition review count mismatch")
 
+# Reviewed reverse replays may add derived full-state objects beside the
+# official GII CAS.  They are deliberately absent from the official manifest:
+# publication accepts only objects named by this separate artifact, re-hashes
+# their deterministic gzip and canonical JSON, and requires an official GII
+# anchor plus an explicit source_exact=false evidence boundary.
+with (root / "verified_reconstructions.json").open(
+        encoding="utf-8") as handle:
+    verified_reconstructions = json.load(handle)
+if verified_reconstructions.get("schema_version") != 1 or \
+        verified_reconstructions.get("kind") != \
+        "lexgraph-reviewed-verified-reconstructions" or \
+        verified_reconstructions.get("state_identity") != \
+        "sha256-canonical-uncompressed-json":
+    raise SystemExit(
+        "publish validation: unsupported verified reconstruction artifact")
+try:
+    reconstruction_built = datetime.fromisoformat(
+        str(verified_reconstructions.get("built_at")).replace("Z", "+00:00"))
+except ValueError:
+    raise SystemExit(
+        "publish validation: invalid verified reconstruction built_at")
+if reconstruction_built.tzinfo is None:
+    raise SystemExit(
+        "publish validation: verified reconstruction built_at lacks timezone")
+reconstruction_rows = verified_reconstructions.get("reconstructions")
+derived_objects = verified_reconstructions.get("object_metadata")
+if not isinstance(reconstruction_rows, list) or \
+        not isinstance(derived_objects, dict):
+    raise SystemExit(
+        "publish validation: malformed verified reconstruction artifact")
+
+derived_loaded_states = {}
+for digest, metadata in derived_objects.items():
+    if not digest_re.fullmatch(str(digest)) or not isinstance(metadata, dict):
+        raise SystemExit(
+            "publish validation: malformed derived state metadata")
+    anchor = str(metadata.get("anchor_state_sha256") or "")
+    expected = Path("objects") / "sha256" / digest[:2] / \
+        f"{digest}.json.gz"
+    if digest in objects or metadata.get("path") != expected.as_posix() or \
+            metadata.get("state_sha256") != digest or \
+            metadata.get("origin") != \
+            "derived_verified_reverse_replay" or \
+            metadata.get("source_exact") is not False or \
+            anchor not in loaded_states or anchor == digest:
+        raise SystemExit(
+            f"publish validation: unsafe derived state metadata {digest}")
+    path = root / "federal_states" / expected
+    if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+        raise SystemExit(
+            f"publish validation: missing derived state object {digest}")
+    compressed = path.read_bytes()
+    if len(compressed) < 18 or compressed[:4] != b"\x1f\x8b\x08\x00" or \
+            compressed[4:8] != b"\x00\x00\x00\x00" or \
+            len(compressed) != metadata.get("gzip_bytes") or \
+            hashlib.sha256(compressed).hexdigest() != \
+            metadata.get("gzip_sha256"):
+        raise SystemExit(
+            f"publish validation: derived gzip mismatch {digest}")
+    try:
+        canonical = gzip.decompress(compressed)
+        state = json.loads(canonical.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"publish validation: unreadable derived state {digest}: {exc}")
+    encoded = json.dumps(
+        state, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        allow_nan=False).encode("utf-8")
+    if encoded != canonical or len(canonical) != \
+            metadata.get("canonical_bytes") or \
+            hashlib.sha256(canonical).hexdigest() != digest or \
+            not isinstance(state, dict) or set(state) != {
+                "id", "jurabk", "juris", "title", "stand", "build",
+                "norm_count", "norms"} or state.get("juris") != "DE" or \
+            not str(state.get("id") or "").startswith("fed_") or \
+            not isinstance(state.get("norms"), list) or \
+            state.get("norm_count") != len(state["norms"]):
+        raise SystemExit(
+            f"publish validation: canonical derived state mismatch {digest}")
+    projection = tuple(state[field] for field in (
+        "id", "jurabk", "juris", "title", "stand", "build"))
+    if projection != official_state_projection[anchor]:
+        raise SystemExit(
+            f"publish validation: derived anchor projection drift {digest}")
+    derived_loaded_states[digest] = (
+        state["id"], state["jurabk"], state["norm_count"])
+
+reconstruction_ids = set()
+reconstruction_intervals = set()
+reconstruction_digests = set()
+for row in reconstruction_rows:
+    if not isinstance(row, dict) or not isinstance(row.get("id"), str) or \
+            not row["id"] or row["id"] in reconstruction_ids:
+        raise SystemExit(
+            "publish validation: malformed/duplicate reconstruction")
+    reconstruction_ids.add(row["id"])
+    digest = str(row.get("state_sha256") or "")
+    anchor = str(row.get("anchor_state_sha256") or "")
+    if digest not in derived_loaded_states or \
+            derived_objects[digest].get("anchor_state_sha256") != anchor or \
+            anchor not in loaded_states or \
+            row.get("act_id") != derived_loaded_states[digest][0] or \
+            row.get("jurabk") != derived_loaded_states[digest][1] or \
+            row.get("act_id") != loaded_states[anchor][0] or \
+            row.get("jurabk") != loaded_states[anchor][1] or \
+            row.get("text_status") != "derived_verified" or \
+            row.get("body_complete") is not True or \
+            row.get("source_exact") is not False or \
+            row.get("reverse_replay_verified") is not True or \
+            row.get("anchor_projection_metadata_retained") is not True or \
+            row.get("date_status") != "official_verified" or \
+            row.get("date_basis") != \
+            "official_bgbl_dip_boundaries_and_verified_replay" or \
+            row.get("verification") != \
+            "exact_cardinality_inverse_and_canonical_forward_replay" or \
+            not isinstance(row.get("changes_reversed"), list) or \
+            not row["changes_reversed"] or row.get("gaps") != []:
+        raise SystemExit(
+            f"publish validation: reconstruction crossed evidence boundary {digest}")
+    try:
+        effective_from = date.fromisoformat(str(row.get("effective_from")))
+        effective_to = date.fromisoformat(str(row.get("effective_to")))
+        published_at = date.fromisoformat(str(row.get("published_at")))
+        date.fromisoformat(str(row.get("observed_at")))
+        knowledge_from = datetime.fromisoformat(
+            str(row.get("knowledge_from")).replace("Z", "+00:00"))
+        knowledge_to = (datetime.fromisoformat(
+            str(row["knowledge_to"]).replace("Z", "+00:00"))
+            if row.get("knowledge_to") else None)
+    except ValueError:
+        raise SystemExit(
+            f"publish validation: invalid reconstruction date {digest}")
+    if effective_to <= effective_from or knowledge_from.tzinfo is None or \
+            (knowledge_to and knowledge_to.tzinfo is None) or \
+            (knowledge_to and knowledge_to <= knowledge_from) or \
+            bool(row.get("retroactive")) != (effective_from < published_at):
+        raise SystemExit(
+            f"publish validation: impossible reconstruction interval {digest}")
+    incoming = row.get("incoming_event") or {}
+    outgoing = row.get("outgoing_event") or {}
+    if incoming.get("effective_at") != row.get("effective_from") or \
+            outgoing.get("effective_at") != row.get("effective_to") or \
+            incoming.get("published_at") != row.get("published_at"):
+        raise SystemExit(
+            f"publish validation: reconstruction boundary mismatch {digest}")
+    evidence = row.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        raise SystemExit(
+            f"publish validation: reconstruction lacks evidence {digest}")
+    evidence_sources = set()
+    for item in evidence:
+        source = item.get("source") if isinstance(item, dict) else None
+        parsed = urlparse(str(item.get("url") or "")) \
+            if isinstance(item, dict) else None
+        if source not in allowed_evidence or parsed.scheme != "https" or \
+                parsed.hostname not in allowed_evidence[source]:
+            raise SystemExit(
+                "publish validation: reconstruction has non-official evidence")
+        evidence_sources.add(source)
+        if source == "GII" and item.get("state_sha256") != anchor:
+            raise SystemExit(
+                "publish validation: reconstruction GII anchor mismatch")
+    if evidence_sources != set(allowed_evidence):
+        raise SystemExit(
+            "publish validation: reconstruction evidence set is incomplete")
+    reconstruction_digests.add(digest)
+    interval_key = (
+        row["act_id"], digest, row["effective_from"], row["effective_to"])
+    if interval_key in reconstruction_intervals:
+        raise SystemExit(
+            "publish validation: duplicate reconstruction interval")
+    reconstruction_intervals.add(interval_key)
+if reconstruction_digests != set(derived_objects) or \
+        int(summary.get("verified_reconstructions") or 0) != \
+        len(reconstruction_rows):
+    raise SystemExit(
+        "publish validation: reconstruction object/count mismatch")
+
+# No orphan, stale or partial file may piggy-back on the CAS directory.  The
+# exact allow-list is the official manifest plus the reviewed-derived artifact.
+expected_cas_paths = {
+    str(metadata["path"]) for metadata in objects.values()
+} | {
+    str(metadata["path"]) for metadata in derived_objects.values()
+}
+cas_root = root / "federal_states" / "objects"
+actual_cas_paths = set()
+for path in cas_root.rglob("*"):
+    if path.is_symlink():
+        raise SystemExit(
+            f"publish validation: symlink in federal state CAS: {path.name}")
+    if path.is_file():
+        actual_cas_paths.add(path.relative_to(
+            root / "federal_states").as_posix())
+    elif not path.is_dir():
+        raise SystemExit(
+            f"publish validation: special file in federal state CAS: {path.name}")
+if actual_cas_paths != expected_cas_paths:
+    raise SystemExit("publish validation: unreviewed federal CAS extras")
+all_loaded_states = {**loaded_states, **derived_loaded_states}
+
 # The public retrospective manifest adds legal-valid time and Lexgraph
 # knowledge time without copying state bodies.  Every body reference must be
 # one of the canonical GII objects verified above.  Event-only BGBl rows are
@@ -287,7 +571,8 @@ if retro_policy.get("official_only") is not True or \
         retro_policy.get("effective_dates_inferred") is not False or \
         retro_policy.get("buzer_input") is not False:
     raise SystemExit("publish validation: invalid retrospective source policy")
-if set(retrospective.get("objects") or {}) != set(objects):
+expected_retrospective_objects = {**objects, **derived_objects}
+if retrospective.get("objects") != expected_retrospective_objects:
     raise SystemExit("publish validation: retrospective state catalogue drift")
 try:
     retrospective_built = datetime.fromisoformat(
@@ -300,6 +585,7 @@ retro_acts = retrospective.get("acts")
 if not isinstance(retro_acts, dict) or not retro_acts:
     raise SystemExit("publish validation: retrospective acts are empty")
 retro_interval_count = retro_event_count = retro_observation_count = 0
+seen_reconstruction_intervals = set()
 for act_id, act in retro_acts.items():
     if not isinstance(act, dict) or act.get("act_id") != act_id:
         raise SystemExit("publish validation: malformed retrospective act")
@@ -314,7 +600,8 @@ for act_id, act in retro_acts.items():
     retro_observation_count += len(observations_for_act)
     for row in intervals:
         digest = str(row.get("state_sha256") or "")
-        if digest not in loaded_states or loaded_states[digest][0] != act_id:
+        if digest not in all_loaded_states or \
+                all_loaded_states[digest][0] != act_id:
             raise SystemExit(
                 "publish validation: retrospective interval state mismatch")
         try:
@@ -341,6 +628,26 @@ for act_id, act in retro_acts.items():
                 published and effective_from < published):
             raise SystemExit(
                 "publish validation: interval retroactive marker mismatch")
+        if digest in derived_loaded_states:
+            provenance = row.get("provenance") or {}
+            interval_key = (act_id, digest, row.get("effective_from"),
+                            row.get("effective_to"))
+            if interval_key not in reconstruction_intervals or \
+                    row.get("text_status") != "derived_verified" or \
+                    row.get("source_exact") is not False or \
+                    row.get("body_complete") is not True or \
+                    row.get("reverse_replay_verified") is not True or \
+                    provenance.get("method") != \
+                    "reviewed_inverse_then_canonical_forward_replay" or \
+                    provenance.get("anchor_state_sha256") != \
+                    derived_objects[digest].get("anchor_state_sha256"):
+                raise SystemExit(
+                    "publish validation: unsafe derived retrospective interval")
+            seen_reconstruction_intervals.add(interval_key)
+        elif row.get("text_status") == "derived_verified" or \
+                row.get("source_exact") is False:
+            raise SystemExit(
+                "publish validation: official interval mislabeled as derived")
     for row in events:
         try:
             published = date.fromisoformat(str(row.get("published_at")))
@@ -371,6 +678,9 @@ if int(retro_counts.get("acts") or -1) != len(retro_acts) or \
         retro_observation_count or summary.get("retrospective_history") != \
         retro_counts:
     raise SystemExit("publish validation: retrospective count mismatch")
+if seen_reconstruction_intervals != reconstruction_intervals:
+    raise SystemExit(
+        "publish validation: verified reconstruction interval missing")
 
 with sqlite3.connect(
         f"file:{root / 'retrospective_history.sqlite'}?mode=ro", uri=True) as db:
@@ -401,6 +711,7 @@ for path in root.rglob("*"):
             f"publish validation: quarantined file leaked: {path.name}")
 for path in (root / "feed.json", root / "graph.json",
              root / "verified_federal_events.json",
+             root / "verified_reconstructions.json",
              root / "official_federal_states.json",
              root / "official_transition_reviews.json"):
     folded = path.read_text(encoding="utf-8").casefold()

@@ -42,6 +42,10 @@ def test_head_markdown_is_exact_and_supports_full_act_or_one_norm() -> None:
     full = render_markdown_snapshot(act, fallback_head="2026-07-15")
     assert full["exact"] is True
     assert full["partial"] is False
+    assert full["complete"] is True
+    assert full["source_exact"] is True
+    assert full["verified_reconstruction"] is False
+    assert full["archive_status"] == "exact"
     assert full["resolved_at"] == "2026-07-15"
     assert "## § 1 — Erster Teil" in full["markdown"]
     assert "## § 24 — Schutz" in full["markdown"]
@@ -78,6 +82,10 @@ def test_effective_date_drives_reverse_state_not_publication_date() -> None:
     assert "Alte Fassung" in before["markdown"]
     assert "Neue Fassung" not in before["markdown"]
     assert before["partial"] is True
+    assert before["complete"] is False
+    assert before["source_exact"] is False
+    assert before["verified_reconstruction"] is False
+    assert before["archive_status"] == "partial"
     assert any(gap["reason"] == "reconstructed_not_source_snapshot"
                for gap in before["gaps"])
 
@@ -241,6 +249,11 @@ def test_complete_official_observation_is_exact_but_not_effective_date() -> None
         fallback_head="2026-07-15", observed_state=state)
     assert rendered["exact"] is True
     assert rendered["partial"] is False
+    assert rendered["complete"] is True
+    assert rendered["source_exact"] is True
+    assert rendered["verified_reconstruction"] is False
+    assert rendered["archive_status"] == "exact"
+    assert rendered["partial"] is False
     assert rendered["state_sha256"] == digest
     assert "Beobachteter amtlicher Text" in rendered["markdown"]
     assert "not an inferred legal effective date" in rendered["markdown"]
@@ -334,3 +347,54 @@ def test_retrospective_state_renders_two_date_axes_and_exact_body() -> None:
     assert "effective_from: \"2024-01-01\"" in rendered["markdown"]
     assert "knowledge_from: \"2026-07-16T10:00:00Z\"" in rendered["markdown"]
     assert "legal-validity interval" in rendered["markdown"]
+
+
+def test_verified_reconstruction_is_complete_without_becoming_source_exact(
+        ) -> None:
+    act = _act(norms=[
+        {"enbez": "§ 24", "titel": "Schutz", "text": "HEAD"},
+    ])
+    interval = {
+        "requested_at": "2026-05-01",
+        "as_of": "2026-07-16T12:00:00Z",
+        "effective_from": "2026-04-29",
+        "effective_to": "2026-06-12",
+        "knowledge_from": "2026-07-16T12:00:00Z",
+        "knowledge_to": None,
+        "published_at": "2026-04-28",
+        "observed_at": "2026-06-13",
+        "verified_through_observed_at": "2026-06-13",
+        "state_sha256": "c" * 64,
+        "text_status": "derived_verified",
+        "date_status": "official_verified",
+        "date_basis": "official_bgbl_commencement_clause",
+        "verification": "reviewed_inverse_then_canonical_forward_replay",
+        "body_complete": True,
+        "source_exact": False,
+        "reverse_replay_verified": True,
+        "gaps": [],
+        "evidence": [{"source": "BGBl",
+                      "url": "https://example.test/bgbl"}],
+    }
+    state = {
+        "act_id": "fed_testg", "jurabk": "TestG",
+        "norms": [{"enbez": "§ 24", "titel": "Schutz",
+                   "text": "Replay-verifizierter Text"}],
+    }
+
+    rendered = render_markdown_snapshot(
+        act, requested_at="2026-05-01", norm="§ 24",
+        fallback_head="2026-07-16", retrospective_state=state,
+        retrospective_interval=interval)
+
+    assert rendered["exact"] is False
+    assert rendered["partial"] is False
+    assert rendered["complete"] is True
+    assert rendered["source_exact"] is False
+    assert rendered["verified_reconstruction"] is True
+    assert rendered["archive_status"] == "verified_reconstruction"
+    assert "archive_status: verified_reconstruction" in rendered["markdown"]
+    assert "complete: true" in rendered["markdown"]
+    assert "source_exact: false" in rendered["markdown"]
+    assert "verified_reconstruction: true" in rendered["markdown"]
+    assert "not an exact historical source capture" in rendered["markdown"]

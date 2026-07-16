@@ -4,11 +4,13 @@ import gzip
 import hashlib
 import json
 import sys
+import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -103,7 +105,21 @@ def _data_plane(tmp_path: Path) -> Path:
                 "date_basis": "official_dip_article_commencement_clause",
                 "candidate_only": True,
                 "historical_text_reconstructed": False,
-                "affected_norms": [], "commands": [], "gaps": [],
+                "document_id": "bgbl-1-2024-999",
+                "amending_article": "3",
+                "article_heading": "Änderung des Testgesetzes",
+                "procedure_id": "12345",
+                "procedure_title": "Teständerungsgesetz",
+                "official_html_url": "https://example.test/bgbl/html",
+                "official_pdf_url": "https://example.test/bgbl/pdf",
+                "affected_norms": ["§ 1"],
+                "commands": [{
+                    "item": 1, "operation": "replace",
+                    "ref": {"para": "1"},
+                    "old_text_constraint": "Alt", "new_text": "Neu",
+                    "raw": "§ 1 wird neu gefasst.",
+                }],
+                "gaps": [],
                 "evidence": [{"source": "BGBl",
                               "url": "https://example.test/bgbl"}],
             }],
@@ -190,6 +206,105 @@ def test_sqlite_download_has_stable_name(tmp_path: Path, monkeypatch) -> None:
     assert response.media_type == "application/vnd.sqlite3"
     assert response.headers["content-disposition"] == \
         'attachment; filename="lexgraph-retrospective-history.sqlite"'
+
+
+def test_markdown_route_preserves_verified_reconstruction_truth_flags(
+        tmp_path: Path, monkeypatch) -> None:
+    data = _data_plane(tmp_path)
+    manifest_path = data / "retrospective_history.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    interval = manifest["acts"]["fed_testg"]["intervals"][0]
+    interval.update({
+        "text_status": "derived_verified",
+        "body_complete": True,
+        "source_exact": False,
+        "reverse_replay_verified": True,
+        "verification": "reviewed_inverse_then_canonical_forward_replay",
+    })
+    _write(manifest_path, manifest)
+    _configure(monkeypatch, data)
+
+    with TestClient(main.app) as client:
+        response = client.get(
+            "/acts/fed_testg/markdown",
+            params={"at": "2024-06-01", "norm": "§ 1"})
+
+    assert response.status_code == 200
+    assert response.headers["x-lexgraph-exact"] == "false"
+    assert response.headers["x-lexgraph-archive-status"] == \
+        "verified_reconstruction"
+    assert response.headers["x-lexgraph-complete"] == "true"
+    assert response.headers["x-lexgraph-source-exact"] == "false"
+    assert response.headers["x-lexgraph-verified-reconstruction"] == "true"
+    assert "archive_status: verified_reconstruction" in response.text
+    assert "complete: true" in response.text
+    assert "source_exact: false" in response.text
+    assert "verified_reconstruction: true" in response.text
+
+
+def test_changes_and_amending_act_preserve_dates_commands_and_evidence(
+        tmp_path: Path, monkeypatch) -> None:
+    data = _data_plane(tmp_path)
+    _configure(monkeypatch, data)
+    known = datetime(2026, 7, 16, 11, tzinfo=timezone.utc)
+
+    result = _json(main.changes(
+        "neu gefasst", "fed_testg", "§ 1", None, None, False,
+        known, 10, 0))
+    assert result["kind"] == "lexgraph-amendment-events"
+    assert result["matched"] == 1
+    event = result["events"][0]
+    assert event["published_at"] == "2024-12-20"
+    assert event["effective_at"] == "2025-01-01"
+    assert event["future"] is False
+    assert event["commands"][0]["old_text_constraint"] == "Alt"
+
+    document = _json(main.amending_act("bgbl-1-2024-999", known))
+    assert document["kind"] == "lexgraph-amending-act"
+    assert document["published_at"] == "2024-12-20"
+    assert document["title"] == "Teständerungsgesetz"
+    assert document["event_count"] == 1
+    assert document["command_count"] == 1
+    assert document["affected_acts"][0]["affected_norms"] == ["§ 1"]
+    assert document["articles"][0]["events"][0]["act_id"] == "fed_testg"
+
+
+def test_changes_support_norm_and_knowledge_time_filters(
+        tmp_path: Path, monkeypatch) -> None:
+    data = _data_plane(tmp_path)
+    _configure(monkeypatch, data)
+    known = datetime(2026, 7, 16, 11, tzinfo=timezone.utc)
+
+    no_norm = _json(main.changes(
+        None, None, "§ 99", None, None, None, known, 10, 0))
+    assert no_norm["matched"] == 0
+
+    with pytest.raises(HTTPException) as raised:
+        main.amending_act("bgbl-1-1900-1", known)
+    assert raised.value.status_code == 404
+
+
+def test_global_and_per_act_atom_feeds_are_valid_and_source_linked(
+        tmp_path: Path, monkeypatch) -> None:
+    data = _data_plane(tmp_path)
+    _configure(monkeypatch, data)
+
+    global_feed = main.changes_atom(20)
+    assert global_feed.media_type == "application/atom+xml"
+    root = ET.fromstring(global_feed.body)
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    entries = root.findall("a:entry", ns)
+    assert len(entries) == 1
+    links = entries[0].findall("a:link", ns)
+    assert any(link.attrib["href"].endswith(
+        "/amending-acts/bgbl-1-2024-999") for link in links)
+    assert "Verkündet 2024-12-20" in entries[0].findtext(
+        "a:summary", namespaces=ns)
+
+    act_feed = main.act_changes_atom("fed_testg", 20)
+    act_root = ET.fromstring(act_feed.body)
+    assert act_root.findtext("a:id", namespaces=ns).endswith(
+        "/acts/fed_testg/changes.atom")
 
 
 def test_health_is_a_retrospective_integrity_gate(

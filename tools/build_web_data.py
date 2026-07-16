@@ -19,6 +19,8 @@ Outputs:
     web/data/federal_states/…   immutable complete GII state objects
     web/data/retrospective_history.json  legal-time + knowledge-time history
     web/data/retrospective_history.sqlite  portable relational history
+    web/data/citations.json   citation metadata/counts (no row payload)
+    web/data/citations.sqlite exact current statutory citations + backlinks
     web/data/search.sqlite     ranked full-text index (acts + current norms)
     web/data/hierarchy.json    competence-aware legal layers (no geometry)
     web/data/graph.json        arena export: nodes/edges/beliefs/ticks/worlds
@@ -51,6 +53,7 @@ from official_states import (                             # noqa: E402
     DEFAULT_STORE as FEDERAL_STATE_STORE,
     load_manifest as load_official_state_manifest,
     load_state_verified as load_official_state,
+    store_state_object,
     transitions as build_official_state_transitions,
 )
 from official_transition_review import review_transitions  # noqa: E402
@@ -58,6 +61,14 @@ from retrospective_history import (                       # noqa: E402
     build_public_manifest,
     materialize_history,
     write_sqlite as write_retrospective_sqlite,
+)
+from verified_reconstruction import (                     # noqa: E402
+    build_from_paths as build_verified_reconstructions,
+)
+from tools.statutory_citations import (                    # noqa: E402
+    build_citation_index,
+    citation_manifest,
+    write_citation_database,
 )
 
 WEB = ROOT / "web" / "data"
@@ -1553,6 +1564,24 @@ def main() -> int:
     )
     retrospective_candidates = load(
         "bgbl_history_backfill", "candidates.jsonl")
+    verified_reconstructions = build_verified_reconstructions(
+        built_at=built_at)
+    derived_states = verified_reconstructions.get("state_objects") or {}
+    derived_metadata = {}
+    for digest, state in sorted(derived_states.items()):
+        stored_digest, metadata = store_state_object(
+            WEB / "federal_states", state)
+        if stored_digest != digest:
+            raise RuntimeError(
+                f"verified reconstruction digest changed: {digest}")
+        reviewed_metadata = dict(
+            (verified_reconstructions.get("object_metadata") or {})[digest])
+        derived_metadata[digest] = {**metadata, **reviewed_metadata}
+    verified_reconstructions["object_metadata"] = derived_metadata
+    all_retrospective_states = {
+        **official_state_objects,
+        **derived_states,
+    }
     previous_retrospective = None
     previous_path = WEB / "retrospective_history.json"
     if previous_path.is_file():
@@ -1564,14 +1593,29 @@ def main() -> int:
             previous_retrospective = None
     retrospective = build_public_manifest(
         internal_retrospective,
-        official_state_objects,
+        all_retrospective_states,
         official_states.get("objects") or {},
         retrospective_candidates,
         built_at=built_at,
         previous=previous_retrospective,
+        verified_reconstructions=verified_reconstructions,
     )
+    public_reconstructions = {
+        key: value for key, value in verified_reconstructions.items()
+        if key != "state_objects"
+    }
     feed = build_feed()
     wiki_idx, details = build_wiki()
+    citation_snapshots = {}
+    for juris, family in (("DE", "gii"), ("DE-BY", "bayern_recht")):
+        snapshot = latest_snapshot(family)
+        if snapshot:
+            citation_snapshots[juris] = snapshot.name
+    citation_index = build_citation_index(
+        details.values(), built_at=built_at,
+        source_snapshots=citation_snapshots)
+    write_citation_database(WEB / "citations.sqlite", citation_index)
+    citations = citation_manifest(citation_index)
     hierarchy = build_hierarchy(wiki_idx)
     graph = build_graph()
     git = build_git(
@@ -1738,6 +1782,8 @@ def main() -> int:
             "total_transitions"],
         "official_federal_legal_reviews": len(transition_reviews),
         "retrospective_history": retrospective["counts"],
+        "verified_reconstructions": len(
+            verified_reconstructions.get("reconstructions") or []),
         "bay_bills": len(bills),
         "bay_verkuendet": sum(1 for b in bills
                               if b["status"] == "verkuendet"),
@@ -1747,6 +1793,7 @@ def main() -> int:
         "transpositions": len(load("eu_layer", "transpositions.jsonl")),
         "feed_events": len(feed),
         "decisions": len(decisions),
+        "citations": citations["counts"],
         "data_policy": data_policy,
         "search": search_counts,
         "graph": {k: len(v) for k, v in graph.items()
@@ -1765,6 +1812,7 @@ def main() -> int:
         "feed.json": dump("feed.json", feed),
         "wiki.json": dump("wiki.json", wiki_idx),
         "decisions.json": dump("decisions.json", decisions),
+        "citations.json": dump("citations.json", citations),
         "watched_procedures.json": dump("watched_procedures.json", watched),
         "amendment_fates.json": dump("amendment_fates.json", amendment_fates),
         "verified_federal_events.json": dump(
@@ -1786,10 +1834,13 @@ def main() -> int:
             }),
         "retrospective_history.json": dump(
             "retrospective_history.json", retrospective),
+        "verified_reconstructions.json": dump(
+            "verified_reconstructions.json", public_reconstructions),
         "hierarchy.json": dump("hierarchy.json", hierarchy),
         "graph.json": dump("graph.json", graph),
         "git.json": dump("git.json", git),
     }
+    sizes["citations.sqlite"] = (WEB / "citations.sqlite").stat().st_size
     if eu_index:
         sizes["eu_index.json"] = dump("eu_index.json", eu_index)
     else:

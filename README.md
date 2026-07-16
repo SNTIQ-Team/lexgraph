@@ -62,7 +62,15 @@ article level or provides no article-wide clause. This is a bitemporal store:
 `knowledge_from/knowledge_to` describe when Lexgraph asserted that result.
 Publication, effect and observation dates are never collapsed into one field.
 An amendment event is not presented as a reconstructed historical full text;
-exact date checkout is enabled only for a verified complete GII state pair.
+the source-exact label is enabled only for a verified complete GII state pair.
+
+Lexgraph also admits a narrower, explicitly derived class: a **verified
+reconstruction** for one bounded interval. Its complete body is recovered by
+reversing reviewed final BGBl commands from a later official GII anchor and
+accepted only when canonical forward replay reproduces that anchor
+byte-for-byte. These rows are `body_complete:true` but always
+`source_exact:false`; neither the API nor the UI calls them exact official
+snapshots. Inspect them through `GET /verified-reconstructions`.
 
 Third-party database rights are treated separately from copyright in the
 individual legal texts. Buzer's private snapshots remain an internal candidate
@@ -113,7 +121,11 @@ uvicorn api.server:server --port 8010   # REST API over web/data (see docs/API.m
 curl 'localhost:8010/acts/fed_aufenthg_2004/markdown?norm=%C2%A7%2024'
 curl 'localhost:8010/acts/fed_asylvfg_1992/markdown?at=2026-07-06&norm=%C2%A7%2029a'
 curl 'localhost:8010/official-transition-reviews?act=fed_asylvfg_1992'
+curl 'localhost:8010/verified-reconstructions?act=SGB%20VIII'
 curl 'localhost:8010/acts/fed_asylblg/history'
+curl 'localhost:8010/changes?act=fed_aufenthg_2004&norm=%C2%A7%2024'
+curl 'localhost:8010/amending-acts/bgbl-1-2024-323'
+curl 'localhost:8010/changes.atom'
 curl 'localhost:8010/acts/fed_asylvfg_1992/markdown?at=2026-07-10'
 curl -OJ 'localhost:8010/retrospective-history.sqlite'
 python3 tools/lex_log.py AsylbLG   # chronology for one act

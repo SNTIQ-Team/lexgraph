@@ -433,6 +433,18 @@ def _store_state(store: Path, state: dict[str, Any]) -> tuple[str, dict]:
     }
 
 
+def store_state_object(store: Path, state: dict[str, Any]) -> tuple[str, dict]:
+    """Store one validated complete state in a compatible deterministic CAS.
+
+    This does not add an official GII observation or mutate a manifest.  It is
+    also used for separately reviewed ``derived_verified`` states whose bytes
+    share the same canonical identity and gzip layout but whose provenance
+    must remain distinct from source-exact observations.
+    """
+    _validate_state(state)
+    return _store_state(Path(store), state)
+
+
 def archive_gii_states(snapshot_dirs: Iterable[Path],
                        store: Path = DEFAULT_STORE) -> dict[str, Any]:
     """Merge complete GII snapshots into the cumulative official state store."""

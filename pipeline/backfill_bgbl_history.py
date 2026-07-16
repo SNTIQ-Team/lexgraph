@@ -29,6 +29,7 @@ Usage:
     python3 pipeline/backfill_bgbl_history.py
     python3 pipeline/backfill_bgbl_history.py --start 2023-01-01 --limit 20
     python3 pipeline/backfill_bgbl_history.py --inventory-only
+    python3 pipeline/backfill_bgbl_history.py --rebuild-latest
 """
 from __future__ import annotations
 
@@ -488,6 +489,8 @@ def _name_in_final_article(alias: str, section: dict) -> bool:
     is_amending_section = bool(re.match(
         r"^(?:(?:weitere|sonstige)\s+)?(?:änderung|aufhebung|neufassung|"
         r"folgeänderungen)\b", heading))
+    is_collective_section = bool(re.match(
+        r"^(?:(?:weitere|sonstige)\s+)?folgeänderungen\b", heading))
 
     # Headings are accepted only when they explicitly describe an amendment,
     # repeal or recast.  This rejects nested replacement provisions such as a
@@ -500,14 +503,23 @@ def _name_in_final_article(alias: str, section: dict) -> bool:
             return True
 
     # The legally operative preamble ends at its first ``wird/werden ...
-    # geändert/gefasst/...``.  Anything after that boundary is command or
-    # replacement text and cannot establish the article's target.
+    # geändert/gefasst/...``.  Anything from the operative ``wird/werden``
+    # onward is command or quoted old/new wording and cannot establish the
+    # article's target.  Using ``operation.end()`` here would, for example,
+    # misclassify a deleted quotation naming the ZPO as a ZPO amendment.
     operation = MAIN_AMENDMENT_RE.search(complete)
     if is_amending_section and operation:
-        preamble = complete[:operation.end()]
+        preamble = complete[:operation.start()]
         if any(re.search(_bounded_name_pattern(form), preamble)
                for form in forms):
             return True
+
+    # An article with a law-specific heading has exactly one target.  A second
+    # statute-shaped sentence in its replacement text is not another target
+    # of the amending article.  Only an explicitly collective Folgeänderungen
+    # heading may contain several independent act preambles.
+    if not is_collective_section:
+        return False
 
     # Collective Folgeänderungen articles have several preambles.  Outside the
     # first one, require the law name to be the grammatical subject and its own
@@ -524,6 +536,89 @@ def _name_in_final_article(alias: str, section: dict) -> bool:
         if re.search(collective, complete):
             return True
     return False
+
+
+COLLECTIVE_SUBSECTION_RE = re.compile(
+    r"(?m)^[ \t]*\((?P<number>\d{1,3})\)[ \t]+"
+    r"(?=(?:Das|Die|Der)\b)")
+
+
+def _collective_subsections(section: dict) -> list[dict]:
+    """Split a final ``Folgeänderungen`` article into act-level clauses.
+
+    Top-level clauses start with ``(1) Das …gesetz … wird wie folgt
+    geändert:``.  Replacement text can itself contain numbered paragraphs,
+    so a marker is accepted only when its short preamble contains both an
+    official publication citation and an operative amendment verb.  The
+    returned text preserves the original line structure for the command
+    parser.
+    """
+    heading = normalize_legal_name(section.get("heading"))
+    if not re.match(
+            r"^(?:(?:weitere|sonstige)\s+)?folgeänderungen\b", heading):
+        return []
+    text = str(section.get("text") or "")
+    candidates = list(COLLECTIVE_SUBSECTION_RE.finditer(text))
+    accepted: list[re.Match[str]] = []
+    expected = 1
+    for marker in candidates:
+        number = int(marker.group("number"))
+        if number != expected:
+            continue
+        probe = _compact(text[marker.start():marker.start() + 1800])
+        if not re.search(r"\b(?:BGBl\.|BAnz\s+AT)", probe,
+                         flags=re.IGNORECASE):
+            continue
+        if not re.search(
+                r"\b(?:wird|werden)\b.{0,240}?"
+                r"\b(?:geändert|aufgehoben|gestrichen)\b",
+                probe, flags=re.IGNORECASE):
+            continue
+        accepted.append(marker)
+        expected += 1
+    if not accepted:
+        return []
+    result = []
+    for index, marker in enumerate(accepted):
+        end = (accepted[index + 1].start()
+               if index + 1 < len(accepted) else len(text))
+        result.append({
+            **section,
+            "text": text[marker.start():end].strip(),
+            "collective_subsection": int(marker.group("number")),
+        })
+    return result
+
+
+def scope_section_to_act(section: dict, matched_act: dict) -> dict:
+    """Return only the command scope belonging to ``matched_act``.
+
+    A normal amendment article is already act-scoped.  For collective
+    Folgeänderungen, require exactly one independently introduced subsection
+    whose grammatical subject is the matched act.  Ambiguity is retained as
+    an explicit parser status and commands are omitted rather than borrowed
+    from another law.
+    """
+    subsections = _collective_subsections(section)
+    if not subsections:
+        return {**section, "command_scope_status": "whole_article"}
+    matches = []
+    for subsection in subsections:
+        if any(_name_in_final_article(alias, subsection)
+               for alias in matched_act.get("aliases") or []):
+            matches.append(subsection)
+    if len(matches) == 1:
+        return {
+            **matches[0],
+            "command_scope_status": "collective_subsection",
+        }
+    return {
+        **section,
+        "text": "",
+        "command_scope_status": (
+            "ambiguous_collective_scope" if matches else
+            "unresolved_collective_scope"),
+    }
 
 
 def exact_final_text_match(section: dict, matched_act: dict) -> str | None:
@@ -699,11 +794,57 @@ def parse_amendment_commands(section: dict) -> tuple[list[dict], list[str]]:
             section.get("heading")):
         lines = lines[1:]
     body = "\n".join(lines)
+    # pdftotext repeats the official page furniture inside long commands.
+    # It is evidence about the PDF page, not amendment wording; remove only
+    # the narrowly shaped BGBl header while retaining every operative byte.
+    body = re.sub(
+        r"(?m)^[ \t]*Seite\s+\d+\s+von\s+\d+\s+Bundesgesetzblatt\s+"
+        r"Jahrgang\s+\d{4}\s+Teil\s+[IVX]+\s+Nr\.\s+\d+[^\n]*$",
+        "", body).replace("\f", "\n")
+    # Drop the Stammgesetz citation and outer ``wird wie folgt geändert``
+    # preamble.  Otherwise an unnumbered one-command subsection can resolve a
+    # § reference from the citation instead of from the operative command.
+    preamble = re.search(
+        r"\b(?:wird|werden)\b[\s\S]{0,260}?"
+        r"\b(?:wie\s+folgt\s+geändert|geändert|aufgehoben|gestrichen)\b"
+        r"\s*[:.]?",
+        body, flags=re.IGNORECASE)
+    if preamble:
+        operative = body[preamble.end():].lstrip()
+        # Whole-act repeal clauses have no leaf command after the preamble.
+        # Keep their official wording as an act-level command.
+        if operative:
+            body = operative
+        elif re.search(r"\baufgehoben\b", preamble.group(0),
+                       flags=re.IGNORECASE):
+            body = preamble.group(0)
+    # A clause can introduce one parent norm and number only the leaf edits,
+    # e.g. ``§ 36a Absatz 2a wird wie folgt geändert: 1. Nummer 2 ...``.
+    # ``_split_items`` returns the leaves, so preserve and inherit that parent
+    # address instead of publishing target-less commands.
+    parent_ref: dict[str, str] = {}
+    parent_scope: str | None = None
+    first_item = re.search(r"(?m)^[ \t]*1\.[ \t]+", body)
+    if first_item:
+        header = body[:first_item.start()].strip()
+        if re.search(r"\bwird\b.{0,120}\bwie\s+folgt\s+geändert\b",
+                     _compact(header), flags=re.IGNORECASE):
+            parent = parse_command(header)
+            candidate_ref = parent.get("ref") or {}
+            if isinstance(candidate_ref, dict) and any(
+                    candidate_ref.get(key) for key in ("para", "article")):
+                parent_ref = {str(key): str(value)
+                              for key, value in candidate_ref.items()
+                              if value is not None}
+                parent_scope = _compact(header)
     parsed: list[dict] = []
     affected: set[str] = set()
     for item, raw in enumerate(_split_items(body), start=1):
         command = parse_command(raw)
         ref = command.get("ref") or {}
+        if parent_ref:
+            ref = {**parent_ref, **ref}
+            command["parent_scope"] = parent_scope
         if not ref.get("para"):
             article = re.search(
                 r"\b(?:Artikel|Art\.)\s+(\d+\s*[a-z]?)\b", raw,
@@ -747,8 +888,10 @@ def build_inventory(documents: Iterable[dict]) -> list[dict]:
                     effective = resolve_article_effective_date(
                         article, commencement)
                     article_text = str(section.get("text") or "")
+                    command_section = scope_section_to_act(
+                        section, matched_act)
                     commands, affected_norms = parse_amendment_commands(
-                        section)
+                        command_section)
                     candidate_id = _candidate_id(
                         str(matched_act["slug"]),
                         str(document["document_id"]), article)
@@ -767,6 +910,10 @@ def build_inventory(documents: Iterable[dict]) -> list[dict]:
                         "procedure_title": procedure.get("procedure_title"),
                         "amending_article": article,
                         "article_heading": section.get("heading"),
+                        "command_scope_status": command_section.get(
+                            "command_scope_status"),
+                        "collective_subsection": command_section.get(
+                            "collective_subsection"),
                         "match_basis": "exact_name_in_final_bgbl_article",
                         "matched_legal_name": alias,
                         "descriptor_aliases": matched_act.get(
@@ -818,6 +965,10 @@ def build_summary(*, start: str, end: str, procedures: list[dict],
             continue
         status = str(row.get("effective_date_status") or "unknown")
         unresolved[status] = unresolved.get(status, 0) + 1
+    scope_counts: dict[str, int] = {}
+    for row in inventory:
+        status = str(row.get("command_scope_status") or "unknown")
+        scope_counts[status] = scope_counts.get(status, 0) + 1
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(
@@ -840,6 +991,12 @@ def build_summary(*, start: str, end: str, procedures: list[dict],
             len(inventory) - len(resolved)),
         "unresolved_effective_date_statuses": dict(sorted(
             unresolved.items())),
+        "amendment_commands": sum(
+            len(row.get("commands") or []) for row in inventory),
+        "command_scope_statuses": dict(sorted(scope_counts.items())),
+        "candidates_without_resolved_command_scope": sum(
+            str(row.get("command_scope_status") or "").startswith((
+                "unresolved", "ambiguous")) for row in inventory),
         "historical_texts_reconstructed": 0,
     }
 
@@ -861,6 +1018,9 @@ def main() -> int:
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--inventory-only", action="store_true",
                         help="discover/count candidates without downloading PDFs")
+    parser.add_argument(
+        "--rebuild-latest", action="store_true",
+        help="reparse the latest cached documents without any network access")
     args = parser.parse_args()
     if not (_valid_date(args.start) and _valid_date(args.end)) or \
             args.start > args.end:
@@ -871,6 +1031,30 @@ def main() -> int:
         parser.error("--delay must be at least 0.2 seconds")
 
     acts = load_curated_acts()
+    if args.rebuild_latest:
+        latest = latest_snapshot("bgbl_history_backfill")
+        documents_path = latest / "documents.jsonl" if latest else None
+        if documents_path is None or not documents_path.is_file():
+            parser.error("no cached BGBl history documents to rebuild")
+        documents = list(read_jsonl(documents_path))
+        inventory = build_inventory(documents)
+        summary_path = latest / "summary.json"
+        previous = (json.loads(summary_path.read_text(encoding="utf-8"))
+                    if summary_path.is_file() else {})
+        summary = build_summary(
+            start=str((previous.get("range") or {}).get("start") or args.start),
+            end=str((previous.get("range") or {}).get("end") or args.end),
+            procedures=[{}] * int(previous.get("dip_promulgated_procedures") or 0),
+            selected=[{}] * int(previous.get("selected_bgbl_documents") or 0),
+            documents=documents, inventory=inventory,
+            corpus_size=len(acts), captured=0, reused=len(documents))
+        summary["reparsed_from_cached_documents"] = True
+        _atomic_jsonl(latest / "candidates.jsonl", inventory)
+        _write_json(summary_path, summary)
+        print(json.dumps(summary, ensure_ascii=False, indent=2,
+                         sort_keys=True))
+        print(f"-> {latest}")
+        return 0
     http = Http(delay=args.delay, retries=4)
     key = current_key(http)
     procedures = fetch_promulgated_procedures(

@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "kind": "lexgraph-verified-reconstruction-reviews",
+  "reviews": [
+    {
+      "id": "fed-derived-review:sgb8-2026-04-29",
+      "act_id": "fed_sgb_8",
+      "jurabk": "SGB 8",
+      "anchor": {
+        "state_sha256": "72b4829e0d71d67c465fe05ab32c2c9fdb4abaad745f7dd04c2ca7869582a06e",
+        "observed_at": "2026-07-15",
+        "builddate": "20260611215511",
+        "source_url": "https://www.gesetze-im-internet.de/sgb_8/",
+        "state_build": "20260611",
+        "state_stand": "Neuf: Neugefasst durch Bek. v. 11.9.2012 I 2022; | Stand: zuletzt geändert durch Art. 9 G v. 23.4.2026 I Nr. 111"
+      },
+      "interval": {
+        "effective_from": "2026-04-29",
+        "effective_to": "2026-06-12"
+      },
+      "incoming": {
+        "candidate_id": "fed-bgbl-candidate:fcf953f4370c51e62289",
+        "document_id": "bgbl-1-2026-111",
+        "procedure_id": "325560",
+        "amending_article": "8",
+        "execution_date": "2026-04-23",
+        "publication_date": "2026-04-28",
+        "effective_at": "2026-04-29",
+        "effective_date_status": "resolved_default_clause",
+        "pdf_sha256": "6ad22e70448c22a448a47c7a778b131a7ac662f99780c5fd982c6b63b930cb29",
+        "pdf_md5": "ddbdc28861282abf3f2ecd513830a152",
+        "text_sha256": "abc98ae0f793816fea8395ce833bca1bc1be70425a555c85eedccb04b67ceb25",
+        "article_text_sha256": "13f8f0f1e90962a95b45794f6f88ef271dd998596d6a769826ace5d5eb8bd7b5",
+        "expected_commands": [
+          {
+            "kind": "insert_paragraph_after",
+            "norm": "§ 64",
+            "after_absatz": "2c",
+            "new_absatz": "2d",
+            "text": "(2d) Abweichend von Absatz 1 dürfen das Ergebnis der Altersfeststellung aus dem Verfahren nach § 42f sowie, soweit der Vertreter der betroffenen Person einwilligt, die auf Grundlage von § 42f Absatz 1 Satz 1 erlangten Erkenntnisse dem Bundesamt für Migration und Flüchtlinge auf Ersuchen für die Erfüllung von Aufgaben nach § 5 Absatz 1 des Asylgesetzes übermittelt werden."
+          }
+        ]
+      },
+      "outgoing": {
+        "candidate_id": "fed-bgbl-candidate:897005e00e326e136829",
+        "document_id": "bgbl-1-2026-111",
+        "procedure_id": "325560",
+        "amending_article": "9",
+        "execution_date": "2026-04-23",
+        "publication_date": "2026-04-28",
+        "effective_at": "2026-06-12",
+        "effective_date_status": "resolved_explicit_article_clause",
+        "pdf_sha256": "6ad22e70448c22a448a47c7a778b131a7ac662f99780c5fd982c6b63b930cb29",
+        "pdf_md5": "ddbdc28861282abf3f2ecd513830a152",
+        "text_sha256": "abc98ae0f793816fea8395ce833bca1bc1be70425a555c85eedccb04b67ceb25",
+        "article_text_sha256": "369ad9111e303f876b7d7438f8c625c904efc519356c3589f9824bd482243312",
+        "expected_commands": [
+          {
+            "kind": "replace_literal",
+            "norm": "§ 42",
+            "absatz": "2",
+            "satz": "5",
+            "old": "Stellung",
+            "new": "Einreichung"
+          },
+          {
+            "kind": "insert_sentence_after",
+            "norm": "§ 42a",
+            "absatz": "3",
+            "after_sentence": "2",
+            "text": "§ 55 Absatz 3 und 5 gilt entsprechend."
+          }
+        ]
+      }
+    }
+  ]
+}

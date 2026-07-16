@@ -19,6 +19,10 @@ URL_1 = ("https://testphase.rechtsinformationen.bund.de/v1/legislation/"
          f"{WORK}/2026-07-01/1/deu/2026-06-03.zip")
 URL_2 = ("https://testphase.rechtsinformationen.bund.de/v1/legislation/"
          f"{WORK}/2026-07-02/1/deu/2026-06-04.zip")
+URL_XML = ("https://testphase.rechtsinformationen.bund.de/v1/legislation/"
+           f"{WORK}/2026-07-03/1/deu/2026-06-05.xml")
+URL_HTML = ("https://testphase.rechtsinformationen.bund.de/v1/legislation/"
+            f"{WORK}/2026-07-04/1/deu/2026-06-06.html")
 
 
 def _zip_bytes(text: str = "official") -> bytes:
@@ -28,15 +32,28 @@ def _zip_bytes(text: str = "official") -> bytes:
     return out.getvalue()
 
 
+def _xml_bytes(text: str = "official") -> bytes:
+    return (f'<?xml version="1.0" encoding="UTF-8"?>'
+            f'<akomaNtoso><doc>{text}</doc></akomaNtoso>').encode()
+
+
+def _html_bytes(text: str = "official") -> bytes:
+    return (f'<!doctype html><html><body><main>{text}</main></body></html>') \
+        .encode()
+
+
 class FakeResponse:
     def __init__(self, status_code: int, body: bytes = b"", data=None,
-                 declared_size: int | None = None):
+                 declared_size: int | None = None,
+                 content_type: str | None = None):
         self.status_code = status_code
         self._body = body
         self._data = data
         size = len(body) if declared_size is None else declared_size
         self.headers = {"Content-Length": str(size)} if status_code == 200 \
             else {}
+        if content_type and status_code == 200:
+            self.headers["Content-Type"] = content_type
         self.closed = False
 
     def json(self):
@@ -69,12 +86,25 @@ class ForbiddenHttp:
         raise AssertionError(f"unexpected HTTP request: {url}")
 
 
+class StaticHttp:
+    def __init__(self, responses: dict[str, FakeResponse]):
+        self.responses = dict(responses)
+        self.calls: list[str] = []
+
+    def get(self, url: str, **_kwargs):
+        self.calls.append(url)
+        return self.responses.get(url, FakeResponse(404))
+
+
 class MappingHttp:
     def __init__(self):
         self.queries: list[str] = []
 
     def get(self, _url: str, **kwargs):
-        abbreviation = kwargs["params"]["abbreviation"]
+        assert "abbreviation" not in kwargs["params"]
+        search_term = kwargs["params"]["searchTerm"]
+        assert search_term.startswith('"') and search_term.endswith('"')
+        abbreviation = search_term[1:-1]
         self.queries.append(abbreviation)
         member = []
         if abbreviation == "AsylG":
@@ -269,3 +299,154 @@ def test_legacy_archive_is_migrated_without_losing_tombstones(tmp_path: Path):
     assert rows[0]["content_sha256"] is None
     assert rows[1]["capture_status"] == "tombstone"
     assert rows[1]["event_id"] == "old-delete"
+
+
+def test_archive_backfill_is_bounded_resumable_and_records_dates_and_media(
+        tmp_path: Path):
+    archive = tmp_path / "archive.jsonl"
+    objects = tmp_path / "objects"
+    stamp_1 = "2026-07-16T10:00:00+00:00"
+    stamp_2 = "2026-07-16T11:00:00+00:00"
+    source_rows = [
+        _event(URL_1, "2026-07-10T01:00:00+00:00"),
+        _event(URL_XML, "2026-07-10T02:00:00+00:00"),
+        _event(URL_HTML, "2026-07-10T03:00:00+00:00"),
+    ]
+    # Exercise the legacy migration boundary as well as capture: a historical
+    # PIT must not survive as an asserted legal-effective date.
+    for row in source_rows:
+        row["time"] = row["point_in_time"]
+        row["legal_effect"] = "revises_consolidation"
+        row.pop("date_basis", None)
+    neuris.atomic_write_jsonl(archive, source_rows)
+
+    zip_body = _zip_bytes("zip")
+    xml_body = _xml_bytes("xml")
+    first_http = StaticHttp({
+        URL_1: FakeResponse(200, zip_body, content_type="application/zip"),
+        URL_XML: FakeResponse(
+            200, xml_body, content_type="application/akn+xml; charset=utf-8"),
+    })
+    first, first_budget = neuris.backfill_archive(
+        first_http, archive_path=archive, objects=objects, limit=2,
+        max_downloads=2, max_bytes=1024 * 1024, captured_at=stamp_1)
+
+    rows = [json.loads(line) for line in archive.read_text().splitlines()]
+    assert first_http.calls == [URL_1, URL_XML]
+    assert first["attempted"] == 2
+    assert first["captured"] == 2
+    assert first["remaining"] == 1
+    assert first_budget.downloads == 2
+    for row in rows[:2]:
+        assert row["capture_status"] == "captured"
+        assert row["captured_at"] == stamp_1
+        assert row["capture_attempted_at"] == stamp_1
+        assert row["capture_attempts"] == 1
+        assert row["content_source_url"] == row["content_url"]
+        assert row["legal_effect"] == "not_asserted"
+        assert row["date_basis"] == \
+            "retrieval_observation_and_eli_identifiers_not_legal_effect"
+        assert row["time"] == row["fetched_at"]
+        assert "effective_at" not in row
+    assert rows[0]["content_media_type"] == "application/zip"
+    assert rows[1]["content_media_type"] == "application/xml"
+    assert rows[1]["content_sha256"] == hashlib.sha256(xml_body).hexdigest()
+    assert rows[1]["content_bytes"] == len(xml_body)
+    assert (objects / f"{rows[1]['content_sha256']}.xml").read_bytes() == \
+        xml_body
+    assert rows[2]["capture_status"] == \
+        "legacy_metadata_only_not_captured"
+
+    html_body = _html_bytes("html")
+    second_http = StaticHttp({
+        URL_HTML: FakeResponse(200, html_body, content_type="text/html"),
+    })
+    second, second_budget = neuris.backfill_archive(
+        second_http, archive_path=archive, objects=objects, limit=2,
+        max_downloads=2, max_bytes=1024 * 1024, captured_at=stamp_2)
+
+    rows = [json.loads(line) for line in archive.read_text().splitlines()]
+    assert second_http.calls == [URL_HTML]
+    assert second["cached"] == 2
+    assert second["attempted"] == 1
+    assert second["captured"] == 1
+    assert second["remaining"] == 0
+    assert second_budget.downloads == 1
+    assert rows[2]["content_media_type"] == "text/html"
+    assert rows[2]["captured_at"] == stamp_2
+    assert rows[2]["capture_attempted_at"] == stamp_2
+    assert (objects / f"{rows[2]['content_sha256']}.html").read_bytes() == \
+        html_body
+
+
+def test_archive_backfill_failure_does_not_starve_unattempted_rows(
+        tmp_path: Path):
+    archive = tmp_path / "archive.jsonl"
+    objects = tmp_path / "objects"
+    neuris.atomic_write_jsonl(archive, [_event(URL_1), _event(URL_2)])
+
+    first_http = StaticHttp({URL_1: FakeResponse(404)})
+    first, _ = neuris.backfill_archive(
+        first_http, archive_path=archive, objects=objects, limit=1,
+        captured_at="2026-07-16T10:00:00+00:00")
+    rows = [json.loads(line) for line in archive.read_text().splitlines()]
+    assert first_http.calls == [URL_1]
+    assert first["failed"] == 1
+    assert rows[0]["capture_status"] == "http_404"
+    assert rows[0]["capture_attempts"] == 1
+
+    body = _zip_bytes("second row")
+    second_http = StaticHttp({URL_2: FakeResponse(200, body)})
+    second, _ = neuris.backfill_archive(
+        second_http, archive_path=archive, objects=objects, limit=1,
+        captured_at="2026-07-16T11:00:00+00:00")
+    rows = [json.loads(line) for line in archive.read_text().splitlines()]
+    assert second_http.calls == [URL_2]
+    assert second["captured"] == 1
+    assert rows[0]["capture_status"] == "http_404"
+    assert rows[1]["capture_status"] == "captured"
+
+
+def test_archive_backfill_prioritises_exact_curated_work_mapping(
+        tmp_path: Path):
+    archive = tmp_path / "archive.jsonl"
+    objects = tmp_path / "objects"
+    general = _event(URL_1, "2026-07-09T01:00:00+00:00")
+    curated = _event(URL_2, "2026-07-10T01:00:00+00:00")
+    curated["eli_work"] = "eli/bund/bgbl-1/2005/s1218"
+    neuris.atomic_write_jsonl(archive, [general, curated])
+    body = _zip_bytes("curated first")
+    http = StaticHttp({URL_2: FakeResponse(200, body)})
+
+    stats, _ = neuris.backfill_archive(
+        http, archive_path=archive, objects=objects, limit=1,
+        work_map={"by_work": {
+            "eli/bund/bgbl-1/2005/s1218": {
+                "slug": "example", "jurabk": "ExampleG",
+            },
+        }}, captured_at="2026-07-16T12:00:00+00:00")
+
+    rows = [json.loads(line) for line in archive.read_text().splitlines()]
+    assert stats["captured"] == 1
+    assert http.calls == [URL_2]
+    assert rows[0].get("content_sha256") is None
+    assert rows[1]["mapped_slug"] == "example"
+    assert rows[1]["mapped_jurabk"] == "ExampleG"
+
+
+def test_archive_backfill_rejects_non_official_source_without_http(
+        tmp_path: Path):
+    archive = tmp_path / "archive.jsonl"
+    row = _event()
+    row["content_url"] = "https://example.org/v1/legislation/object.zip"
+    neuris.atomic_write_jsonl(archive, [row])
+
+    stats, budget = neuris.backfill_archive(
+        ForbiddenHttp(), archive_path=archive, objects=tmp_path / "objects",
+        limit=1, captured_at="2026-07-16T12:00:00+00:00")
+    stored = json.loads(archive.read_text())
+    assert stats["attempted"] == 1
+    assert stats["failed"] == 1
+    assert budget.downloads == 0
+    assert stored["capture_status"] == "invalid_source_url"
+    assert stored["capture_attempted_at"] == "2026-07-16T12:00:00+00:00"

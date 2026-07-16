@@ -18,6 +18,7 @@ operation="other" and the raw text — silence is worse than coarseness.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 
 # ---------------------------------------------------------------- targets
@@ -174,12 +175,18 @@ def parse_command(cmd: str) -> dict:
         old, new = _clean(m.group(1)), _clean(m.group(2))
     elif op in ("replace", "insert") and quotes:
         new = "\n".join(quotes)
+    raw = cmd.strip()
     return {
         "operation": op,
         "ref": _ref(c),
         "old_text_constraint": old,
         "new_text": new,
-        "raw": c[:800],
+        # The command is primary evidence for the target/operation parser.
+        # Never truncate it: large recasts routinely exceed the former
+        # 800-character UI-era cap.  Preserve line structure and attach a
+        # stable digest so downstream exports can prove byte identity.
+        "raw": raw,
+        "raw_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
     }
 
 
