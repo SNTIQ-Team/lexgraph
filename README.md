@@ -14,15 +14,22 @@ from, when it may pass, when it was last amended, and what changed.**
 |---|---|
 | WP21 legislative procedures (DIP) | **362** |
 | Extracted PatchInstructions | **1,484** (607 proposed · 9 adopted · 841 published · 23 rejected · 4 not merged) |
-| Federal acts (GII) + norms | **51 / 10,939** |
-| Official federal state archive | **172 observations / 63 states / 7 transitions** |
+| Federal acts (GII) + norms | **125 / 15,738** |
+| Official federal GII catalogue (metadata) | **6,126** |
+| Official federal state archive | **297 observations / 137 states / 7 transitions** |
 | Legally dated federal transitions | **1** final-text + commencement review |
 | Official retrospective BGBl inventory (2023+) | **144 documents / 484 amendment articles / 399 resolved effective dates** |
 | Bavarian acts (BAYERN.RECHT) + versions | **12 / 531** (since 1985) |
 | Curated EU instruments + German transpositions | **47 / 136** |
 | EU in-force metadata index | **7,934** directives and basic regulations |
 | Court decisions | **82** (3 reviewed + 79 official federal RII) |
-| QFS arena | 745 nodes · 2,588 beliefs · 3 jurisdiction worlds |
+| QFS arena | 804 nodes · 810 beliefs · 3 jurisdiction worlds |
+
+The 125 federal acts form the curated **deep corpus**: full current text,
+norm-level search, citations, snapshots and diffs.  They are not presented as
+all German federal law.  The separate 6,126-row official GII catalogue gives
+broad discovery and source links without pretending that metadata-only rows
+already have Lexgraph's deep history.
 
 The EU breadth index covers every in-force directive (including delegated and
 implementing directives) and basic regulation exposed by CELLAR, as metadata

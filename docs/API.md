@@ -78,8 +78,8 @@ formats calendar dates to `dd.mm.yyyy`.
 
 ```json
 {
-  "built_at": "2026-07-14T22:33:57+00:00",
-  "acts_fed": 51,
+  "built_at": "2026-07-16T11:56:04+00:00",
+  "acts_fed": 125,
   "acts_by": 12,
   "patches": { "proposed": 607, "adopted": 9, "rejected": 23, "published": 841, "not_merged": 4 },
   "vorgaenge": 362,
@@ -91,26 +91,26 @@ formats calendar dates to `dd.mm.yyyy`.
   "watched_terminal": 1,
   "amendment_fates": 1,
   "amendment_fates_validated": 1,
-  "official_federal_observations": 172,
-  "official_federal_states": 63,
+  "official_federal_observations": 297,
+  "official_federal_states": 137,
   "official_federal_transitions": 7,
   "official_federal_legal_reviews": 1,
-  "retrospective_history": {"acts":51,"interval_assertions":1,
-    "current_intervals":1,"events":484,"events_with_effective_date":399,
-    "observations":172,"state_objects":63},
+  "retrospective_history": {"acts":125,"interval_assertions":4,
+    "current_intervals":3,"events":944,"current_events":460,
+    "events_with_effective_date":379,"observations":297,"state_objects":138},
   "bay_bills": 123,
   "bay_verkuendet": 60,
   "eu_instruments": 47,
   "eu_index_total": 7934,
-  "gii_catalog_total": 6125,
+  "gii_catalog_total": 6126,
   "transpositions": 136,
   "feed_events": 600,
   "decisions": 82,
-  "citations": {"total":35822,"resolved":29937,"unresolved":5885,
-    "self":30315,"cross_act":5507,"acts_scanned":63,
-    "source_norms_scanned":11846},
-  "search": { "acts": 63, "norms": 11852 },
-  "graph": { "nodes": 745, "edges": 1471, "beliefs": 2588, "ticks": 264, "worlds": 3 }
+  "citations": {"total":50530,"resolved":41878,"unresolved":8652,
+    "self":39905,"cross_act":10625,"acts_scanned":137,
+    "source_norms_scanned":16645},
+  "search": { "acts": 137, "norms": 16651 },
+  "graph": { "nodes": 804, "edges": 1459, "beliefs": 810, "ticks": 145, "worlds": 3 }
 }
 ```
 
@@ -172,8 +172,8 @@ full text outside the curated corpus.
 ```json
 {
   "schema_version": 1,
-  "built_at": "2026-07-15",
-  "total": 6125,
+  "built_at": "2026-07-16",
+  "total": 6126,
   "acts": [
     {"id":"gii:bgb","abbrev":"bgb","title":"Bürgerliches Gesetzbuch",
      "url":"https://www.gesetze-im-internet.de/bgb/",

@@ -1616,6 +1616,10 @@ def main() -> int:
         source_snapshots=citation_snapshots)
     write_citation_database(WEB / "citations.sqlite", citation_index)
     citations = citation_manifest(citation_index)
+    # The manifest is deliberately tiny and the detailed rows now live in
+    # SQLite.  Release the large extraction graph before constructing the FTS
+    # database; this keeps broad-corpus rebuilds inside the VPS memory budget.
+    del citation_index
     hierarchy = build_hierarchy(wiki_idx)
     graph = build_graph()
     git = build_git(

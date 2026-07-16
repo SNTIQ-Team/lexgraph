@@ -414,6 +414,17 @@ def discover_gii_snapshots(root: Path = DEFAULT_SNAPSHOTS) -> list[Path]:
     )
 
 
+def project_snapshot_observations(path: Path) -> list[dict[str, Any]]:
+    """Project the exact manifest observations for one complete snapshot.
+
+    This is intentionally read-only.  Retention tooling uses it to prove that
+    a raw snapshot is represented in the durable manifest before removing the
+    redundant source JSONL files.
+    """
+    return [copy.deepcopy(observation)
+            for _state, observation in _project_snapshot(Path(path))]
+
+
 def _store_state(store: Path, state: dict[str, Any]) -> tuple[str, dict]:
     canonical = canonical_json_bytes(state)
     digest = _sha256(canonical)

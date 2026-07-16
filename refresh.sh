@@ -30,6 +30,7 @@ fi
 step " 4/24" "BGBl promulgation events (daily feed)"       python3 pipeline/fetch_bgbl_events.py
 step " 5/24" "GII corpus HEAD (lags days-weeks)"           python3 pipeline/fetch_gii.py
 step " 6/24" "archive complete official GII states"       python3 tools/archive_gii_states.py
+step "6b/24" "prune archive-verified raw GII snapshots"   python3 tools/prune_gii_snapshots.py
 step " 7/24" "final BGBl documents + integrity/text"       python3 pipeline/fetch_bgbl_documents.py
 step " 8/24" "2023+ official BGBl retrospective inventory" python3 pipeline/backfill_bgbl_history.py
 echo "==> [ 9/24] Federal case law intake"

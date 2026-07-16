@@ -608,7 +608,7 @@ def write_citation_database(output: Path, index: Mapping[str, object]) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp = output.with_name(output.name + ".tmp")
     tmp.unlink(missing_ok=True)
-    rows = list(index.get("citations") or [])
+    rows = index.get("citations") or []
     conn = sqlite3.connect(tmp)
     try:
         conn.executescript("""
@@ -698,9 +698,16 @@ def write_citation_database(output: Path, index: Mapping[str, object]) -> None:
             target_pinpoint_key, occurrence_count, machine_extracted,
             current_state_only, legal_interpretation
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
-        values = []
-        for ordinal, row in enumerate(rows):
-            values.append((
+        def values():
+            """Yield SQLite rows without duplicating the citation graph.
+
+            A broad full-text corpus can contain tens of thousands of citation
+            dictionaries.  Building a second equally large tuple list here
+            needlessly raises the peak RSS of the refresh/watch workers.
+            ``sqlite3.executemany`` consumes this iterator incrementally.
+            """
+            for ordinal, row in enumerate(rows):
+                yield (
                 ordinal, row["id"], row["status"],
                 row.get("unresolved_reason"), row["kind"],
                 row["source_act"], _key(row["source_act"]),
@@ -719,8 +726,8 @@ def write_citation_database(output: Path, index: Mapping[str, object]) -> None:
                 int(bool(row["machine_extracted"])),
                 int(bool(row["current_state_only"])),
                 row["legal_interpretation"],
-            ))
-        conn.executemany(insert, values)
+                )
+        conn.executemany(insert, values())
         conn.commit()
         check = conn.execute("PRAGMA quick_check").fetchone()
         if not check or check[0] != "ok":

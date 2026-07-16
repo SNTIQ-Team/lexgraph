@@ -55,6 +55,33 @@ CORPUS = {
     "waffg_2002", "beg", "idnrg",
 }
 
+# Broad practice expansion, verified against the official GII TOC/XML on
+# 2026-07-16.  Keep this named bundle separate so a future edit cannot
+# silently shrink the deep full-text corpus back to the original seed set.
+PRACTICE_EXPANSION_2026_07 = {
+    # migration, asylum, integration, identity & civil status
+    "asylzbv_2026", "azrg-dv", "aknv", "einbtestv", "bqfg", "deuf_v",
+    "dbv", "bmg", "pstg", "pstv", "pa_g_1986", "pauswg", "vwdg",
+    "vwdg-dv", "viszg", "hauslg",
+    # benefits, social administration, housing & accessibility
+    "algiiv_2008", "grsidav", "sozhidav_2019", "svev", "de_v",
+    "beitrvv", "wogv", "wofg", "wobindg", "woflv", "wovermrg", "wbvg",
+    "woeigg", "bgg", "bitv_2_0", "pflegezg", "fpfzg", "kkg",
+    "beratungsg",
+    # family and personal status
+    "famfg", "famgkg", "versausglg", "btog", "aug_2011", "adwirkg",
+    "nam_ndg", "sbgg", "muschg_2018",
+    # employment and workplace protection
+    "arbgg", "burlg", "tzbfg", "a_g", "betrvg", "tvg", "bbig_2005",
+    "arbschg", "jarbschg", "aentg_2009", "schwarzarbg_2004", "nachwg",
+    "hinschg", "entgtranspg", "betravg", "asig",
+    # courts, enforcement, information rights and general procedure
+    "bverfgg", "gvg", "gkg_2004", "rvg", "jveg", "owig_1968", "vwvg",
+    "vwzg_2005", "ifg", "bdsg_2018", "fgo", "inso", "ao_1977", "bgbeg",
+}
+
+CORPUS |= PRACTICE_EXPANSION_2026_07
+
 
 def strip_tags(el: ET.Element) -> str:
     """Flatten a textdaten subtree to plain text, keeping structure hints."""
@@ -135,6 +162,21 @@ def parse_toc(xml_bytes: bytes) -> tuple[dict[str, str], list[dict]]:
     return links, catalog
 
 
+def require_complete_corpus(wanted: set[str], links: dict[str, str]) -> None:
+    """Refuse a default refresh if GII no longer exposes a configured act.
+
+    A transiently incomplete TOC or a renamed slug must not silently replace a
+    complete production generation with fewer laws.  Explicit ``--slugs``
+    probes remain intentionally partial and are handled separately in
+    :func:`main`.
+    """
+    missing = sorted(wanted - links.keys())
+    if missing:
+        raise RuntimeError(
+            "configured corpus missing from the official GII index: "
+            + ", ".join(missing))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slugs", help="comma list; default: practice corpus")
@@ -147,8 +189,15 @@ def main() -> int:
     print(f"[toc] {len(links)} laws in the federal index")
 
     missing = sorted(wanted - links.keys())
-    if missing:
-        print(f"[warn] not in GII index: {missing}")
+    if args.slugs:
+        if missing:
+            print(f"[warn] not in GII index: {missing}")
+    else:
+        try:
+            require_complete_corpus(wanted, links)
+        except RuntimeError as exc:
+            print(f"[error] {exc}", file=sys.stderr)
+            return 1
 
     acts, norms = [], []
     for slug in sorted(wanted & links.keys()):
