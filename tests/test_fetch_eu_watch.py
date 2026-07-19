@@ -11,8 +11,10 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 from fetch_eu_watch import (  # noqa: E402
     active_eu_watches,
     apply_final_review_gate,
+    council_communication_evidence,
     fetch_council_development,
     fetch_watch_resilient,
+    merge_council_communication,
     merge_council_development,
     parse_council_register,
     parse_eurlex_procedure,
@@ -181,6 +183,100 @@ def test_council_preparation_is_not_upgraded_to_completed_agreement() -> None:
         html, config, "2026-07-15T04:00:00Z")
     assert development["stage"] == "Preparation for a political agreement"
     assert development["terminal"] is False
+
+
+COMMUNICATION_CONFIG = {
+    "council_communication_seed": {
+        "date": "2026-07-15",
+        "title": ("EU countries agree to extend temporary protection for "
+                  "those fleeing Ukraine until March 2028"),
+        "url": "https://example.test/press-release",
+        "stage": "Political agreement — formal Council adoption pending",
+        "kind": "press_release",
+        "body": "Permanent Representatives Committee (member states' ambassadors)",
+    },
+}
+
+
+def test_verified_council_communication_upgrades_stage_but_not_terminal() -> None:
+    communication = council_communication_evidence(
+        COMMUNICATION_CONFIG, "2026-07-19T10:00:00Z")
+    assert communication is not None
+    assert communication["source"] == "Council press release"
+    assert communication["retrieval_status"] == "verified_seed"
+    assert communication["terminal"] is False
+
+    row = {
+        "status": "Ongoing", "stage": "Preparation for a political agreement",
+        "date": "2026-07-10", "terminal": False,
+        "events": [
+            {"date": "2026-06-26", "title": "Discussions within the Council"},
+            {"date": "2026-07-10",
+             "title": "Preparation for a political agreement",
+             "source": "Council public register", "document": "ST 11375/26"},
+        ],
+    }
+    merged = merge_council_communication(row, communication)
+    assert merged["status"] == "Ongoing"
+    assert merged["stage"] == \
+        "Political agreement — formal Council adoption pending"
+    assert merged["date"] == "2026-07-15"
+    # A communicated agreement in principle is procedural evidence only.
+    assert merged["terminal"] is False
+    assert merged["council_communication"]["url"] == \
+        "https://example.test/press-release"
+
+    again = merge_council_communication(dict(merged), council_communication_evidence(
+        COMMUNICATION_CONFIG, "2026-07-19T22:00:00Z"))
+    press_events = [event for event in again["events"]
+                    if event.get("source") == "Council press release"]
+    assert len(press_events) == 1
+
+
+def test_stale_fallback_keeps_council_communication_evidence() -> None:
+    class PlaceholderResponse:
+        text = "<html><body>temporary placeholder</body></html>"
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class PlaceholderHttp:
+        def get(self, _url: str, **_kwargs):
+            return PlaceholderResponse()
+
+    config = {
+        "official_url": "https://example.test/procedure",
+        "procedure": "2026/0186/NLE", "celex_proposal": "52026PC0345",
+        "council_register_document": "ST 11375/26",
+        "council_register_url": "https://example.test/register",
+        "council_register_seed": {
+            "date": "2026-07-10",
+            "stage": "Preparation for a political agreement",
+            "meeting_date": "2026-07-10",
+        },
+        **COMMUNICATION_CONFIG,
+    }
+    previous = {
+        "procedure": "2026/0186/NLE", "title": "Tracked proposal",
+        "status": "Ongoing", "stage": "Preparation for a political agreement",
+        "date": "2026-07-10", "url": "https://example.test/procedure",
+        "events": [{"date": "2026-06-26", "title": "Council discussion"}],
+        "adopted_celexes": [], "official_journal": [], "terminal": False,
+    }
+    row = fetch_watch_resilient(
+        PlaceholderHttp(), "eu-x", config, "2026-07-19T08:00:00Z", previous)
+    assert row["source_stale"] is True
+    assert row["stage"] == \
+        "Political agreement — formal Council adoption pending"
+    assert row["terminal"] is False
+    assert row["council_communication"]["retrieval_status"] == "verified_seed"
+
+    again = fetch_watch_resilient(
+        PlaceholderHttp(), "eu-x", config, "2026-07-19T20:00:00Z", row)
+    press_events = [event for event in again["events"]
+                    if event.get("source") == "Council press release"]
+    assert len(press_events) == 1
+    assert again["events"] == row["events"]
 
 
 def test_council_register_browser_block_preserves_verified_seed() -> None:

@@ -81,6 +81,14 @@
         "meeting_date": "2026-07-10",
         "content_accessible": false
       },
+      "council_communication_seed": {
+        "date": "2026-07-15",
+        "title": "EU countries agree to extend temporary protection for those fleeing Ukraine until March 2028",
+        "url": "https://www.consilium.europa.eu/en/press/press-releases/2026/07/15/eu-countries-agree-to-extend-temporary-protection-for-those-fleeing-ukraine-until-march-2028/",
+        "stage": "Political agreement — formal Council adoption pending",
+        "kind": "press_release",
+        "body": "Permanent Representatives Committee (member states' ambassadors); formal Council adoption announced for the coming weeks"
+      },
       "queries": [
         "2026/0186/NLE",
         "COM(2026) 345",

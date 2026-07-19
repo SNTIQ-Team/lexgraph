@@ -128,6 +128,57 @@ def test_stale_eu_fallback_does_not_fabricate_status_transition(
     assert len(history.read_text().splitlines()) == 1
 
 
+def test_retrieval_transport_flips_do_not_manufacture_history(
+        tmp_path: Path) -> None:
+    import copy
+
+    watch = tmp_path / "watch.json"
+    state = tmp_path / "state.json"
+    history = tmp_path / "history.jsonl"
+    _write(watch, {"procedures": {"eu-x": {
+        "id": "eu", "source": "EUR-Lex", "monitor": True}}})
+    eu = [{
+        "id": "eu-x", "procedure": "2026/0186/NLE", "title": "Tracked",
+        "status": "Ongoing",
+        "stage": "Political agreement — formal Council adoption pending",
+        "date": "2026-07-15",
+        "events": [{
+            "date": "2026-07-15",
+            "title": "Political agreement — formal Council adoption pending",
+            "source": "Council press release", "url": "https://press.example",
+            "retrieval_status": "verified_seed",
+        }],
+        "council_development": {
+            "source": "Council public register", "document": "ST 11375/26",
+            "date": "2026-07-10",
+            "stage": "Preparation for a political agreement",
+            "retrieval_status": "verified_seed", "fetched_at": "2026-07-19T08:00:00Z",
+        },
+        "council_communication": {
+            "source": "Council press release", "url": "https://press.example",
+            "date": "2026-07-15",
+            "stage": "Political agreement — formal Council adoption pending",
+            "retrieval_status": "verified_seed", "fetched_at": "2026-07-19T08:00:00Z",
+        },
+        "adopted_celexes": [], "official_journal": [], "terminal": False,
+    }]
+
+    first = update_watch_state(
+        watch, state, history, [], eu, "2026-07-19T08:00:00Z")
+    assert len(first["changes"]) == 1
+
+    # Only retrieval transport metadata flips (Consilium availability, retry
+    # timing); the official metadata is byte-identical.  No history event.
+    flipped = copy.deepcopy(eu)
+    flipped[0]["council_development"]["retrieval_status"] = "fetch_unavailable"
+    flipped[0]["council_development"]["fetched_at"] = "2026-07-19T20:00:00Z"
+    flipped[0]["council_communication"]["fetched_at"] = "2026-07-19T20:00:00Z"
+    flipped[0]["events"][0]["retrieval_status"] = "fetched"
+    second = update_watch_state(
+        watch, state, history, [], flipped, "2026-07-19T20:00:00Z")
+    assert second["changes"] == []
+
+
 def test_missing_source_is_explicit_and_reappearance_is_recorded(
         tmp_path: Path) -> None:
     watch = tmp_path / "watch.json"

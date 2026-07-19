@@ -245,6 +245,74 @@ def fetch_council_development(http: Http, config: dict,
         return _council_seed(config, fetched_at, "fetch_unavailable")
 
 
+def council_communication_evidence(config: dict, fetched_at: str) -> dict | None:
+    """Return checked-in evidence of an official Council communication.
+
+    Consilium press pages sit behind a browser check, so this record is a
+    reviewer-verified seed rather than a live fetch.  A communicated political
+    agreement documents an agreement in principle; it is never treated as
+    formal Council adoption, publication or applicable law.
+    """
+    seed = config.get("council_communication_seed")
+    if not isinstance(seed, dict):
+        return None
+    return {
+        "source": "Council press release",
+        "kind": seed.get("kind") or "press_release",
+        "url": seed.get("url"),
+        "date": seed.get("date"),
+        "title": seed.get("title"),
+        "stage": seed.get("stage") or "Political agreement",
+        "body": seed.get("body"),
+        "fetched_at": fetched_at,
+        "retrieval_status": "verified_seed",
+        "terminal": False,
+    }
+
+
+def merge_council_communication(row: dict,
+                                communication: dict | None) -> dict:
+    """Attach a verified Council communication and reselect the newest event.
+
+    Once the communication is the latest dated official event, the displayed
+    stage moves past the preparatory Coreper note to the communicated
+    agreement in principle.  Formal adoption, legal-linguistic finalisation
+    and Official Journal publication remain outstanding: ``terminal`` stays
+    false and the final-review gate is untouched.
+    """
+    if not communication:
+        return row
+    row["council_communication"] = communication
+    event = {
+        "date": communication.get("date"),
+        "title": communication.get("stage") or communication.get("title"),
+        "headline": communication.get("title"),
+        "source": communication.get("source"),
+        "url": communication.get("url"),
+        "document_type": str(communication.get("kind") or
+                             "press_release").replace("_", " ").upper(),
+        "retrieval_status": communication.get("retrieval_status"),
+        "terminal": False,
+        "celexes": [],
+        "documents": [],
+    }
+    # A re-checked seed for the same communication replaces the older
+    # representation instead of manufacturing a duplicate event.
+    row["events"] = [
+        old for old in row.get("events") or []
+        if not (old.get("source") == communication.get("source") and
+                old.get("url") == communication.get("url"))
+    ] + [event]
+    row["events"].sort(key=lambda item: (
+        str(item.get("date") or ""), str(item.get("title") or "")))
+    latest = row["events"][-1]
+    row["stage"] = latest.get("title") or row.get("stage")
+    row["date"] = latest.get("date") or row.get("date")
+    # An agreement in principle is procedural evidence, never a final act.
+    row["terminal"] = False
+    return row
+
+
 def merge_council_development(row: dict,
                               development: dict | None) -> dict:
     """Attach Council evidence and select the newest official event."""
@@ -345,6 +413,8 @@ def fetch_watch(http: Http, watch_key: str, config: dict,
     row = parse_eurlex_procedure(response.text, watch_key, config, fetched_at)
     row = merge_council_development(
         row, fetch_council_development(http, config, fetched_at))
+    row = merge_council_communication(
+        row, council_communication_evidence(config, fetched_at))
     journal = [record for celex in row["adopted_celexes"]
                if (record := _official_journal_record(http, celex))]
     return apply_final_review_gate(row, config, journal)
@@ -373,6 +443,7 @@ def stale_fallback(watch_key: str, config: dict, previous: dict | None,
         "url": previous.get("url") or config.get("official_url"),
         "events": previous.get("events") or [],
         "council_development": previous.get("council_development"),
+        "council_communication": previous.get("council_communication"),
         "adopted_celexes": previous.get("adopted_celexes") or [],
         "official_journal": previous.get("official_journal") or [],
         "publication_detected": bool(previous.get("publication_detected")),
@@ -392,6 +463,14 @@ def stale_fallback(watch_key: str, config: dict, previous: dict | None,
             previous_council.get("date") or ""):
         row = merge_council_development(row, seed)
         # merge_council_development correctly refuses to infer terminality.
+        row["source_stale"] = True
+        row["retrieval_status"] = "stale_fallback"
+    communication = council_communication_evidence(config, fetched_at)
+    previous_communication = previous.get("council_communication") or {}
+    if communication and str(communication.get("date") or "") >= str(
+            previous_communication.get("date") or ""):
+        row = merge_council_communication(row, communication)
+        # merge_council_communication also refuses to infer terminality.
         row["source_stale"] = True
         row["retrieval_status"] = "stale_fallback"
     return row

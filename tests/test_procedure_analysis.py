@@ -105,6 +105,130 @@ def test_eu_preparation_is_not_upgraded_to_political_agreement() -> None:
                for item in analysis["inferences"])
 
 
+def test_communicated_political_agreement_strengthens_forecast() -> None:
+    row = {
+        "id": "eu-x", "source": "EUR-Lex", "status": "Ongoing",
+        "stage": "Political agreement — formal Council adoption pending",
+        "tracking_state": "active", "adopted_celexes": [],
+        "official_journal": [], "url": "https://eurlex.example/procedure",
+        "council_communication": {
+            "source": "Council press release",
+            "date": "2026-07-15",
+            "title": ("EU countries agree to extend temporary protection "
+                      "for those fleeing Ukraine until March 2028"),
+            "url": "https://consilium.example/press",
+            "stage": "Political agreement — formal Council adoption pending",
+            "retrieval_status": "verified_seed",
+        },
+    }
+    config = {
+        "celex_proposal": "52026PC0345",
+        "proposal_url": "https://eurlex.example/proposal",
+        "scope_source": "https://eurlex.example/proposal",
+        "council_register_url": "https://consilium.example/register",
+    }
+
+    analysis = analyse_procedure(row, config, [], [], "2026-07-19T10:00:00Z")
+
+    forecast = analysis["forecast"]
+    assert forecast["outcome"] == "formal_adoption_and_publication_expected"
+    assert forecast["likelihood"]["band"] == "very_high"
+    assert forecast["not_a_fact"] is True
+    # Practically agreed, but never presented as adopted law.
+    facts = {fact["id"] for fact in analysis["facts"]}
+    assert "council_political_agreement" in facts
+    assert "council_prepares_political_agreement" not in facts
+    checks = {check["id"]: check["status"] for check in analysis["checks"]}
+    assert checks["adopted_act_identified"] == "pending"
+    assert checks["official_journal_publication"] == "pending"
+    conditions = analysis["next_milestone"]["conditions"]
+    assert "förmliche Ratsannahme" in conditions
+    assert "sprachjuristische Überarbeitung" in conditions
+    assert "Amtsblattveröffentlichung" in conditions
+    press_fact = next(fact for fact in analysis["facts"]
+                      if fact["id"] == "council_political_agreement")
+    assert "https://consilium.example/press" in press_fact["source_urls"]
+
+
+def test_political_agreement_signal_retires_after_adoption_evidence() -> None:
+    row = {
+        "id": "eu-x", "source": "EUR-Lex", "status": "Ongoing",
+        "stage": "Adoption by Council",
+        "tracking_state": "active",
+        "adopted_celexes": ["32026D1999"],
+        "official_journal": [{"celex": "32026D1999",
+                              "citation": "OJ L, 2026/1999"}],
+        "url": "https://eurlex.example/procedure",
+        "council_communication": {
+            "source": "Council press release",
+            "date": "2026-07-15",
+            "title": "EU countries agree to extend temporary protection",
+            "url": "https://consilium.example/press",
+            "stage": "Political agreement — formal Council adoption pending",
+            "retrieval_status": "verified_seed",
+        },
+    }
+    config = {
+        "celex_proposal": "52026PC0345",
+        "proposal_url": "https://eurlex.example/proposal",
+        "scope_source": "https://eurlex.example/proposal",
+        "council_register_url": "https://consilium.example/register",
+    }
+
+    analysis = analyse_procedure(row, config, [], [], "2026-08-05T10:00:00Z")
+
+    # Once adoption/publication evidence exists, the communicated agreement
+    # must stop asserting that formal adoption is still outstanding.
+    facts = {fact["id"] for fact in analysis["facts"]}
+    assert "council_political_agreement" not in facts
+    assert all("stehen noch aus" not in fact["statement"]
+               for fact in analysis["facts"])
+    assert analysis["forecast"]["outcome"] == "final_text_review_pending"
+
+
+def test_chronology_lists_each_council_evidence_once() -> None:
+    press_url = "https://consilium.example/press"
+    register_url = "https://consilium.example/register"
+    row = {
+        "id": "eu-x", "source": "EUR-Lex", "status": "Ongoing",
+        "stage": "Political agreement — formal Council adoption pending",
+        "tracking_state": "active", "adopted_celexes": [],
+        "official_journal": [], "url": "https://eurlex.example/procedure",
+        "events": [
+            {"date": "2026-07-10",
+             "title": "Preparation for a political agreement",
+             "source": "Council public register", "document": "ST 11375/26",
+             "url": register_url},
+            {"date": "2026-07-15",
+             "title": "Political agreement — formal Council adoption pending",
+             "headline": "EU countries agree to extend temporary protection",
+             "source": "Council press release", "url": press_url},
+        ],
+        "council_development": {
+            "source": "Council public register", "document": "ST 11375/26",
+            "date": "2026-07-10", "title": "Long register title - Preparation",
+            "stage": "Preparation for a political agreement",
+            "url": register_url,
+        },
+        "council_communication": {
+            "source": "Council press release", "date": "2026-07-15",
+            "title": "EU countries agree to extend temporary protection",
+            "stage": "Political agreement — formal Council adoption pending",
+            "url": press_url,
+        },
+    }
+    config = {"council_register_url": register_url}
+
+    analysis = analyse_procedure(row, config, [], [], "2026-07-19T10:00:00Z")
+
+    press_entries = [entry for entry in analysis["chronology"]
+                     if press_url in entry["source_urls"]]
+    register_entries = [entry for entry in analysis["chronology"]
+                        if register_url in entry["source_urls"]]
+    assert len(press_entries) == 1
+    assert len(register_entries) == 1
+
+
 def test_retrospective_result_requires_roles_transitions_and_current_law() -> None:
     row = {
         "id": "322125", "source": "DIP", "status": "Verkündet",

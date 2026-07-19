@@ -122,6 +122,7 @@ def _eu_row(watch_key: str, config: dict, row: dict) -> dict:
         "official_journal": row.get("official_journal") or [],
         "events": row.get("events") or [],
         "council_development": row.get("council_development"),
+        "council_communication": row.get("council_communication"),
         "publication_detected": bool(row.get("publication_detected")),
         "awaiting_final_review": bool(row.get("awaiting_final_review")),
         "final_text_review": row.get("final_text_review"),
@@ -141,18 +142,26 @@ def _fingerprint(row: dict) -> str:
         "official_journal", "events",
         "abstract", "initiators", "approval_requirements", "topics",
         "positions",
-        "council_development",
+        "council_development", "council_communication",
         "publication_detected", "awaiting_final_review", "final_text_review",
     )}
-    council = fields.get("council_development")
-    if isinstance(council, dict):
-        # Retrieval time is represented by last_checked.  Keeping it in the
-        # transition fingerprint would manufacture a history event on every
-        # twice-daily poll even when the official Council metadata is stable.
-        fields["council_development"] = {
-            key: value for key, value in council.items()
-            if key != "fetched_at"
-        }
+    def _stable_evidence(value: object) -> object:
+        # Retrieval transport metadata is not official data: retrieval time is
+        # represented by last_checked, and retrieval_status flips with source
+        # availability (fetched / fetch_unavailable / verified_seed) while the
+        # official metadata stays byte-identical.  Keeping either in the
+        # transition fingerprint would manufacture history events on ordinary
+        # availability flips or on every twice-daily poll.
+        if not isinstance(value, dict):
+            return value
+        return {key: item for key, item in value.items()
+                if key not in ("fetched_at", "retrieval_status")}
+
+    for evidence_key in ("council_development", "council_communication"):
+        fields[evidence_key] = _stable_evidence(fields.get(evidence_key))
+    if isinstance(fields.get("events"), list):
+        fields["events"] = [_stable_evidence(event)
+                            for event in fields["events"]]
     return json.dumps(fields, ensure_ascii=False, sort_keys=True,
                       separators=(",", ":"))
 
@@ -325,6 +334,7 @@ def update_watch_state(watchlist_path: Path, state_path: Path,
                 "adopted_celexes": current.get("adopted_celexes") or [],
                 "official_journal": current.get("official_journal") or [],
                 "council_development": current.get("council_development"),
+                "council_communication": current.get("council_communication"),
             }
             if prior_event is None:
                 history_additions.append(event)

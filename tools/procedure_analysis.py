@@ -11,6 +11,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import date, datetime
 
+_GERMAN_MONTHS = ("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
+                  "August", "September", "Oktober", "November", "Dezember")
+
+
+def _german_date(value: object) -> str | None:
+    try:
+        day = date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return None
+    return f"{day.day}. {_GERMAN_MONTHS[day.month - 1]} {day.year}"
+
 
 def _urls(*values: object) -> list[str]:
     result: list[str] = []
@@ -125,10 +136,24 @@ def _chronology(row: dict, history: list[dict], fate: dict | None) -> list[dict]
             continue
         add(event.get("date"), event.get("title") or event.get("stage"),
             "official_event", "verified", event.get("url"), official_url)
+    def already_in_events(evidence: dict) -> bool:
+        # merge_council_development/merge_council_communication already embed
+        # the evidence as an official event; listing it a second time under
+        # its longer title would show one real-world step as two entries.
+        return any(isinstance(event, dict) and evidence.get("url") and
+                   event.get("url") == evidence.get("url") and
+                   event.get("source") == evidence.get("source")
+                   for event in row.get("events") or [])
+
     council = row.get("council_development") or {}
-    if isinstance(council, dict):
+    if isinstance(council, dict) and not already_in_events(council):
         add(council.get("date"), council.get("title") or council.get("stage"),
             "official_event", "verified", council.get("url"))
+    communication = row.get("council_communication") or {}
+    if isinstance(communication, dict) and not already_in_events(communication):
+        add(communication.get("date"),
+            communication.get("title") or communication.get("stage"),
+            "official_event", "verified", communication.get("url"))
     for position in row.get("positions") or []:
         if not isinstance(position, dict):
             continue
@@ -220,9 +245,22 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
     review_passed = bool(
         isinstance(review, dict) and review.get("status") == "passed" and
         review.get("article_2_compared") is True)
-    preparing_agreement = "preparation for a political agreement" in stage_folded
-    political_agreement = ("political agreement" in stage_folded and
-                           not preparing_agreement)
+    communication = row.get("council_communication")
+    communication = communication if isinstance(communication, dict) else {}
+    communication_url = communication.get("url")
+    # Agreement signals describe the *current* stage.  Once an adopted CELEX
+    # or an OJ citation exists, the persisted communication and any lingering
+    # agreement wording are historical context and must no longer generate
+    # facts claiming that formal adoption is still outstanding.
+    agreement_superseded = bool(adopted or journal)
+    preparing_agreement = ("preparation for a political agreement"
+                           in stage_folded and not agreement_superseded)
+    # A verified Council communication documents the agreement in principle
+    # even while EUR-Lex and the register still show preparatory documents.
+    political_agreement = ((("political agreement" in stage_folded and
+                             not preparing_agreement) or bool(communication))
+                           and not agreement_superseded)
+    preparing_agreement = preparing_agreement and not political_agreement
     council_signal = preparing_agreement or political_agreement
 
     checks.extend([
@@ -234,7 +272,8 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
                "Politische Einigung von Annahme getrennt",
                "passed" if council_signal else "not_applicable",
                "Auch die Vorbereitung einer politischen Einigung oder eine politische Einigung selbst sind weder formelle Ratsannahme noch geltendes Recht.",
-               config.get("council_register_url"), official_url),
+               communication_url, config.get("council_register_url"),
+               official_url),
         _check("adopted_act_identified", "transition", "Angenommenen Rechtsakt identifiziert",
                "passed" if adopted else "pending",
                ("Ein finaler CELEX-Rechtsakt ist erfasst." if adopted else
@@ -257,10 +296,23 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
             "Die Coreper-Tagesordnung vom 10. Juli 2026 bezeichnet den Punkt nur als Vorbereitung einer politischen Einigung; eine formelle Ratsannahme ist damit nicht belegt.",
             "verified", config.get("council_register_url"), official_url))
     elif political_agreement:
-        facts.append(_fact(
-            "council_political_agreement", "procedural_signal",
-            "Im Ratsregister ist eine politische Einigung dokumentiert; der EUR-Lex-Vorgang ist weiterhin nicht als endgültig abgeschlossen belegt.",
-            "verified", config.get("council_register_url"), official_url))
+        if communication:
+            communicated = _german_date(communication.get("date"))
+            headline = str(communication.get("title") or "").strip()
+            facts.append(_fact(
+                "council_political_agreement", "procedural_signal",
+                ("Der Rat hat" +
+                 (f" am {communicated}" if communicated else "") +
+                 " öffentlich eine grundsätzliche Einigung der Mitgliedstaaten mitgeteilt" +
+                 (f" („{headline}“)" if headline else "") +
+                 "; die förmliche Ratsannahme, die sprachjuristische Überarbeitung und die Amtsblattveröffentlichung stehen noch aus."),
+                "verified", communication_url,
+                config.get("council_register_url"), official_url))
+        else:
+            facts.append(_fact(
+                "council_political_agreement", "procedural_signal",
+                "Im Ratsregister ist eine politische Einigung dokumentiert; der EUR-Lex-Vorgang ist weiterhin nicht als endgültig abgeschlossen belegt.",
+                "verified", config.get("council_register_url"), official_url))
 
     factors: list[dict] = []
     warnings = ["Der Prognosekorridor ist eine regelbasierte Einschätzung und kein amtlicher Verfahrensstatus."]
@@ -277,10 +329,16 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
             "Die Behandlung im Coreper ist ein starkes Fortgangssignal, aber noch keine dokumentierte Einigung oder Annahme.",
             config.get("council_register_url")))
     elif political_agreement:
-        factors.append(_factor(
-            "supports", "Politische Einigung im Rat",
-            "Die im Ratsregister dokumentierte Einigung ist ein starkes Signal für die spätere formelle Annahme.",
-            config.get("council_register_url")))
+        if communication:
+            factors.append(_factor(
+                "supports", "Politische Einigung öffentlich mitgeteilt",
+                "Die amtliche Ratsmitteilung dokumentiert die grundsätzliche Einigung der Mitgliedstaaten; bis zur förmlichen Annahme bleiben vor allem formale Schritte offen.",
+                communication_url, config.get("council_register_url")))
+        else:
+            factors.append(_factor(
+                "supports", "Politische Einigung im Rat",
+                "Die im Ratsregister dokumentierte Einigung ist ein starkes Signal für die spätere formelle Annahme.",
+                config.get("council_register_url")))
     if status.casefold() == "ongoing" or not adopted:
         factors.append(_factor(
             "uncertainty", "Vorgang noch offen",
@@ -316,6 +374,19 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
             "official_journal_publication", "Veröffentlichung im Amtsblatt",
             "Die Fundstelle und der finale CELEX müssen erfasst werden.", "expected",
             ["Amtsblattfundstelle veröffentlichen"], official_url)
+    elif political_agreement:
+        forecast = _forecast(
+            "formal_adoption_and_publication_expected", "very_high", 0, 0,
+            "medium",
+            "Die Verlängerung des vorübergehenden Schutzes ist im Rat politisch vereinbart und damit praktisch beschlossen. Offen sind noch die förmliche Ratsannahme, die sprachjuristische Überarbeitung und die Veröffentlichung im Amtsblatt; ob Artikel 2 unverändert bleibt, zeigt erst der angenommene Endtext.")
+        next_milestone = _milestone(
+            "council_formal_adoption",
+            "Förmliche Ratsannahme und Amtsblattveröffentlichung",
+            "Nach der mitgeteilten Einigung folgen die sprachjuristische Schlussfassung, der förmliche Ratsbeschluss und die Veröffentlichung; erst der Endtext belegt die Fassung von Artikel 2.",
+            "expected", ["sprachjuristische Überarbeitung",
+                         "förmliche Ratsannahme", "Amtsblattveröffentlichung"],
+            communication_url, config.get("council_register_url"),
+            official_url)
     elif council_signal:
         forecast = _forecast(
             "extension_likely_exact_article_2_uncertain", "high", 0, 0,
@@ -338,9 +409,10 @@ def _analyse_eu(row: dict, config: dict, checks: list[dict],
     inferences = [_inference(
         "stage_based_eu_forecast", "procedural_forecast",
         forecast["summary"], forecast["confidence"],
-        ["latest_official_stage", "adopted_celex_presence",
-         "official_journal_presence", "final_text_review_state"],
-        config.get("council_register_url"), official_url),
+        ["latest_official_stage", "council_communication_presence",
+         "adopted_celex_presence", "official_journal_presence",
+         "final_text_review_state"],
+        communication_url, config.get("council_register_url"), official_url),
         _inference(
             "article_2_wording_uncertain", "content_forecast",
             "Aus dem Ratsstadium lässt sich die endgültige Reichweite des geschlechtsneutral formulierten Artikels 2 nicht ableiten.",

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-15T09:49:50+00:00",
+  "checked_at": "2026-07-19T18:11:22+00:00",
   "procedures": {
     "329468": {
       "id": "329468",
@@ -293,11 +293,11 @@
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-15T09:49:50+00:00",
+      "last_checked": "2026-07-19T18:11:22+00:00",
       "last_observed_status": "Überwiesen",
       "last_observed_stage": "Überwiesen",
       "last_observed_updated": "2026-02-12T10:57:00+01:00",
-      "last_observed_at": "2026-07-15T09:49:50+00:00",
+      "last_observed_at": "2026-07-19T18:11:22+00:00",
       "last_changed": "2026-07-15T09:47:02+00:00"
     },
     "eu-2026-0186-nle": {
@@ -309,8 +309,8 @@
       "gesta": null,
       "title": "COM (2026) 345: Proposal for a COUNCIL IMPLEMENTING DECISION extending temporary protection, as introduced by Implementing Decision (EU) 2022/382, until 4 March 2028",
       "status": "Ongoing",
-      "stage": "Preparation for a political agreement",
-      "date": "2026-07-10",
+      "stage": "Political agreement — formal Council adoption pending",
+      "date": "2026-07-15",
       "updated": null,
       "url": "https://eur-lex.europa.eu/procedure/EN/2026_186",
       "promulgation": [],
@@ -349,12 +349,24 @@
           "addressee": "Permanent Representatives Committee (Part 2)",
           "meeting_date": "2026-07-10",
           "content_accessible": false,
-          "retrieval_status": "verified_seed",
+          "retrieval_status": "fetch_unavailable",
           "terminal": false,
           "celexes": [],
           "documents": [
             "ST 11375/26"
           ]
+        },
+        {
+          "date": "2026-07-15",
+          "title": "Political agreement — formal Council adoption pending",
+          "headline": "EU countries agree to extend temporary protection for those fleeing Ukraine until March 2028",
+          "source": "Council press release",
+          "url": "https://www.consilium.europa.eu/en/press/press-releases/2026/07/15/eu-countries-agree-to-extend-temporary-protection-for-those-fleeing-ukraine-until-march-2028/",
+          "document_type": "PRESS RELEASE",
+          "retrieval_status": "verified_seed",
+          "terminal": false,
+          "celexes": [],
+          "documents": []
         }
       ],
       "council_development": {
@@ -368,26 +380,38 @@
         "addressee": "Permanent Representatives Committee (Part 2)",
         "meeting_date": "2026-07-10",
         "content_accessible": false,
-        "fetched_at": "2026-07-15T09:49:50+00:00",
+        "fetched_at": "2026-07-19T17:47:33+00:00",
+        "retrieval_status": "fetch_unavailable",
+        "terminal": false
+      },
+      "council_communication": {
+        "source": "Council press release",
+        "kind": "press_release",
+        "url": "https://www.consilium.europa.eu/en/press/press-releases/2026/07/15/eu-countries-agree-to-extend-temporary-protection-for-those-fleeing-ukraine-until-march-2028/",
+        "date": "2026-07-15",
+        "title": "EU countries agree to extend temporary protection for those fleeing Ukraine until March 2028",
+        "stage": "Political agreement — formal Council adoption pending",
+        "body": "Permanent Representatives Committee (member states' ambassadors); formal Council adoption announced for the coming weeks",
+        "fetched_at": "2026-07-19T17:47:33+00:00",
         "retrieval_status": "verified_seed",
         "terminal": false
       },
       "publication_detected": false,
       "awaiting_final_review": false,
       "final_text_review": null,
-      "retrieval_status": "stale_fallback",
-      "source_stale": true,
-      "retrieval_warning": "EUR-Lex refresh failed; reusing the last persisted official observation (ValueError).",
+      "retrieval_status": "fresh",
+      "source_stale": false,
+      "retrieval_warning": null,
       "terminal": false,
       "active": true,
       "tracking_state": "active",
       "first_seen": "2026-07-15T02:59:08+00:00",
-      "last_checked": "2026-07-15T09:49:50+00:00",
+      "last_checked": "2026-07-19T18:11:22+00:00",
       "last_observed_status": "Ongoing",
-      "last_observed_stage": "Political agreement",
+      "last_observed_stage": "Political agreement — formal Council adoption pending",
       "last_observed_updated": null,
-      "last_observed_at": "2026-07-15T03:18:37+00:00",
-      "last_changed": "2026-07-15T09:47:02+00:00"
+      "last_observed_at": "2026-07-19T18:11:22+00:00",
+      "last_changed": "2026-07-19T18:11:22+00:00"
     },
     "322125": {
       "id": "322125",
