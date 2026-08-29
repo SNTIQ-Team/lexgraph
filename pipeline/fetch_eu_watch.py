@@ -28,7 +28,26 @@ ADOPTED_DECISION_RE = re.compile(r"^3\d{4}D\d{4,}$")
 ADOPTION_EVENT_RE = re.compile(
     r"(?:adoption by (?:the )?council|act adopted|final act|"
     r"publication in (?:the )?official journal)", re.IGNORECASE)
+# EUR-Lex states the outcome in the procedure status itself, e.g.
+# "Completed (Adopted act: 32026D1912 )".  On 2026/0186/NLE the final event
+# row arrives with an empty title AND an empty CELEX cell, so the status line
+# is the only place the adopted act is named — without it the site kept
+# showing an adopted, published procedure as still pending.
+STATUS_ADOPTED_RE = re.compile(
+    r"adopted\s+act\s*:?\s*(3\d{4}D\d{4,})", re.IGNORECASE)
 COUNCIL_DATE_RE = re.compile(r"\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b")
+
+# CELLAR — the Publications Office's own RDF store, on a DIFFERENT host to
+# eur-lex.europa.eu.  PITFALL (2026-08-29): every eur-lex.europa.eu HTML path
+# now answers 302 -> /TodayOJ/index.html for this server, both with our UA and
+# a browser UA, so the procedure page and the legal-content OJ notice are both
+# unreachable.  CELLAR keeps working and is the same publisher, so the adopted
+# act and its Official Journal publication are sourced from it instead of
+# being lost to a redirect.
+CELLAR_SPARQL = "https://publications.europa.eu/webapi/rdf/sparql"
+LANG_ENG_URI = "http://publications.europa.eu/resource/authority/language/ENG"
+OJ_L_COLLECTION = ("http://publications.europa.eu/resource/authority/"
+                   "document-collection/OJ-L")
 
 
 def _text(node) -> str:
@@ -86,6 +105,13 @@ def parse_eurlex_procedure(html: str, watch_key: str, config: dict,
         if ADOPTION_EVENT_RE.search(str(event.get("title") or ""))
         for celex in event.get("celexes") or []
         if ADOPTED_DECISION_RE.match(celex)
+    } | {
+        # The status line is the page's own statement about this procedure,
+        # not loose page text: only an explicit "Adopted act: <CELEX>" counts,
+        # so legal-context citations elsewhere still cannot leak in.
+        match.group(1)
+        for match in STATUS_ADOPTED_RE.finditer(status)
+        if ADOPTED_DECISION_RE.match(match.group(1))
     })
     latest = events[-1] if events else {}
     return {
@@ -353,6 +379,72 @@ def merge_council_development(row: dict,
     return row
 
 
+def cellar_adopted_act(http: Http, proposal_celex: str) -> dict | None:
+    """The act that adopted ``proposal_celex``, with its OJ publication.
+
+    An act declares its own origin in CELLAR with
+    ``cdm:resource_legal_adopts_resource_legal``, so this is the publisher
+    stating the link, not an inference of ours: 32026D1912 adopts 52026PC0345
+    and carries official-journal-act_date_publication 2026-08-04 in OJ-L.
+
+    Returns ``None`` when nothing has been adopted yet — which is the normal
+    answer for a procedure still running, and must never be mistaken for a
+    retrieval failure.
+    """
+    if not proposal_celex:
+        return None
+    query = f"""PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT DISTINCT ?celex ?pub ?collection ?title WHERE {{
+  ?proposal cdm:resource_legal_id_celex "{proposal_celex}"^^xsd:string .
+  ?act cdm:resource_legal_adopts_resource_legal ?proposal ;
+       cdm:resource_legal_id_celex ?celex .
+  OPTIONAL {{ ?act cdm:official-journal-act_date_publication ?pub }}
+  OPTIONAL {{ ?act cdm:official-journal-act_part_of_collection_document
+                   ?collection }}
+  OPTIONAL {{
+    ?e cdm:expression_belongs_to_work ?act ;
+       cdm:expression_uses_language <{LANG_ENG_URI}> ;
+       cdm:expression_title ?title .
+  }}
+}} LIMIT 25"""
+    response = http.get(CELLAR_SPARQL, params={
+        "query": query, "format": "application/sparql-results+json"},
+        timeout=90)
+    response.raise_for_status()
+    rows = [{key: value["value"] for key, value in binding.items()}
+            for binding in response.json()["results"]["bindings"]]
+    # One act, but several bindings (entry-into-force dates multiply rows):
+    # collapse on CELEX and keep the first publication statement seen.
+    best: dict[str, dict] = {}
+    for row in rows:
+        celex = str(row.get("celex") or "")
+        if not ADOPTED_DECISION_RE.match(celex):
+            continue
+        entry = best.setdefault(celex, {"celex": celex})
+        for key in ("pub", "collection", "title"):
+            if row.get(key) and not entry.get(key):
+                entry[key] = row[key]
+    for celex in sorted(best):
+        entry = best[celex]
+        published = str(entry.get("pub") or "")
+        # Only an OJ L publication counts as promulgation evidence here.
+        if not published or not str(entry.get("collection") or "").endswith("OJ-L"):
+            continue
+        return {
+            "celex": celex,
+            "citation": f"OJ L, {published}",
+            "published_at": published,
+            "title": " ".join(str(entry.get("title") or "").split()),
+            "eli": None,
+            "url": ("https://eur-lex.europa.eu/legal-content/EN/TXT/"
+                    f"?uri=CELEX:{celex}"),
+            "source": "CELLAR (Publications Office SPARQL)",
+            "retrieval": "cellar_sparql",
+        }
+    return None
+
+
 def _official_journal_record(http: Http, celex: str) -> dict | None:
     url = f"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:{celex}"
     response = http.get(url, timeout=45)
@@ -417,11 +509,39 @@ def fetch_watch(http: Http, watch_key: str, config: dict,
         row, council_communication_evidence(config, fetched_at))
     journal = [record for celex in row["adopted_celexes"]
                if (record := _official_journal_record(http, celex))]
+    # eur-lex.europa.eu HTML is unreachable from this host (302 -> TodayOJ),
+    # so the notice lookup above yields nothing even for an act that IS
+    # published. Ask CELLAR, the same publisher, on its own host.
+    if not journal:
+        journal = _cellar_journal(http, row, config)
     return apply_final_review_gate(row, config, journal)
 
 
+def _cellar_journal(http: Http, row: dict, config: dict) -> list[dict]:
+    """OJ evidence for the watched proposal, straight from CELLAR."""
+    proposal = str(row.get("proposal_celex") or config.get("celex_proposal") or "")
+    try:
+        record = cellar_adopted_act(http, proposal)
+    except Exception as exc:  # noqa: BLE001
+        # Deliberately wide: this runs inside the retrieval error path, whose
+        # entire job is to degrade without throwing.  A malformed CELLAR reply
+        # must leave the watch on its last good observation, never escalate a
+        # handled failure into an unhandled one.
+        print(f"  [warn] CELLAR adopted-act lookup failed: "
+              f"{type(exc).__name__}")
+        return []
+    if not record:
+        return []
+    celex = record["celex"]
+    if celex not in row["adopted_celexes"]:
+        row["adopted_celexes"] = sorted({*row["adopted_celexes"], celex})
+    print(f"  [cellar] adopted act {celex} published {record['published_at']}")
+    return [record]
+
+
 def stale_fallback(watch_key: str, config: dict, previous: dict | None,
-                   fetched_at: str, error: Exception) -> dict:
+                   fetched_at: str, error: Exception,
+                   http: Http | None = None) -> dict:
     """Preserve the last official observation after a transient fetch failure.
 
     The fallback is intentionally *not* a new official observation.  Status,
@@ -457,6 +577,20 @@ def stale_fallback(watch_key: str, config: dict, previous: dict | None,
             "EUR-Lex refresh failed; reusing the last persisted official "
             f"observation ({type(error).__name__})."),
     }
+    # The procedure page being unreachable says nothing about whether the act
+    # was adopted. CELLAR is a separate host and still answers, so promulgation
+    # evidence is recovered here rather than frozen at the last observation.
+    if not row["official_journal"]:
+        recovered = _cellar_journal(http, row, config) if http else []
+        if recovered:
+            row = apply_final_review_gate(row, config, recovered)
+            row["retrieval_status"] = "stale_fallback_cellar_publication"
+            row["source_stale"] = True
+            row["retrieval_warning"] = (
+                "EUR-Lex procedure page unreachable "
+                f"({type(error).__name__}); Official Journal publication "
+                "recovered from CELLAR.")
+
     seed = _council_seed(config, fetched_at, "verified_seed")
     previous_council = previous.get("council_development") or {}
     if seed and str(seed.get("date") or "") >= str(
@@ -482,7 +616,8 @@ def fetch_watch_resilient(http: Http, watch_key: str, config: dict,
     try:
         row = fetch_watch(http, watch_key, config, fetched_at)
     except (requests.RequestException, ValueError, KeyError) as exc:
-        return stale_fallback(watch_key, config, previous, fetched_at, exc)
+        return stale_fallback(watch_key, config, previous, fetched_at, exc,
+                              http)
     row["retrieval_status"] = "fresh"
     row["source_stale"] = False
     row["retrieval_warning"] = None

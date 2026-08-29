@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 
 from fetch_eu_watch import (  # noqa: E402
     active_eu_watches,
+    cellar_adopted_act,
     apply_final_review_gate,
     council_communication_evidence,
     fetch_council_development,
@@ -88,6 +89,34 @@ def test_only_final_act_event_can_nominate_adopted_celex() -> None:
     assert row["adopted_celexes"] == ["32026D1999"]
     # Parsing alone never claims publication; fetch_watch verifies the OJ page.
     assert row["terminal"] is False
+
+
+def test_completed_status_nominates_the_adopted_celex() -> None:
+    """The real 2026/0186/NLE page: the final adoption row carries no title and
+    no CELEX, so only the status line names the adopted act.  Missing it left
+    the site claiming a completed procedure was still pending."""
+    html = HTML.replace(
+        '<div><span class="procStatus procPending"></span><b>Ongoing</b></div>',
+        '<div><span class="procStatus procEnd"></span>'
+        '<b>Completed (Adopted act: 32026D1912 )</b></div>',
+    ) + """
+    <div class="eventRow">
+      <div class="eventTitle"><button><div class="VMIMore"></div></button></div>
+      <div class="eventCelex"></div>
+      <div class="eventDate"><span>30/07/2026</span></div>
+    </div>
+    """
+    row = parse_eurlex_procedure(html, "eu-x", {}, "2026-08-29T12:00:00Z")
+    assert row["adopted_celexes"] == ["32026D1912"]
+    # Still not terminal here: fetch_watch must confirm the OJ citation and a
+    # persisted Article-2 review before polling stops.
+    assert row["terminal"] is False
+
+
+def test_status_line_does_not_harvest_unrelated_context_celexes() -> None:
+    """32022D0382 appears on the page as legal context, never as adopted."""
+    row = parse_eurlex_procedure(HTML, "eu-x", {}, "2026-08-29T12:00:00Z")
+    assert row["adopted_celexes"] == []
 
 
 def test_oj_publication_stays_active_until_matching_article_review() -> None:
@@ -358,3 +387,71 @@ def test_transient_eurlex_parse_failure_reuses_previous_without_transition() -> 
                       if event.get("document") == "ST 11375/26"]
     assert len(council_events) == 1
     assert again["events"] == row["events"]
+
+
+class _CellarResponse:
+    """Minimal stand-in for the SPARQL JSON reply."""
+
+    def __init__(self, bindings):
+        self._bindings = bindings
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"results": {"bindings": self._bindings}}
+
+
+class _CellarHttp:
+    def __init__(self, bindings):
+        self._bindings = bindings
+        self.calls = 0
+
+    def get(self, url, params=None, timeout=None):
+        self.calls += 1
+        return _CellarResponse(self._bindings)
+
+
+def _binding(**values):
+    return {key: {"value": value} for key, value in values.items()}
+
+
+OJ_L = ("http://publications.europa.eu/resource/authority/"
+        "document-collection/OJ-L")
+
+
+def test_cellar_supplies_the_adopted_act_when_eurlex_html_is_unreachable():
+    """Every eur-lex.europa.eu HTML path 302s to TodayOJ from production, so
+    the OJ notice lookup returns nothing even for a published act. CELLAR is a
+    different host and states the adoption link itself."""
+    http = _CellarHttp([
+        _binding(celex="32026D1912", pub="2026-08-04", collection=OJ_L,
+                 title="Council Implementing Decision (EU) 2026/1912"),
+        # entry-into-force variants duplicate the act — must collapse to one
+        _binding(celex="32026D1912", pub="2026-08-04", collection=OJ_L),
+    ])
+    record = cellar_adopted_act(http, "52026PC0345")
+    assert record is not None
+    assert record["celex"] == "32026D1912"
+    assert record["citation"] == "OJ L, 2026-08-04"
+    assert record["published_at"] == "2026-08-04"
+    assert record["source"].startswith("CELLAR")
+
+
+def test_cellar_reports_nothing_while_the_procedure_is_still_running():
+    """No adopted act is the normal answer mid-procedure — never an error."""
+    assert cellar_adopted_act(_CellarHttp([]), "52026PC0345") is None
+
+
+def test_cellar_ignores_an_act_not_published_in_the_l_series():
+    c_series = OJ_L.replace("OJ-L", "OJ-C")
+    http = _CellarHttp([
+        _binding(celex="32026D1912", pub="2026-08-04", collection=c_series),
+    ])
+    assert cellar_adopted_act(http, "52026PC0345") is None
+
+
+def test_cellar_is_not_asked_without_a_proposal_celex():
+    http = _CellarHttp([])
+    assert cellar_adopted_act(http, "") is None
+    assert http.calls == 0
