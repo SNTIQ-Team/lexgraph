@@ -102,3 +102,39 @@ def test_amendment_fate_validates_only_declared_current_law_checks(
     assert validation["passed"] is True
     assert [check["reason"] for check in validation["checks"]] == [
         "norm_absent", "text_found"]
+
+
+def test_publication_clears_the_configured_draft_only_badge(tmp_path, monkeypatch):
+    """A watch configured as draft-only must stop claiming "draft / not in
+    force" once the act it tracks is published in the Official Journal —
+    2026/0186/NLE kept the badge after 32026D1912 appeared in OJ L."""
+    watchlist = tmp_path / "watchlist.json"
+    state = tmp_path / "state.json"
+    history = tmp_path / "history.jsonl"
+    _write(watchlist, {"procedures": {
+        "eu-x": {
+            "id": "temporary-protection", "source": "EUR-Lex",
+            "jurisdiction": "EU", "scope": "Draft only", "draft_only": True,
+        },
+    }})
+    _write(state, {"schema_version": 1, "checked_at": "2026-08-29T20:00:00Z",
+                   "procedures": {
+        "eu-x": {"id": "eu-x", "source": "EUR-Lex", "title": "EU act",
+                 "status": "Completed (Adopted act: 32026D1912 )",
+                 "active": True, "terminal": False,
+                 "publication_detected": True,
+                 "awaiting_final_review": True,
+                 "official_journal": [{"celex": "32026D1912",
+                                       "citation": "OJ L, 2026-08-04"}],
+                 "tracking_state": "active",
+                 "last_checked": "2026-08-29T20:00:00Z"},
+    }})
+    history.write_text("", encoding="utf-8")
+    monkeypatch.setattr(web_data, "PROCEDURE_WATCHLIST", watchlist)
+    monkeypatch.setattr(web_data, "PROCEDURE_WATCH_STATE", state)
+    monkeypatch.setattr(web_data, "PROCEDURE_WATCH_HISTORY", history)
+
+    row = web_data.build_watched_procedures({})["procedures"][0]
+
+    assert row["publication_detected"] is True
+    assert row["draft_only"] is False, "published act still badged as a draft"

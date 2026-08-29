@@ -212,6 +212,22 @@ def _source_analysis(row: dict, config: dict) -> tuple[list[dict], list[dict]]:
          "Der Eintrag fehlt im jüngsten amtlichen Snapshot; der vorherige "
          "Status wird nicht als aktuelle Beobachtung ausgegeben."),
         "unverified" if missing or stale else "verified", url)]
+    # An Official Journal publication is evidence in its own right, from a
+    # separate official source (CELLAR). A procedure page that failed to load
+    # says nothing about it, so it must not be swallowed by the stale flag —
+    # otherwise a published, in-force act reports "0 verified facts".
+    for record in row.get("official_journal") or []:
+        celex = str(record.get("celex") or "").strip()
+        if not celex:
+            continue
+        citation = str(record.get("citation") or "").strip()
+        provenance = str(record.get("source") or "").strip()
+        facts.append(_fact(
+            f"official_journal:{celex}", "official_publication",
+            "Im Amtsblatt der EU veröffentlicht: "
+            f"{celex}{f' ({citation})' if citation else ''}."
+            + (f" Quelle: {provenance}." if provenance else ""),
+            "verified", record.get("url"), record.get("eli")))
     checks = [_check(
         "official_source_available", "source", "Amtliche Quelle verfügbar",
         "failed" if missing else "pending" if stale else "passed",

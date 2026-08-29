@@ -869,7 +869,15 @@ def build_watched_procedures(hierarchy: dict,
             "queries": list(config.get("queries") or []),
             "scope": config.get("scope"),
             "scope_source": config.get("scope_source"),
-            "draft_only": bool(config.get("draft_only", False)),
+            # "Draft only" describes the tracked TEXT, not the watch, so the
+            # configured flag must not outlive publication. 2026/0186/NLE kept
+            # it after 32026D1912 appeared in OJ L on 2026-08-04, and the UI
+            # went on badging an adopted, in-force act "Entwurf / nicht in
+            # Kraft". Publication is the moment there is no longer only a draft.
+            # `row` already carries the observation (both branches set
+            # publication_detected); `source` exists only in the fallback one.
+            "draft_only": bool(config.get("draft_only", False))
+                          and not bool(row.get("publication_detected")),
             "cutoff": config.get("cutoff"),
             "entry_date_is_criterion": config.get("entry_date_is_criterion"),
             "initiated_by": config.get("initiated_by"),

@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from procedure_analysis import analyse_procedure  # noqa: E402
+from procedure_analysis import analyse_procedure, _source_analysis  # noqa: E402
 
 
 def test_active_dip_analysis_uses_positions_and_operative_text_check() -> None:
@@ -265,3 +265,34 @@ def test_retrospective_result_requires_roles_transitions_and_current_law() -> No
                                      "current_law"})
     assert len([event for event in analysis["chronology"]
                 if event["kind"] == "document_chain"]) == 5
+
+
+def test_official_journal_stays_a_verified_fact_when_the_page_fetch_is_stale():
+    """A failed EUR-Lex page fetch must not erase OJ publication evidence.
+    2026/0186/NLE reported "0 verified facts" while 32026D1912 was already
+    published, because the only fact was the stale-marked status line."""
+    facts, _checks = _source_analysis(
+        {
+            "status": "Completed (Adopted act: 32026D1912 )",
+            "stage": "Completed",
+            "source_stale": True,
+            "official_journal": [{
+                "celex": "32026D1912",
+                "citation": "OJ L, 2026-08-04",
+                "source": "CELLAR (Publications Office SPARQL)",
+                "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/"
+                       "?uri=CELEX:32026D1912",
+            }],
+        },
+        {},
+    )
+    verified = [f for f in facts if f["status"] == "verified"]
+    assert len(verified) == 1, "OJ publication should survive a stale page"
+    assert "32026D1912" in verified[0]["statement"]
+    assert verified[0]["kind"] == "official_publication"
+
+
+def test_no_official_journal_means_no_extra_fact():
+    facts, _ = _source_analysis(
+        {"status": "Ongoing", "stage": "Ongoing"}, {})
+    assert [f["kind"] for f in facts] == ["official_observation"]
