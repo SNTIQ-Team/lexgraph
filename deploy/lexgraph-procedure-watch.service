@@ -11,7 +11,12 @@ Type=oneshot
 WorkingDirectory=/srv/sntiq-lexgraph
 EnvironmentFile=-/etc/sntiq/lexgraph.env
 ExecStart=/srv/sntiq-lexgraph/deploy/refresh-procedure-watch.sh
-TimeoutStartSec=35min
+# Step [4/5] is the SAME full build_web_data.py the daily refresh runs, and on
+# this host that build needs ~250M resident plus a swap-backed working set of
+# ~2.3G, taking well over 35 minutes while it thrashes.  The old 35min ceiling
+# guaranteed either an OOM kill or a timeout at exactly that step; between
+# 2026-07-22 and 2026-08-29 the job never once reached [5/5] publish.
+TimeoutStartSec=2h
 
 # Keep this status-only job subordinate to the public API on the 1 GB VPS.
 Nice=15
@@ -19,9 +24,12 @@ CPUWeight=20
 CPUQuota=60%
 IOWeight=20
 IOSchedulingClass=idle
-MemoryHigh=300M
-MemoryMax=420M
-MemorySwapMax=128M
+# Matches lexgraph-refresh.service, the one envelope this build is known to
+# complete in.  MemorySwapMax is deliberately ABSENT: capping swap at 128M is
+# what turned memory pressure into an OOM kill, since the build's peak is an
+# order of magnitude above that.  MemoryHigh still throttles it under pressure.
+MemoryHigh=250M
+MemoryMax=450M
 TasksMax=64
 OOMPolicy=stop
 
