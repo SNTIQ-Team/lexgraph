@@ -13,9 +13,16 @@ VERIFIED endpoints (2026-07-06):
     cdm:work_title (German act title) + cdm:resource_legal_id_local (national
     OJ citation).  Calibrated against 32019L1937 -> 17 DEU sector-7 works
     incl. 72019L1937DEU_202304032 "Hessisches Hinweisgebermeldestellengesetz".
-  - EUR-Lex RSS (HTML legal-content paths are WAF-blocked, HTTP 202):
-    https://eur-lex.europa.eu/EN/display-feed.rss?rssId=222
-    ("Acts of the Official Journal L", CELEX id in each item title).
+  - OJ L acts come from CELLAR too, NOT from EUR-Lex RSS.
+    PITFALL (2026-08-29): the old feed
+    https://eur-lex.europa.eu/EN/display-feed.rss?rssId=222 now 302s to
+    /TodayOJ/index.html, which is one of the WAF-blocked HTML paths — it
+    answers 202 with an EMPTY body.  raise_for_status() is happy, so the
+    breakage surfaced only as ET.ParseError("no element found") and the
+    step degraded silently for weeks.  Prefer CELLAR: it carries the real
+    OJ publication date (official-journal-act_date_publication, 2026-08-04
+    for 32026D1912) rather than the feed's pubDate, and the OJ-L collection
+    filter reproduces exactly what the feed used to list.
 Licensing: Decision 2011/833/EU — free reuse.
 
 Instrument list = regex over DIP vorgang titles
@@ -36,20 +43,24 @@ from __future__ import annotations
 
 import re
 import sys
-import xml.etree.ElementTree as ET
 from collections import defaultdict
-from email.utils import parsedate_to_datetime
+from datetime import date, timedelta
 
 from common import Http, latest_snapshot, read_jsonl, snapshot_dir, \
     write_jsonl
 
 SPARQL = "https://publications.europa.eu/webapi/rdf/sparql"
-RSS_OJ_L = "https://eur-lex.europa.eu/EN/display-feed.rss?rssId=222"
+OJ_L_COLLECTION = ("http://publications.europa.eu/resource/authority/"
+                   "document-collection/OJ-L")
+# Rolling window for OJ L publications. Generous enough that a few missed
+# runs still backfill, small enough to keep the query inside CELLAR limits.
+OJ_WINDOW_DAYS = 45
 UA = "SNTIQ-lexgraph/0.1 (research; deless500@gmail.com)"
 
 PREFIXES = """\
 PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 """
 LANG_DEU = "http://publications.europa.eu/resource/authority/language/DEU"
 LANG_ENG = "http://publications.europa.eu/resource/authority/language/ENG"
@@ -201,25 +212,40 @@ SELECT DISTINCT ?u ?mcx ?title ?cit ?ojn ?ojp ?ojd WHERE {{
 
 
 def fetch_oj_events(http: Http) -> list[dict]:
-    """Latest OJ L acts from the working EUR-Lex RSS feed."""
-    r = http.get(RSS_OJ_L, timeout=60)
-    r.raise_for_status()
-    events = []
-    for item in ET.fromstring(r.content).iter("item"):
-        title = (item.findtext("title") or "").strip()
-        # corrigenda (…R(nn)) come without a ": <title>" part — keep them
-        m = re.match(r"CELEX:([0-9A-Za-z()_]+)(?::\s*(.*))?$", title, re.S)
-        if not m:
-            print(f"[warn] unparsed RSS item: {title[:80]}")
+    """Recent OJ L acts from CELLAR, dated by actual OJ publication.
+
+    Corrigenda (…R(nn)) are kept: a corrigendum is itself an OJ L publication
+    and changes the operative text.  An empty result is reported as a warning
+    rather than swallowed — this step went unnoticed for weeks once before.
+    """
+    until = date.today()
+    since = until - timedelta(days=OJ_WINDOW_DAYS)
+    q = PREFIXES + f"""\
+SELECT DISTINCT ?celex ?pub ?title WHERE {{
+  ?w cdm:official-journal-act_part_of_collection_document
+         <{OJ_L_COLLECTION}> ;
+     cdm:official-journal-act_date_publication ?pub ;
+     cdm:resource_legal_id_celex ?celex .
+  FILTER(?pub >= "{since}"^^xsd:date && ?pub <= "{until}"^^xsd:date)
+  OPTIONAL {{
+    ?e cdm:expression_belongs_to_work ?w ;
+       cdm:expression_uses_language <{LANG_ENG}> ;
+       cdm:expression_title ?title .
+  }}
+}} ORDER BY DESC(?pub)"""
+    events, seen = [], set()
+    for row in sparql(http, q):
+        celex = row.get("celex", "")
+        if not celex or celex in seen:
             continue
-        when = ""
-        pd = (item.findtext("pubDate") or "").strip()
-        if pd:
-            when = parsedate_to_datetime(pd).isoformat()
+        seen.add(celex)
         events.append({"kind": "published", "jurisdiction": "EU",
-                       "celex": m.group(1),
-                       "title": " ".join((m.group(2) or "").split()),
-                       "time": when})
+                       "celex": celex,
+                       "title": " ".join((row.get("title") or "").split()),
+                       "time": row.get("pub", "")})
+    if not events:
+        print(f"[warn] no OJ L acts published {since}..{until} — "
+              f"CELLAR returned nothing, check the endpoint")
     return events
 
 
@@ -263,7 +289,7 @@ def main() -> int:
     print(f"[cellar] {len(transpositions)} MNEs across {len(covered)} "
           f"directives; none for: {sorted(set(directives) - covered)}")
 
-    print("[rss] fetching OJ L feed …")
+    print("[cellar] fetching OJ L publications …")
     events = fetch_oj_events(http)
 
     out = snapshot_dir("eu_layer")
