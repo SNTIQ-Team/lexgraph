@@ -65,6 +65,35 @@ def _dip_url(procedure: str | None) -> str | None:
         if match else None
 
 
+def _states_differ(change: dict, old_present: bool,
+                   new_present: bool) -> bool:
+    """Is this change a real difference between the two official states?
+
+    Body text alone does not decide it.  A norm can be added or removed while
+    carrying no body at all (GewSchG § 1c is a heading-only norm), and GII
+    renumbers outline units without editing the norms under them (BGB § 480
+    moved from "Untertitel 4" to "Untertitel 5" with its sentence untouched).
+    Both are provable state changes; requiring ``old != new`` would reject
+    them and, worse, would stop the whole public build.
+
+    So: when one side is absent, presence *is* the difference.  When both
+    sides are present, compare the whole captured norm — its content-addressed
+    digest when the producer supplied one, otherwise the fields we hold.
+    """
+    if not old_present and not new_present:
+        return False
+    if not (old_present and new_present):
+        return True
+    old_norm = change.get("old_norm_sha256")
+    new_norm = change.get("new_norm_sha256")
+    if isinstance(old_norm, str) and isinstance(new_norm, str):
+        return old_norm != new_norm
+    return (str(change.get("old")), change.get("old_title"),
+            change.get("old_glied")) != (
+        str(change.get("new")), change.get("new_title"),
+        change.get("new_glied"))
+
+
 def validate_public_event(event: dict) -> None:
     """Fail closed when a private candidate leaks into a public build."""
     tier = event.get("verification")
@@ -100,8 +129,8 @@ def validate_public_event(event: dict) -> None:
             old, new = change.get("old"), change.get("new")
             old_present = change.get("old_present") is True
             new_present = change.get("new_present") is True
-            if (not isinstance(old, str) or not isinstance(new, str)
-                    or old == new or (not old_present and not new_present)):
+            if not isinstance(old, str) or not isinstance(new, str) or not (
+                    _states_differ(change, old_present, new_present)):
                 raise ValueError("exact state pairs require distinct text states")
             if change.get("old_sha256") != _sha256(old) or \
                     change.get("new_sha256") != _sha256(new):

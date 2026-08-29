@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from federal_history import (  # noqa: E402
+    _sha256,
     build_public_federal_history,
     current_text_correspondence_events,
     exact_gii_state_events,
@@ -150,3 +151,63 @@ def test_public_build_policy_does_not_name_buzer_as_an_input(tmp_path):
         "buzer_role": "private_candidate_and_cross_check",
         "effective_dates_inferred": False,
     }
+
+
+def _complete_pair_event(changes):
+    """A complete GII state-pair event, as official_states produces them."""
+    return {
+        "verification": "exact",
+        "complete_parsed_state_pair": True,
+        "old_state_sha256": "a" * 64,
+        "new_state_sha256": "b" * 64,
+        "evidence": [{"source": "GII",
+                      "url": "https://www.gesetze-im-internet.de/bgb/"}],
+        "changes": changes,
+    }
+
+
+def _change(**updates):
+    text = "Auf den Tausch finden die Vorschriften über den Kauf Anwendung."
+    row = {
+        "para": "§ 480", "old": text, "new": text,
+        "old_present": True, "new_present": True,
+        "old_sha256": _sha256(text), "new_sha256": _sha256(text),
+        "operation": "replace",
+        "old_title": "Tausch", "new_title": "Tausch",
+        "old_glied": "Untertitel 4 Tausch", "new_glied": "Untertitel 5 Tausch",
+        "old_norm_sha256": "c" * 64, "new_norm_sha256": "d" * 64,
+    }
+    row.update(updates)
+    return row
+
+
+def test_outline_only_change_with_identical_body_text_is_public():
+    """GII renumbered BGB § 480 from Untertitel 4 to 5 without touching § 480's
+    body.  That is a real, provable state change, not a fabricated one."""
+    validate_public_event(_complete_pair_event([_change()]))
+
+
+def test_removal_of_an_empty_bodied_norm_is_public():
+    """GewSchG § 1c is a heading-only norm: deleting it leaves both text sides
+    empty, so presence — not text — is the proof of change."""
+    validate_public_event(_complete_pair_event([_change(
+        para="§ 1c", operation="delete", old="", new="",
+        old_present=True, new_present=False,
+        old_sha256=_sha256(""), new_sha256=_sha256(""),
+        old_title="", new_title=None,
+        old_glied="", new_glied=None,
+        old_norm_sha256="c" * 64, new_norm_sha256=None,
+    )]))
+
+
+def test_identical_norm_states_are_still_rejected():
+    with pytest.raises(ValueError, match="distinct"):
+        validate_public_event(_complete_pair_event([_change(
+            old_norm_sha256="c" * 64, new_norm_sha256="c" * 64)]))
+    with pytest.raises(ValueError, match="distinct"):
+        validate_public_event(_complete_pair_event([_change(
+            old_glied="Untertitel 4 Tausch", new_glied="Untertitel 4 Tausch",
+            old_norm_sha256=None, new_norm_sha256=None)]))
+    with pytest.raises(ValueError, match="distinct"):
+        validate_public_event(_complete_pair_event([_change(
+            old_present=False, new_present=False)]))
