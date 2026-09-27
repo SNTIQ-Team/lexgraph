@@ -84,3 +84,24 @@ precedence ::ffff:0:0/96  100
 Keep a backup of `gai.conf` and confirm `getent ahosts huggingface.co` lists
 IPv4 first.  This is a host-level provider workaround, not a crawler retry
 policy; remove it once outbound IPv6 is known to work.
+
+## Bounded frequent observations and compact releases (2026-09-27)
+
+The watched-procedure timer runs every four hours. Fetching/checkpointing still
+records each observation, but `tools.watch_publish_state` skips the expensive
+corpus build when the watched evidence, watch configuration and transition
+history have not changed. An unsuccessful publication remains pending and is
+retried. The full daily refresh continues to cover the rest of the corpus.
+
+`tools/stage_release.py` stages generations using checksummed hardlinks to
+unchanged files in the previous immutable sibling. Changed files get new
+inodes; rsync never uses `--inplace`. Source symlinks are rejected. A conservative
+full-copy budget plus a default 2 GiB free-space reserve is checked before
+staging (`LEXGRAPH_PUBLISH_RESERVE_MIB` configures it). Three logical generations
+remain available while unchanged content shares disk blocks. Existing releases
+and source archives are not deleted by this change.
+
+Bulk historical collection belongs on the workstation under the collector's
+request, byte, archive and free-space budgets. Export only validated public
+indexes/history into production. More frequent checks do not mean a full
+historical crawl of every source on the small VPS.

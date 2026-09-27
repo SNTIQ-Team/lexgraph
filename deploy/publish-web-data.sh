@@ -27,7 +27,6 @@ trap cleanup EXIT
 
 test -d "$SRC"
 mkdir -p "$RELEASE"
-rsync -a --delete "$SRC/" "$RELEASE/"
 
 PYTHON="${LEXGRAPH_PYTHON:-}"
 if [ -z "$PYTHON" ]; then
@@ -37,6 +36,14 @@ if [ -z "$PYTHON" ]; then
         PYTHON=python3
     fi
 fi
+
+stage_args=()
+if [ -L "$TARGET" ]; then
+    previous="$(readlink -f -- "$TARGET")"
+    case "$previous" in "$ROOT"/web-data.release-*) stage_args+=(--previous "$previous");; esac
+fi
+"$PYTHON" "$(dirname "$0")/../tools/stage_release.py" "$SRC" "$RELEASE" \
+    "${stage_args[@]}" --reserve-mib "${LEXGRAPH_PUBLISH_RESERVE_MIB:-2048}"
 
 "$PYTHON" - "$RELEASE" <<'PY'
 import gzip

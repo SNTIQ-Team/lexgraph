@@ -1472,3 +1472,11 @@ Search returns per-component availability in `components.changes` and
 searched empty component has `*_total: 0`. `status: partial` and
 `result_total_is_partial: true` qualify the aggregate count while preserving
 successful matches. Integrity failures retain `integrity_check_failed`.
+
+### Joined research
+
+The Amtsgraph composition root serves `/research` (public `/v1/research`),
+joining existing Lexgraph search/text and authority/court resolution as typed
+components. It preserves ambiguity and source failures, rejects unsupported
+historical competence queries and never invents a law-to-authority assignment.
+No second corpus is stored. Native source snapshots remain component-scoped.

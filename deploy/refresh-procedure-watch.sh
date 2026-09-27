@@ -5,7 +5,7 @@
 # crawlers.  It refreshes the current Bundestag procedure snapshot and the
 # narrow EUR-Lex watch list, advances the persistent watch state/history,
 # rebuilds the static API data plane and publishes it.  The systemd timer runs
-# it twice daily; terminal procedures remain in the archive but the narrow EU
+# it every four hours; terminal procedures remain in the archive but the narrow EU
 # fetcher stops polling them after their terminal observation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -35,12 +35,25 @@ echo "==> [2/5] active EUR-Lex procedure watches"
 echo "==> [3/5] persistent watch state + change-only history"
 "$PYTHON" tools/update_procedure_watch.py
 
+# A polling timestamp alone must not trigger the full corpus rebuild.
+if "$PYTHON" -m tools.watch_publish_state needed; then
+    :
+else
+    check_status=$?
+    if [ "$check_status" -eq 3 ]; then
+        echo "OK — no evidence change; existing publication retained"
+        exit 0
+    fi
+    exit "$check_status"
+fi
+
 echo "==> [4/5] rebuild API data plane"
 "$PYTHON" tools/build_web_data.py
 test -s web/data/summary.json
 
 echo "==> [5/5] publish -> /srv/sntiq-lexapi/data/web-data"
 deploy/publish-web-data.sh web/data
+"$PYTHON" -m tools.watch_publish_state published
 
 built=$(curl -fsS http://127.0.0.1:8002/health \
   | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["built_at"])')
