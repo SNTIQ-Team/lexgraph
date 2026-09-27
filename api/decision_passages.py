@@ -39,7 +39,7 @@ def database(root):
 def coverage_status(root):
  try:
   conn,coverage=database(Path(root).resolve());conn.close()
-  return {'status':'ok',**{k:coverage[k] for k in ['profile','metadata_decisions','indexed_decisions','passages','citation_mentions','gaps','knowledge_time']}}
+  return {'status':'ok','observation_feed':{'path':'/decision-observations','profile':'public-decision-observations/1','temporal_queries':False},**{k:coverage[k] for k in ['profile','metadata_decisions','indexed_decisions','passages','citation_mentions','gaps','knowledge_time']}}
  except HTTPException as error:return error.detail
 
 def decision(conn,identity):
@@ -61,6 +61,17 @@ def enrich(row,source,*,preview=False,tokens=()):
 
 def create_router(data_dir):
  router=APIRouter()
+ @router.get('/decision-observations')
+ def observations(request:Request,limit:int=Query(50,ge=1,le=100),offset:int=Query(0,ge=0,le=100000)):
+  from api.public_observations import observation,PROFILE
+  validate_query(request,{'limit','offset'});conn,coverage=database(Path(data_dir()).resolve())
+  try:
+   total=conn.execute("SELECT count(*) FROM decisions WHERE status='indexed'").fetchone()[0]
+   rows=conn.execute("SELECT * FROM decisions WHERE status='indexed' ORDER BY id LIMIT ? OFFSET ?",(limit,offset)).fetchall()
+   return {'status':'partial' if coverage['gaps'] else 'ok','profile':PROFILE,'request_scope':{'limit':limit,'offset':offset},
+     'total':total,'observations':[observation(conn,row) for row in rows],'coverage':coverage}
+  except (OSError,sqlite3.Error,ValueError,KeyError,TypeError):failure(503,'integrity_check_failed',reason='decision_observations_unusable')
+  finally:conn.close()
  @router.get('/decision-passages')
  def search(request:Request,q:str|None=Query(None,min_length=1,max_length=400),decision_id:str|None=Query(None,min_length=1,max_length=200),section:str|None=None,limit:int=Query(10,ge=1,le=25),offset:int=Query(0,ge=0,le=100000)):
   validate_query(request,{'q','decision_id','section','limit','offset'})
