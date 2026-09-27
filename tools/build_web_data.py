@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "pipeline"))
 from common import SNAPSHOTS, latest_snapshot, read_jsonl  # noqa: E402
 from qfs import parse_qfs                                # noqa: E402
+from tools.decision_passages import build_index as build_decision_passages
 from api.search_engine import build_search_database       # noqa: E402
 from procedure_analysis import analyse_procedure           # noqa: E402
 from federal_history import (                             # noqa: E402
@@ -1633,6 +1634,7 @@ def main() -> int:
     git = build_git(
         official_transitions, transition_reviews, retrospective_candidates)
     decisions = load_decisions()
+    build_decision_passages(decisions, ROOT / "data" / "cache" / "rii", WEB, observed_at=built_at)
     data_policy = {
         "schema_version": 1,
         "public_build": not include_quarantined_sources(),

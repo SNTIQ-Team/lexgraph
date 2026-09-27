@@ -62,6 +62,7 @@ from api.act_archive import (
     markdown_filename,
     render_markdown_snapshot,
 )
+from api.decision_passages import create_router as decision_passages_router, coverage_status as decision_passage_coverage
 from api.gii_catalog import GiiCatalogIndex
 from api.citation_store import CitationStoreError, query_citations
 from api.search_engine import SearchEngine, normalize_search_text
@@ -86,6 +87,7 @@ DATA_DIR = Path(os.environ.get(
     Path(__file__).resolve().parent.parent / "web" / "data")).resolve()
 
 app = FastAPI(title="Lexgraph", version="1.5")
+app.include_router(decision_passages_router(lambda: DATA_DIR))
 
 @app.middleware("http")
 async def search_contract(request: Request, call_next):
@@ -123,11 +125,12 @@ def corpus_snapshot():
 def capabilities():
     return {"schema_version": 1, "service": "lexgraph",
             "snapshot": corpus_snapshot(), "snapshot_precondition": "If-Lexgraph-Snapshot",
+            "decision_passage_coverage": decision_passage_coverage(DATA_DIR),
             "search": {"norms": "current_only", "changes": "recorded_history",
-                       "decisions": "metadata", "component_status": True},
+                       "decisions": "metadata", "decision_passages": "retained_official_xml", "component_status": True},
             "historical_text": {"operation": "acts/{id}/markdown", "parameters": ["at", "as_of"],
                                 "resolution": "source_capture_or_verified_reconstruction"},
-            "operations": ["search", "acts/{id}/markdown", "acts/{id}/history", "changes", "decisions"]}
+            "operations": ["search", "acts/{id}/markdown", "acts/{id}/history", "changes", "decisions", "decision-passages", "decisions/{id}/passages/{passage_id}"]}
 
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)

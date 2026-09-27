@@ -32,7 +32,8 @@ SERVICE_INDEX = {
         "/acts/{id}/markdown", "/retrospective-history.sqlite",
         "/changes", "/changes.atom", "/acts/{id}/changes.atom",
         "/amending-acts/{document_id}",
-        "/decisions", "/decisions/{id}",
+        "/decisions", "/decisions/{id}", "/decision-passages",
+        "/decisions/{id}/passages/{passage_id}", "/decisions/{id}/source",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",
         "/official-states", "/verified-reconstructions",
@@ -61,6 +62,7 @@ server.add_middleware(
     expose_headers=[
         "Content-Disposition",
         "X-Lexgraph-Snapshot",
+        "X-Lexgraph-Source-Sha256",
         "X-Lexgraph-Requested-Date",
         "X-Lexgraph-Resolved-Date",
         "X-Lexgraph-Head-Date",

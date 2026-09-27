@@ -1480,3 +1480,17 @@ joining existing Lexgraph search/text and authority/court resolution as typed
 components. It preserves ambiguity and source failures, rejects unsupported
 historical competence queries and never invents a law-to-authority assignment.
 No second corpus is stored. Native source snapshots remain component-scoped.
+
+
+### Official decision passages
+
+`GET /decision-passages?q=...&decision_id=...&section=...&limit=10&offset=0`
+searches retained RII source blocks (at least q or decision_id required). Results
+include the original section, source role, paragraph_label (null when the source
+is unnumbered), XML/text hashes and a bounded excerpt with Unicode-codepoint
+offsets. Use `GET /decisions/{id}/passages/{passage_id}` for the exact full block
+and `GET /decisions/{id}/source` for its original ZIP. A source block locator
+is not an invented court paragraph. Metadata-only decisions return typed source
+gaps. Dates and unknown/repeated arguments are rejected; these are current
+retained representations, not historical publication-time retrieval. Existing
+`If-Lexgraph-Snapshot` checks bind related calls to one immutable generation.
