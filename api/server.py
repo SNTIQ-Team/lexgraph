@@ -32,7 +32,7 @@ SERVICE_INDEX = {
         "/acts/{id}/markdown", "/retrospective-history.sqlite",
         "/changes", "/changes.atom", "/acts/{id}/changes.atom",
         "/amending-acts/{document_id}",
-        "/decisions", "/decisions/{id}", "/decision-passages",
+        "/decisions", "/decisions/{id}", "/decision-passages", "/decisions/{id}/relations",
         "/decisions/{id}/passages/{passage_id}", "/decisions/{id}/source",
         "/git", "/graph", "/hierarchy", "/eu-index",
         "/procedures/watched", "/amendment-fates", "/federal-history",

@@ -22,7 +22,7 @@ def stamp(file):
 @lru_cache(maxsize=8)
 def verified(root,db_stamp,manifest_stamp):
  root=Path(root);manifest=json.loads((root/'decision_passages.json').read_text())
- if manifest.get('schema_version')!=1 or manifest.get('profile')!='rii-passages/1':raise ValueError('invalid manifest')
+ if manifest.get('schema_version')!=2 or manifest.get('profile')!='official-passages/2':raise ValueError('invalid manifest')
  with (root/'decision_passages.sqlite').open('rb') as f:digest=hashlib.file_digest(f,'sha256').hexdigest()
  if digest!=manifest.get('database_sha256'):raise ValueError('database hash mismatch')
  return manifest
@@ -39,11 +39,11 @@ def database(root):
 def coverage_status(root):
  try:
   conn,coverage=database(Path(root).resolve());conn.close()
-  return {'status':'ok',**{k:coverage[k] for k in ['profile','metadata_decisions','indexed_decisions','passages','gaps','knowledge_time']}}
+  return {'status':'ok',**{k:coverage[k] for k in ['profile','metadata_decisions','indexed_decisions','passages','citation_mentions','gaps','knowledge_time']}}
  except HTTPException as error:return error.detail
 
 def decision(conn,identity):
- row=conn.execute('SELECT id,status,metadata,ecli,xml_sha256,zip_sha256,observed_at FROM decisions WHERE id=?',(identity,)).fetchone()
+ row=conn.execute('SELECT id,status,metadata,ecli,xml_sha256,zip_sha256,observed_at,content_sha256,source_data FROM decisions WHERE id=?',(identity,)).fetchone()
  if row is None:failure(404,'not_in_corpus',decision_id=identity)
  if row['status']!='indexed':failure(409,'source_text_unavailable',decision_id=identity,reason=row['status'])
  return row
@@ -51,7 +51,7 @@ def decision(conn,identity):
 def enrich(row,source,*,preview=False,tokens=()):
  data=json.loads(row['data']);metadata=json.loads(source['metadata'])
  data['decision']={k:metadata.get(k) for k in ['id','az','court_short','date','kind']};data['decision']['ecli']=source['ecli']
- data['source']={'url':metadata.get('url'),'xml_sha256':source['xml_sha256'],'zip_sha256':source['zip_sha256'],'observed_at':source['observed_at'],'profile':'rii-passages/1','language':'de'}
+ data['source']=json.loads(source['source_data'])
  if preview:
   text=data.pop('text');matches=[re.search(r'\b'+re.escape(t)+r'\b',text,re.IGNORECASE) for t in tokens]
   positions=[m.start() for m in matches if m];start=max(0,min(positions)-160) if positions else 0
@@ -96,13 +96,31 @@ def create_router(data_dir):
    return {'status':'ok',**result}
   except (sqlite3.Error,ValueError):failure(503,'integrity_check_failed')
   finally:conn.close()
+ @router.get('/decisions/{decision_id}/relations')
+ def relations(request:Request,decision_id:str,direction:str='outgoing',limit:int=Query(10,ge=1,le=25),offset:int=Query(0,ge=0,le=100000)):
+  validate_query(request,{'direction','limit','offset'})
+  if direction not in {'outgoing','incoming'}:failure(422,'invalid_request',reason='unknown direction')
+  conn,coverage=database(Path(data_dir()).resolve())
+  try:
+   if conn.execute('SELECT id FROM decisions WHERE id=?',(decision_id,)).fetchone() is None:failure(404,'not_in_corpus',decision_id=decision_id)
+   if direction=='outgoing':decision(conn,decision_id)
+   column='source_id' if direction=='outgoing' else 'target_id'
+   total=conn.execute(f'SELECT count(*) FROM citations WHERE {column}=?',(decision_id,)).fetchone()[0]
+   records=conn.execute(f'SELECT data FROM citations WHERE {column}=? ORDER BY source_id,target_id,passage_id,position LIMIT ? OFFSET ?',(decision_id,limit,offset)).fetchall()
+   result=[]
+   for record in records:
+    data=json.loads(record['data']);data['source']=json.loads(decision(conn,data['source_id'])['source_data']);result.append(data)
+   return {'status':'ok','request_scope':{'decision_id':decision_id,'direction':direction,'limit':limit,'offset':offset},'total':total,'relations':result,'coverage':coverage}
+  except (sqlite3.Error,ValueError):failure(503,'integrity_check_failed')
+  finally:conn.close()
  @router.get('/decisions/{decision_id}/source')
  def source(request:Request,decision_id:str):
   validate_query(request,set());conn,_=database(Path(data_dir()).resolve())
   try:
    row=decision(conn,decision_id);blob=conn.execute('SELECT source_zip FROM decisions WHERE id=?',(decision_id,)).fetchone()[0]
-   if hashlib.sha256(blob).hexdigest()!=row['zip_sha256']:failure(503,'integrity_check_failed')
-   return Response(blob,media_type='application/zip',headers={'X-Lexgraph-Source-Sha256':row['zip_sha256'],'Content-Disposition':f'attachment; filename="{quote(decision_id,safe="")}.zip"'})
+   if hashlib.sha256(blob).hexdigest()!=row['content_sha256']:failure(503,'integrity_check_failed')
+   descriptor=json.loads(row['source_data'])
+   return Response(blob,media_type=descriptor['media_type'],headers={'X-Lexgraph-Source-Sha256':row['content_sha256'],'Content-Disposition':f'attachment; filename="{quote(decision_id,safe="")}.{descriptor["extension"]}"'})
   except (sqlite3.Error,ValueError):failure(503,'integrity_check_failed')
   finally:conn.close()
  return router

@@ -81,7 +81,7 @@ with (root / "decision_passages.json").open(encoding="utf-8") as handle:
     passages = json.load(handle)
 with (root / "decision_passages.sqlite").open("rb") as handle:
     passage_hash = hashlib.file_digest(handle, "sha256").hexdigest()
-if passages.get("schema_version") != 1 or passages.get("database_sha256") != passage_hash:
+if passages.get("schema_version") != 2 or passages.get("database_sha256") != passage_hash:
     raise SystemExit("publish validation: decision passage manifest/hash mismatch")
 with sqlite3.connect(f"file:{root / 'decision_passages.sqlite'}?mode=ro", uri=True) as db:
     if db.execute("PRAGMA quick_check").fetchone()[0] != "ok" or db.execute("SELECT count(*) FROM passages").fetchone()[0] != passages.get("passages"):

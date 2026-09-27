@@ -127,10 +127,10 @@ def capabilities():
             "snapshot": corpus_snapshot(), "snapshot_precondition": "If-Lexgraph-Snapshot",
             "decision_passage_coverage": decision_passage_coverage(DATA_DIR),
             "search": {"norms": "current_only", "changes": "recorded_history",
-                       "decisions": "metadata", "decision_passages": "retained_official_xml", "component_status": True},
+                       "decisions": "metadata", "decision_passages": "retained_official_source_blocks", "decision_relations": "source_bound_citation_mentions", "component_status": True},
             "historical_text": {"operation": "acts/{id}/markdown", "parameters": ["at", "as_of"],
                                 "resolution": "source_capture_or_verified_reconstruction"},
-            "operations": ["search", "acts/{id}/markdown", "acts/{id}/history", "changes", "decisions", "decision-passages", "decisions/{id}/passages/{passage_id}"]}
+            "operations": ["search", "acts/{id}/markdown", "acts/{id}/history", "changes", "decisions", "decision-passages", "decisions/{id}/passages/{passage_id}", "decisions/{id}/relations"]}
 
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)

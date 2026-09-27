@@ -148,3 +148,27 @@ licensing set in [`LICENSING.md`](LICENSING.md); official and third-party
 source material retains the file-level regimes in [`docs/RIGHTS.md`](docs/RIGHTS.md).
 
 Built by **[SNTIQ](https://sntiq.com/)**.
+
+### Retained decision text and citation passages
+
+`pipeline/fetch_decision_sources.py` captures the bounded official-source list in
+`data/decision_sources.json`; refresh runs it before rebuilding. Each retained
+representation is content addressed and validated against court, docket, date
+and document type. HTTP challenges, wrong identities and changed numbering fail
+without replacing the prior capture. Captures retain their observation time;
+source publication dates are not inferred from judgment dates or portal updates.
+
+`/decision-passages` and `/decisions/{id}/passages/{passage_id}` read the immutable
+`official-passages/2` index. RII supplies original ZIP/XML hashes; BSG HTML,
+Cellar XHTML and Sozialgerichtsbarkeit JSON supply a typed `content_sha256` and
+source locator. `/decisions/{id}/source` returns exactly those retained bytes.
+An official representation without paragraph markers has `paragraph_label:null`;
+local block order must never be cited as a court Randnummer.
+
+`/decisions/{id}/relations?direction=incoming|outgoing&limit=10&offset=0` returns
+literal citations qualified by a nearby court name and a unique docket in the
+retained corpus. Every mention names its source passage, role, text hash and
+Unicode-codepoint span. Legal treatment remains unclassified: a citation in a
+headnote, reported argument or reasoning passage does not establish adoption,
+causality, or another independent witness. Both passage and relation reads reject
+unsupported temporal filters; use the snapshot header to pin a corpus generation.

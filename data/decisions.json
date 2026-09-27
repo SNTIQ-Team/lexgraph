@@ -3,6 +3,7 @@
   "decisions": [
     {
       "id": "sg-muenchen-2026-s-42-ay-55-26-er",
+      "text_role": "curated_excerpt",
       "court": "Sozialgericht München",
       "court_short": "SG München",
       "level": "SG",
@@ -67,6 +68,7 @@
     },
     {
       "id": "eugh-2026-c-621-24",
+      "celex": "62024CJ0621",
       "court": "Gerichtshof der Europäischen Union",
       "court_short": "EuGH",
       "level": "EuGH",
@@ -136,7 +138,7 @@
       ],
       "related": [],
       "quote": null,
-      "url": "https://dejure.org/dienste/vernetzung/rechtsprechung?Gericht=BSG&Datum=25.07.2024&Aktenzeichen=B%208%20AY%206%2F23%20R",
+      "url": "https://www.bsg.bund.de/SharedDocs/Entscheidungen/DE/2024/2024_07_25_B_08_AY_06_23_R.html",
       "source": "BSG",
       "text": null
     }

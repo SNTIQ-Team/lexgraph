@@ -1,0 +1,17 @@
+[
+  {
+    "decision_id": "bsg-2024-b-8-ay-6-23-r",
+    "profile": "bsg-html/1",
+    "url": "https://www.bsg.bund.de/SharedDocs/Entscheidungen/DE/2024/2024_07_25_B_08_AY_06_23_R.html"
+  },
+  {
+    "decision_id": "eugh-2026-c-621-24",
+    "profile": "cellar-xhtml/1",
+    "url": "https://publications.europa.eu/resource/cellar/3cae0a89-5fee-11f1-9af0-01aa75ed71a1.0001.05/DOC_1"
+  },
+  {
+    "decision_id": "sg-muenchen-2026-s-42-ay-55-26-er",
+    "profile": "sozialgerichtsbarkeit-json/1",
+    "url": "https://www.sozialgerichtsbarkeit.de/api/public/entscheidungen/180475"
+  }
+]

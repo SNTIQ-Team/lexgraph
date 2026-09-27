@@ -42,6 +42,7 @@ if [ "${LEXGRAPH_ENABLE_RII:-0}" = "1" ]; then
 else
     echo "    skipped by data policy (use NeuRIS; legacy RII is explicit opt-in)"
 fi
+step "9b/24" "retained official decision sources"          python3 pipeline/fetch_decision_sources.py
 step "10/24" "NeuRIS changelog + expiring ZIP capture"     python3 pipeline/fetch_neuris_changelog.py
 step "10b/24" "bounded resumable NeuRIS archive backfill" \
     python3 pipeline/fetch_neuris_changelog.py --backfill-archive \
