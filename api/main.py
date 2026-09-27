@@ -52,7 +52,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from api.act_archive import (
@@ -86,6 +86,35 @@ DATA_DIR = Path(os.environ.get(
     Path(__file__).resolve().parent.parent / "web" / "data"))
 
 app = FastAPI(title="Lexgraph", version="1.5")
+
+@app.middleware("http")
+async def search_contract(request: Request, call_next):
+    route_path = request.url.path
+    root_path = request.scope.get("root_path", "")
+    if root_path and route_path.startswith(root_path + "/"):
+        route_path = route_path[len(root_path):]
+    if route_path == "/search":
+        allowed = {"q", "limit", "norm_limit", "procedure_limit", "catalog_limit"}
+        unsupported = sorted(set(request.query_params) - allowed)
+        repeated = sorted(k for k in request.query_params if len(request.query_params.getlist(k)) > 1)
+        if unsupported or repeated:
+            temporal = bool(set(unsupported) & {"at", "as_of", "valid_at", "known_at"})
+            return JSONResponse(status_code=422, content={
+                "status": "unsupported_temporal_request" if temporal else "invalid_request",
+                "unsupported_arguments": unsupported, "repeated_arguments": repeated,
+                "search_scope": "current_norms_and_recorded_history"})
+    return await call_next(request)
+
+
+@app.get("/capabilities")
+def capabilities():
+    return {"schema_version": 1, "service": "lexgraph",
+            "search": {"norms": "current_only", "changes": "recorded_history",
+                       "decisions": "metadata", "component_status": True},
+            "historical_text": {"operation": "acts/{id}/markdown", "parameters": ["at", "as_of"],
+                                "resolution": "source_capture_or_verified_reconstruction"},
+            "operations": ["search", "acts/{id}/markdown", "acts/{id}/history", "changes", "decisions"]}
+
 
 # git.json lane index → jurisdiction (0=EU, 1=Bund, 2=Bayern, 3=Länder)
 LANES = ["EU", "Bund", "Bayern", "Länder"]
@@ -1001,22 +1030,33 @@ def _append_temporal_search(result: dict, query: str,
                             change_limit: int = 25,
                             decision_limit: int = 20) -> dict:
     """Add amendment history and judgments to the unified search envelope."""
-    manifest = _retrospective_manifest(optional=True)
-    if manifest is not None:
-        try:
+    statuses = {}
+    changes = {"matched": 0, "events": []}
+    try:
+        manifest = _retrospective_manifest(optional=True)
+        if manifest is None:
+            statuses["changes"] = {"status": "unavailable", "reason": "not_in_corpus"}
+        else:
             changes = resolve_changes(manifest, query=query)
-        except (RetrospectiveIntegrityError, RetrospectiveNotFound):
-            changes = {"matched": 0, "events": []}
-    else:
-        changes = {"matched": 0, "events": []}
-    result["change_total"] = int(changes.get("matched") or 0)
-    result["change_matches"] = list(
-        changes.get("events") or [])[:change_limit]
+            statuses["changes"] = {"status": "ok"}
+    except RetrospectiveIntegrityError:
+        statuses["changes"] = {"status": "unavailable", "reason": "integrity_check_failed"}
+    except RetrospectiveNotFound:
+        statuses["changes"] = {"status": "unavailable", "reason": "not_in_corpus"}
+    except (HTTPException, OSError, ValueError) as exc:
+        reason = "integrity_check_failed" if isinstance(exc.__cause__, RetrospectiveIntegrityError) else "source_unavailable"
+        statuses["changes"] = {"status": "unavailable", "reason": reason}
+    result["change_total"] = int(changes.get("matched") or 0) if statuses["changes"]["status"] == "ok" else None
+    result["change_matches"] = list(changes.get("events") or [])[:change_limit]
 
     try:
-        decision_rows = list(_load("decisions"))
-    except (HTTPException, KeyError):
+        decision_rows = _load("decisions")
+        if not isinstance(decision_rows, list) or any(not isinstance(r, dict) for r in decision_rows):
+            raise ValueError("invalid decision representation")
+        statuses["decisions"] = {"status": "ok"}
+    except (HTTPException, KeyError, OSError, ValueError):
         decision_rows = []
+        statuses["decisions"] = {"status": "unavailable", "reason": "source_unavailable"}
     needle = query.strip().casefold()
 
     def decision_hit(row: dict) -> bool:
@@ -1030,10 +1070,13 @@ def _append_temporal_search(result: dict, query: str,
                    for value in values if value)
 
     decision_matches = [row for row in decision_rows if decision_hit(row)]
-    result["decision_total"] = len(decision_matches)
+    result["decision_total"] = len(decision_matches) if statuses["decisions"]["status"] == "ok" else None
     result["decision_matches"] = decision_matches[:decision_limit]
+    result["components"] = {**result.get("components", {}), **statuses}
+    result["status"] = "partial" if any(c["status"] != "ok" for c in statuses.values()) else "ok"
+    result["result_total_is_partial"] = result["status"] == "partial"
     result["result_total"] = int(result.get("result_total") or 0) + \
-        result["change_total"] + result["decision_total"]
+        (result["change_total"] or 0) + (result["decision_total"] or 0)
     return result
 
 

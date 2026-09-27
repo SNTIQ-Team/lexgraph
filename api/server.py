@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 
-from api.main import app as lexgraph
+from api.main import app as lexgraph, search_contract
 
 SERVICE_INDEX = {
     "service": "lexgraph-api",
@@ -48,6 +48,7 @@ server = FastAPI(
     redoc_url=None,
 )
 
+server.middleware("http")(search_contract)
 server.add_middleware(GZipMiddleware, minimum_size=2048)
 
 # CORS: allow all origins so any browser frontend can call the API

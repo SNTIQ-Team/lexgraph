@@ -1459,3 +1459,16 @@ The arena lives at `data/lexgraph_de_wp21.qfs` (binary; produced by
 `qfs_visualizer`). `graph.json` above is its JSON projection.
 
 Licensing is governed by the repository's own terms.
+
+### Search availability contract
+
+`GET /capabilities` distinguishes current-norm discovery, historical amendment
+records, decision metadata and the dated-text resolver. `/search` rejects
+unknown or repeated arguments, including unsupported temporal constraints, with
+HTTP 422. Use the dated act endpoints for historical text.
+
+Search returns per-component availability in `components.changes` and
+`components.decisions`. Unavailable sources have `*_total: null`; a successfully
+searched empty component has `*_total: 0`. `status: partial` and
+`result_total_is_partial: true` qualify the aggregate count while preserving
+successful matches. Integrity failures retain `integrity_check_failed`.
