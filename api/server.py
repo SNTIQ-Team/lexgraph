@@ -60,6 +60,7 @@ server.add_middleware(
     allow_headers=["*"],
     expose_headers=[
         "Content-Disposition",
+        "X-Lexgraph-Snapshot",
         "X-Lexgraph-Requested-Date",
         "X-Lexgraph-Resolved-Date",
         "X-Lexgraph-Head-Date",

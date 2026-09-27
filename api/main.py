@@ -83,7 +83,7 @@ from api.retrospective_store import (
 # Deployment override: LEXGRAPH_DATA=/path/to/web/data (default: repo layout)
 DATA_DIR = Path(os.environ.get(
     "LEXGRAPH_DATA",
-    Path(__file__).resolve().parent.parent / "web" / "data"))
+    Path(__file__).resolve().parent.parent / "web" / "data")).resolve()
 
 app = FastAPI(title="Lexgraph", version="1.5")
 
@@ -103,12 +103,26 @@ async def search_contract(request: Request, call_next):
                 "status": "unsupported_temporal_request" if temporal else "invalid_request",
                 "unsupported_arguments": unsupported, "repeated_arguments": repeated,
                 "search_scope": "current_norms_and_recorded_history"})
-    return await call_next(request)
+    snapshot = corpus_snapshot()
+    requested = request.headers.get("if-lexgraph-snapshot")
+    if requested and requested != snapshot:
+        return JSONResponse(status_code=409, content={"status": "stale_snapshot", "snapshot": snapshot})
+    response = await call_next(request)
+    if snapshot:
+        response.headers["X-Lexgraph-Snapshot"] = snapshot
+    return response
+
+
+def corpus_snapshot():
+    # DATA_DIR is pinned to one immutable generation at process start. Publishing
+    # switches the symlink and restarts this worker; in-flight reads retain theirs.
+    return DATA_DIR.name if DATA_DIR.name.startswith("web-data.release-") else None
 
 
 @app.get("/capabilities")
 def capabilities():
     return {"schema_version": 1, "service": "lexgraph",
+            "snapshot": corpus_snapshot(), "snapshot_precondition": "If-Lexgraph-Snapshot",
             "search": {"norms": "current_only", "changes": "recorded_history",
                        "decisions": "metadata", "component_status": True},
             "historical_text": {"operation": "acts/{id}/markdown", "parameters": ["at", "as_of"],
